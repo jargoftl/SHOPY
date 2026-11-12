@@ -1,0 +1,303 @@
+import SiteName from '../components/SiteName.jsx'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, NavLink, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { ArrowDownLeft, ArrowUpRight, Bell, Heart, History, MapPin, MessageCircle, Package, Settings, Store, UserRound } from 'lucide-react'
+import { AiOutlineDashboard } from 'react-icons/ai'
+import { FaWallet } from 'react-icons/fa'
+import { IoCopyOutline } from 'react-icons/io5'
+import { apiRequest } from '../lib/api.js'
+import AmountInput from '../components/AmountInput.jsx'
+import WalletModal from '../components/WalletModal.jsx'
+import BuyerExtras from '../components/BuyerExtras.jsx'
+import BalanceDisplay from '../components/BalanceDisplay.jsx'
+import { formatMoney as money, parseAmountCents } from '../lib/money.js'
+import { coinDetails } from '../lib/coins.js'
+import { walletDetailsKey, walletToShow } from '../lib/walletModal.js'
+
+const input = 'mt-1 h-11 w-full rounded border border-[#dfe3dd] bg-white px-3 text-sm outline-none focus:border-[#315941]'
+const profileLinks = [
+  { to: '/profile', label: 'Overview', Icon: AiOutlineDashboard, end: true },
+  { to: '/profile/wallet', label: 'My wallet', Icon: FaWallet },
+  { to: '/profile/orders', label: 'My Orders', Icon: Package },
+  { to: '/profile/favorites', label: 'Favorite products', Icon: Heart },
+  { to: '/profile/stores', label: 'Followed stores', Icon: Store },
+  { to: '/profile/visits', label: 'Visited stores', Icon: History },
+  { to: '/messages', label: 'System messages', Icon: MessageCircle },
+  { to: '/profile/setup', label: 'Setup', Icon: Settings },
+  { to: '/profile/addresses', label: 'Addresses', Icon: MapPin },
+  { to: '/profile/notifications', label: 'Notifications', Icon: Bell },
+]
+
+const BuyerProfilePage = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { section } = useParams()
+  const [profile, setProfile] = useState(null)
+  const [notifications, setNotifications] = useState([])
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState(location.state?.signupNotice || '')
+  const [kind, setKind] = useState('')
+  const [coin, setCoin] = useState('BTC')
+  const [coinOpen, setCoinOpen] = useState(false)
+  const [transactionPassword, setTransactionPassword] = useState('')
+  const [activeDeposit, setActiveDeposit] = useState(null)
+  const [showAddress, setShowAddress] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [updatesError, setUpdatesError] = useState('')
+  const [modalRequestId, setModalRequestId] = useState(null)
+  const modalRequestRef = useRef(null)
+  const activeRequestRef = useRef(null)
+  const seenWallets = useRef(new Set())
+  const submittingDeposit = useRef(false)
+  const profileLoaded = profile !== null
+  useEffect(() => {
+    const oldSection = location.hash.slice(1)
+    if (!section && ['wallet', 'orders', 'favorites', 'stores', 'visits', 'setup', 'addresses', 'notifications'].includes(oldSection)) {
+      navigate(`/profile/${oldSection}`, { replace: true, state: location.state })
+    }
+  }, [location.hash, location.state, navigate, section])
+  const updateProfile = useCallback((data) => {
+    setProfile(data)
+    if (modalRequestRef.current && !data.requests.some((request) => request.id === modalRequestRef.current && request.status === 'pending' && request.walletAddress)) {
+      modalRequestRef.current = null
+      setModalRequestId(null)
+    }
+    const next = walletToShow(data.requests, activeRequestRef.current, seenWallets.current)
+    if (next && !modalRequestRef.current) {
+      seenWallets.current.add(walletDetailsKey(next))
+      modalRequestRef.current = next.id
+      setModalRequestId(next.id)
+    }
+  }, [])
+
+  const load = async () => {
+    const [data, alerts] = await Promise.all([apiRequest('/api/buyer/profile'), apiRequest('/api/notifications')])
+    updateProfile(data)
+    setNotifications(alerts.notifications)
+  }
+  useEffect(() => {
+    let active = true
+    apiRequest('/api/auth/me')
+      .then(({ user }) => {
+        if (user.role !== 'customer') {
+          navigate(user.role === 'admin' ? '/admin' : '/seller', { replace: true })
+          return null
+        }
+        return Promise.all([apiRequest('/api/buyer/profile'), apiRequest('/api/notifications')])
+      })
+      .then((result) => { if (active && result) { updateProfile(result[0]); setNotifications(result[1].notifications) } })
+      .catch((err) => {
+        if (!active) return
+        if (err.status === 401) navigate('/login', { replace: true })
+        else setError(err.message)
+      })
+    return () => { active = false }
+  }, [navigate, updateProfile])
+
+  useEffect(() => {
+    if (!profileLoaded || busy) return
+    let active = true
+    const timer = window.setInterval(async () => {
+      try {
+        const [data, alerts] = await Promise.all([apiRequest('/api/buyer/profile'), apiRequest('/api/notifications')])
+        if (active) {
+          updateProfile(data)
+          setNotifications(alerts.notifications)
+          setUpdatesError('')
+        }
+      } catch (err) {
+        if (active) setUpdatesError(`Automatic updates unavailable: ${err.message}`)
+      }
+    }, 15000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [profileLoaded, busy, updateProfile])
+
+  const selectDepositCoin = async (item) => {
+    if (submittingDeposit.current) return
+    if (!transactionPassword) { setCoinOpen(false); setError('Enter your transaction password before choosing a coin.'); return }
+    submittingDeposit.current = true
+    setCoin(item); setCoinOpen(false); setBusy(true); setError(''); setNotice('')
+    let created = false
+    try {
+      const { id } = await apiRequest('/api/buyer/requests', { method: 'POST', body: JSON.stringify({ kind: 'deposit', coin: item, transactionPassword }) })
+      created = true
+      setTransactionPassword('')
+      activeRequestRef.current = id
+      setActiveDeposit({ id, coin: item, amountCents: null })
+      setNotice('Request sent to the administrator. The wallet details will appear below.')
+      await load()
+    } catch (err) { if (!created) setCoin(''); setError(err.message) } finally { submittingDeposit.current = false; setBusy(false) }
+  }
+
+  const submitRequest = async (event) => {
+    event.preventDefault()
+    const form = event.currentTarget
+    const values = new FormData(form)
+    const amountCents = parseAmountCents(values.get('amount'))
+    if (amountCents === null || amountCents <= 0) {
+      setError('Enter an amount between $0.01 and $1,000,000 with at most two decimal places.')
+      return
+    }
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await apiRequest('/api/buyer/requests', { method: 'POST', body: JSON.stringify({ kind, coin, amountCents, destination: values.get('destination') || '', transactionPassword }) })
+      setTransactionPassword('')
+      setKind('')
+      setNotice('Request sent to the administrator for manual review.')
+      await load()
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  const saveDepositAmount = async (event, requestId) => {
+    event.preventDefault()
+    const amountCents = parseAmountCents(new FormData(event.currentTarget).get('amount'))
+    if (amountCents === null || amountCents <= 0) { setError('Enter an amount between $0.01 and $1,000,000 with at most two decimal places.'); return }
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await apiRequest(`/api/buyer/requests/${requestId}/amount`, { method: 'PATCH', body: JSON.stringify({ amountCents }) })
+      setNotice('Amount sent to the administrator. You can now submit a receipt.')
+      await load()
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  const uploadReceipt = async (event, requestId) => {
+    event.preventDefault()
+    const form = event.currentTarget
+    const file = new FormData(form).get('receipt')
+    if (!(file instanceof File) || !['image/png', 'image/jpeg'].includes(file.type) || !file.size || file.size > 2 * 1024 * 1024) {
+      setError('Choose a PNG or JPEG screenshot up to 2 MB.')
+      return
+    }
+    setBusy(true); setError(''); setNotice('')
+    try {
+      const response = await fetch(`/api/buyer/requests/${requestId}/receipt`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': file.type }, body: file })
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || 'Screenshot upload failed.')
+      }
+      await load()
+      form.reset()
+      setNotice('Screenshot sent to the administrator. It does not confirm payment.')
+    } catch (err) { setError(err.message === 'Failed to fetch' ? 'Cannot connect to the server. Please try again.' : err.message) } finally { setBusy(false) }
+  }
+  const copyAddress = async (address) => {
+    try { await navigator.clipboard.writeText(address); setNotice('Wallet address copied.'); setError('') }
+    catch { setError('Could not copy the address. Select and copy it manually.') }
+  }
+  const refreshProfile = async () => {
+    setBusy(true); setError(''); setNotice('')
+    try { await load(); setNotice('Account details refreshed.') }
+    catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+
+  const saveAddress = async (event) => {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = Object.fromEntries(new FormData(form))
+    data.isDefault = Boolean(data.isDefault)
+    setBusy(true); setError(''); setNotice('')
+    try {
+      const result = await apiRequest('/api/buyer/addresses', { method: 'POST', body: JSON.stringify(data) })
+      setProfile((current) => ({ ...current, addresses: result.addresses }))
+      setShowAddress(false)
+      setNotice('Address saved.')
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+  const setDefault = async (id) => {
+    setError('')
+    try {
+      const result = await apiRequest(`/api/buyer/addresses/${id}/default`, { method: 'PATCH' })
+      setProfile((current) => ({ ...current, addresses: result.addresses }))
+    } catch (err) { setError(err.message) }
+  }
+  const logOut = async () => {
+    try { await apiRequest('/api/auth/logout', { method: 'POST' }); navigate('/') } catch (err) { setError(err.message) }
+  }
+  if (!profile) return <main className="mx-auto max-w-xl px-5 py-20"><p role={error ? 'alert' : 'status'}>{error || 'Loading your profile…'}</p>{error && <div className="mt-4 flex gap-5"><button type="button" className="underline" onClick={() => window.location.reload()}>Try again</button><Link className="underline" to="/login">Go to login</Link></div>}</main>
+  if (section && !['wallet', 'orders', 'favorites', 'stores', 'visits', 'setup', 'addresses', 'notifications'].includes(section)) return <Navigate to="/profile" replace />
+  const activeRequest = activeDeposit && (profile.requests.find((request) => request.id === activeDeposit.id) || activeDeposit)
+  const modalRequest = profile.requests.find((request) => request.id === modalRequestId && request.status === 'pending' && request.walletAddress)
+
+  return (
+    <div className="min-h-screen bg-[#f4f6f1] pb-24 text-[#19231b]">
+      {modalRequest && <WalletModal key={`${modalRequest.id}-${modalRequest.walletAddress}-${modalRequest.network}-${modalRequest.paymentCoin}`} request={modalRequest} onClose={() => { modalRequestRef.current = null; setModalRequestId(null) }} />}
+      <header className="border-b border-[#e1e7df] bg-white"><div className="mx-auto flex max-w-[1300px] items-center justify-between gap-4 px-5 py-5"><Link to="/" className="text-2xl font-black tracking-[-0.07em]"><SiteName /><span className="ml-1 text-sm">▰</span></Link><nav className="flex items-center gap-5 text-sm"><Link to="/products" className="transition-colors hover:text-[#467055]">Shop</Link><button type="button" onClick={logOut} className="rounded-full border border-[#dce4da] px-4 py-2 transition-colors hover:border-[#315941]">Log out</button></nav></div></header>
+      <main className="mx-auto max-w-[1300px] px-5 py-8 sm:py-12">
+        <div className="mb-8"><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#6e806f]">Your account</p><h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Profile</h1><p className="mt-2 text-sm text-[#738075]">A little space for everything that matters to you.</p></div>
+        {error && <p role="alert" className="mb-4 border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+        {notice && <p role="status" className="mb-4 border border-green-200 bg-green-50 p-3 text-sm">{notice}</p>}
+        {updatesError && <p role="alert" className="mb-4 border border-red-200 bg-red-50 p-3 text-sm text-red-800">{updatesError}</p>}
+        <div className="grid gap-6 lg:grid-cols-[250px_1fr]">
+          <aside className="h-fit rounded-2xl border border-[#e1e7df] bg-white p-5 shadow-[0_8px_30px_rgba(27,50,33,0.04)]">
+            <div className="flex items-center gap-3 lg:block"><div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[#eaf1e7] text-[#315941]"><UserRound size={27} /></div>
+            <div><h2 className="break-words font-semibold lg:mt-4">{profile.user.fullName}</h2><p className="mt-1 break-all text-xs text-[#737970]">{profile.user.email}</p><p className="mt-2 font-mono text-xs text-[#627267]">Member ID: #{profile.user.id}</p></div></div>
+            <nav aria-label="Profile navigation" className="mt-5 grid grid-cols-2 gap-1 border-t border-[#edf0eb] pt-4 sm:grid-cols-3 lg:grid-cols-1">{profileLinks.map(({ to, label, Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors ${isActive ? 'bg-[#eaf2e8] font-semibold text-[#214d35]' : 'text-[#637168] hover:bg-[#f5f8f3] hover:text-[#214d35]'}`}><Icon size={18} className="shrink-0" aria-hidden="true" /><span>{label}</span></NavLink>)}</nav>
+          </aside>
+          <div className="min-w-0 space-y-6">
+            {!section && <><section className="overflow-hidden rounded-2xl bg-[#263d35] p-7 text-white sm:p-9"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c5d8c6]">Welcome back</p><h2 className="mt-3 break-words text-2xl font-semibold sm:text-3xl">{profile.user.fullName}</h2><p className="mt-3 max-w-lg text-sm leading-6 text-[#d3e2d3]">Manage your account, follow your favorite stores, and keep track of your orders all in one place.</p><div className="mt-7 flex flex-wrap items-end justify-between gap-4 border-t border-white/15 pt-5"><BalanceDisplay balanceCents={profile.wallet.balanceCents} /><Link to="/profile/wallet" className="inline-flex items-center gap-2 rounded-full bg-[#d7ed9f] px-4 py-2 text-sm font-semibold text-[#1a3423]">View wallet <ArrowUpRight size={16} /></Link></div></section><div className="grid gap-4 sm:grid-cols-2">{[{ to: '/profile/orders', label: 'My Orders', detail: 'View your order history', Icon: Package }, { to: '/profile/favorites', label: 'Favorites', detail: `${profile.favorites.length} saved products`, Icon: Heart }, { to: '/profile/stores', label: 'Followed stores', detail: `${profile.follows.length} stores followed`, Icon: Store }, { to: '/messages', label: 'System messages', detail: 'Chat with the administrator', Icon: MessageCircle }].map(({ to, label, detail, Icon }) => <Link key={to} to={to} className="group flex items-center gap-4 rounded-2xl border border-[#e1e7df] bg-white p-5 transition hover:border-[#adc8ad] hover:shadow-sm"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#edf4eb] text-[#315941]"><Icon size={20} /></span><span className="min-w-0 flex-1"><span className="block font-semibold">{label}</span><span className="mt-1 block text-xs text-[#738075]">{detail}</span></span><ArrowUpRight size={17} className="text-[#829486] transition group-hover:text-[#315941]" /></Link>)}</div></>}
+            {section === 'wallet' && <><section id="wallet" className="grid gap-4 sm:grid-cols-3">
+              <div className="rounded bg-[#263d35] p-6 text-white"><BalanceDisplay balanceCents={profile.wallet.balanceCents} size="text-3xl" /></div>
+              <button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setTransactionPassword(''); setActiveDeposit(null); setCoin(''); setKind('deposit') }} className="flex items-center justify-center gap-3 border border-[#e1e7df] bg-white p-6 text-sm font-semibold hover:border-[#315941] disabled:opacity-60"><ArrowDownLeft size={22} /> Deposit request</button>
+              <button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setTransactionPassword(''); setActiveDeposit(null); setCoin('BTC'); setKind('withdrawal') }} className="flex items-center justify-center gap-3 border border-[#e1e7df] bg-white p-6 text-sm font-semibold hover:border-[#315941] disabled:opacity-60"><ArrowUpRight size={22} /> Withdrawal request</button>
+            </section>
+            <p className="text-xs leading-5 text-[#737970]">Select a coin to send a deposit request. The administrator will send the wallet and network here. Enter the amount, then upload a screenshot for manual review. No crypto is processed or verified here; confirmation does not change the demo balance.</p>
+            {kind && <section className="space-y-4 border border-[#e1e7df] bg-white p-5">
+              <div className="flex justify-between"><h2 className="font-semibold">{kind === 'deposit' ? 'Deposit' : 'Withdrawal'} request</h2><button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setKind(''); setTransactionPassword('') }} className="text-sm underline disabled:opacity-60">Close</button></div>
+              {activeRequest ? <>
+                <div><p className="text-sm font-medium">Selected coin</p><div className="mt-2 rounded border border-[#dfe3dd] px-3 py-3 text-sm"><span style={{ backgroundColor: coinDetails[activeRequest.coin][2] }} className="mr-2 inline-grid size-6 place-items-center rounded-full font-bold text-white" aria-hidden="true">{coinDetails[activeRequest.coin][1]}</span>{coinDetails[activeRequest.coin][0]} ({activeRequest.coin})</div></div>
+                <div aria-live="polite" className="rounded border border-[#dfe3dd] bg-[#f7f9f5] p-4 text-sm">
+                  <p className="font-semibold">Wallet address · Request #{activeRequest.id}</p>
+                  {activeRequest.status && activeRequest.status !== 'pending' ? <p className="mt-2 text-[#737970]">This request is {activeRequest.status}. No further payment should be sent for it.</p> : activeRequest.walletAddress ? <>
+                    <p className="mt-2 text-xs text-[#526055]">Accepted coin: {activeRequest.paymentCoin} · Network: {activeRequest.network}</p>
+                    <div className="mt-2 flex items-center gap-3"><span className="min-w-0 flex-1 break-all font-mono">{activeRequest.walletAddress}</span><button type="button" onClick={() => copyAddress(activeRequest.walletAddress)} aria-label="Copy wallet address" title="Copy wallet address" className="grid size-10 shrink-0 place-items-center rounded border border-[#cbd5ca] hover:border-[#315941]"><IoCopyOutline size={20} /></button></div>
+                    {activeRequest.instructions && <p className="mt-3 whitespace-pre-wrap text-xs text-[#526055]">{activeRequest.instructions}</p>}
+                    <p className="mt-3 text-xs text-[#737970]">Check the accepted coin and network before paying. This site does not process or verify transfers.</p>
+                  </> : <div className="mt-3 flex items-center gap-3 text-[#526055]"><span aria-hidden="true" className="size-4 rounded-full border-2 border-[#b8c8bb] border-t-[#315941] motion-safe:animate-spin" /><span>Waiting for the administrator to send the wallet address. Updates appear automatically.</span></div>}
+                </div>
+                {activeRequest.amountCents != null && <p className="text-xs text-[#737970]">Requested amount: {money(activeRequest.amountCents)}. To select a different coin or amount, start a new request.</p>}
+                <button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setActiveDeposit(null); setCoin(''); setCoinOpen(false) }} className="text-sm underline disabled:opacity-60">Start a new request</button>
+                {activeRequest.status === 'pending' && activeRequest.walletAddress && activeRequest.amountCents === null && <form onSubmit={(event) => saveDepositAmount(event, activeRequest.id)} className="grid gap-2"><label className="text-sm font-medium">Deposit amount (USD equivalent)<AmountInput name="amount" className={input} placeholder="10,000.00" /></label><button disabled={busy} className="w-fit bg-[#263d35] px-4 py-2 text-sm text-white disabled:opacity-60">Save amount</button></form>}
+                {activeRequest.status === 'pending' && activeRequest.walletAddress && activeRequest.amountCents !== null && <form onSubmit={(event) => uploadReceipt(event, activeRequest.id)} className="grid gap-2"><label className="text-xs font-medium">Upload payment screenshot (PNG or JPEG, max 2 MB)<input name="receipt" type="file" accept="image/png,image/jpeg" required className="mt-1 block w-full text-sm" /></label><button disabled={busy} className="w-fit border border-[#315941] px-3 py-2 text-xs disabled:opacity-60">Send screenshot</button></form>}
+              </> : <form onSubmit={submitRequest} className="space-y-4">
+              {!profile.hasTransactionPassword && <p className="text-sm">First <Link to="/profile/setup" className="underline">set a transaction password in Setup</Link>.</p>}
+              <label className="block text-sm font-medium">Transaction password<input type="password" autoComplete="off" value={transactionPassword} onChange={(event) => setTransactionPassword(event.target.value)} required className={input} /></label>
+              <fieldset disabled={busy}><legend className="text-sm font-medium">Choose a coin</legend><details open={coinOpen} onToggle={(event) => setCoinOpen(event.currentTarget.open)} className="relative mt-2"><summary className="cursor-pointer rounded border border-[#dfe3dd] px-3 py-3 text-sm">{coin ? <><span style={{ backgroundColor: coinDetails[coin][2] }} className="mr-2 inline-grid size-6 place-items-center rounded-full font-bold text-white" aria-hidden="true">{coinDetails[coin][1]}</span>{coinDetails[coin][0]} ({coin})</> : 'Select a coin'}</summary><div className="mt-1 grid max-h-56 gap-1 overflow-y-auto border border-[#dfe3dd] bg-white p-2">{profile.coins.map((item) => <label key={item} className="flex cursor-pointer items-center gap-3 p-2 text-sm hover:bg-[#f1f5ef]"><input type="radio" name="coin" checked={coin === item} onChange={() => { if (kind === 'deposit') selectDepositCoin(item); else { setCoin(item); setCoinOpen(false) } }} /><span style={{ backgroundColor: coinDetails[item][2] }} className="grid size-7 place-items-center rounded-full font-bold text-white" aria-hidden="true">{coinDetails[item][1]}</span>{coinDetails[item][0]} ({item})</label>)}</div></details></fieldset>
+              {kind === 'deposit' ? <div className="rounded border border-[#dfe3dd] bg-[#f7f9f5] p-4 text-sm"><p className="font-semibold">Wallet address</p><p className="mt-2 text-[#737970]">{busy ? 'Sending your request…' : 'Selecting a coin sends a request to the administrator.'}</p></div> : <><label className="block text-sm font-medium">Amount (USD equivalent)<AmountInput name="amount" className={input} placeholder="10,000.00" /></label><label className="block text-sm font-medium">Destination and network<input name="destination" maxLength={500} required placeholder="Wallet address and network" className={input} /></label><button disabled={busy} className="bg-[#263d35] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">Submit request</button></>}
+              </form>}
+            </section>}
+            <section className="border border-[#e1e7df] bg-white p-5">
+              <div className="flex items-center justify-between gap-3"><h2 className="font-semibold">Request history</h2><button type="button" disabled={busy} onClick={refreshProfile} className="text-xs underline disabled:opacity-60">Refresh updates</button></div>
+              {profile.requests.length ? <div className="mt-4 divide-y divide-[#edf0eb]">{profile.requests.map((request) => <div key={request.id} className="py-3 text-sm">
+                <p className="font-medium">#{request.id} · {request.kind} · {request.coin} · {request.amountCents === null ? 'Amount not provided' : money(request.amountCents)} <span className="ml-2 text-xs uppercase text-[#737970]">{request.status}</span></p>
+                {request.instructions && <p className="mt-2 whitespace-pre-wrap text-[#526055]">Admin instructions: {request.instructions}</p>}
+                {request.destination && <p className="mt-1 break-all text-xs text-[#737970]">Destination: {request.destination}</p>}
+                {request.kind === 'deposit' && request.status === 'pending' && <button type="button" disabled={busy} onClick={() => { activeRequestRef.current = request.id; if (request.walletAddress) seenWallets.current.add(walletDetailsKey(request)); setActiveDeposit(request); setKind('deposit'); document.getElementById('wallet')?.scrollIntoView({ behavior: 'smooth' }) }} className="mt-2 text-xs underline disabled:opacity-60">View wallet and receipt</button>}
+                {request.walletAddress && request.status === 'pending' && <div className="mt-3 rounded bg-[#f2f5ef] p-3"><p className="font-medium">Accepted: {request.paymentCoin} · Network: {request.network}</p><p className="mt-2 break-all">Wallet: {request.walletAddress}</p><button type="button" onClick={() => copyAddress(request.walletAddress)} className="mt-2 underline">Copy wallet address</button><p className="mt-2 text-xs">Check the coin and network carefully. Transfers are not processed or verified by this site.</p></div>}
+                {request.receipts.length > 0 && <p className="mt-2 text-xs text-[#737970]">{request.receipts.length} screenshot(s) submitted. Payment still requires independent verification.</p>}
+                {request.kind === 'deposit' && request.status === 'pending' && request.walletAddress && request.amountCents !== null && <form onSubmit={(event) => uploadReceipt(event, request.id)} className="mt-3 grid gap-2"><label className="text-xs font-medium">Upload payment screenshot (PNG or JPEG, max 2 MB)<input name="receipt" type="file" accept="image/png,image/jpeg" required className="mt-1 block w-full text-sm" /></label><button disabled={busy} className="w-fit border border-[#315941] px-3 py-2 text-xs disabled:opacity-60">Send screenshot</button></form>}
+              </div>)}</div> : <p className="mt-3 text-sm text-[#737970]">No requests yet.</p>}
+            </section>
+            </>}
+            {['orders', 'favorites', 'setup'].includes(section) && <BuyerExtras profile={profile} onRefresh={load} section={section} />}
+            {section === 'stores' && <div>
+              <section id="stores" className="border border-[#e1e7df] bg-white p-5"><h2 className="font-semibold">Stores you visited</h2>{profile.visits.length ? <ul className="mt-3 divide-y divide-[#edf0eb]">{profile.visits.map((store) => <li key={store.sellerId} className="py-3 text-sm"><Link className="font-medium underline" to={`/stores/${store.sellerId}`}>{store.storeName}</Link><p className="mt-1 text-xs text-[#737970]">{store.visitCount} visits · Last visit {store.lastVisitedAt} UTC</p></li>)}</ul> : <p className="mt-3 text-sm text-[#737970]">No store visits recorded yet.</p>}<h3 className="mt-5 text-sm font-semibold">Followed stores ({profile.follows.length})</h3>{profile.follows.map((store) => <Link key={store.sellerId} to={`/stores/${store.sellerId}`} className="mt-2 block text-sm underline">{store.storeName}</Link>)}</section>
+            </div>}
+            {section === 'visits' && <section className="rounded-2xl border border-[#e1e7df] bg-white p-5 sm:p-6">
+              <h2 className="text-xl font-semibold">Visited store history</h2>
+              <p className="mt-2 text-sm text-[#737970]">Stores you visited while signed in, ordered by your most recent visit.</p>
+              {profile.visits.length ? <ul className="mt-4 divide-y divide-[#edf0eb]">{profile.visits.map((store) => <li key={store.sellerId} className="flex items-center gap-4 py-4"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#edf4eb] text-[#315941]"><Store size={20} /></span><div className="min-w-0"><Link className="break-words text-sm font-medium underline" to={`/stores/${store.sellerId}`}>{store.storeName}</Link><p className="mt-1 text-xs text-[#737970]">{store.visitCount} {store.visitCount === 1 ? 'visit' : 'visits'} · Last visit {store.lastVisitedAt} UTC</p></div></li>)}</ul> : <p className="mt-4 text-sm text-[#737970]">No store visits recorded yet. <Link to="/products" className="underline">Browse products</Link></p>}
+            </section>}
+            {section === 'addresses' && <div>
+              <section id="addresses" className="border border-[#e1e7df] bg-white p-5"><div className="flex justify-between gap-3"><h2 className="font-semibold">Billing addresses</h2><button type="button" onClick={() => setShowAddress(!showAddress)} className="text-sm underline">{showAddress ? 'Cancel' : '+ Add address'}</button></div>{profile.addresses.length ? <ul className="mt-3 divide-y divide-[#edf0eb]">{profile.addresses.map((address) => <li key={address.id} className="py-3 text-sm"><p className="font-medium">{address.fullName} · {address.phone}</p><p className="mt-1 text-xs text-[#737970]">{address.address}, {address.city}, {address.region} {address.postalCode}, {address.country}</p>{address.isDefault ? <span className="mt-2 inline-block text-xs font-semibold text-[#315941]">Default</span> : <button type="button" onClick={() => setDefault(address.id)} className="mt-2 text-xs underline">Set as default</button>}</li>)}</ul> : <p className="mt-3 text-sm text-[#737970]">No saved addresses.</p>}
+                {showAddress && <form onSubmit={saveAddress} className="mt-4 grid gap-3">{[['fullName', 'Full name'], ['phone', 'Phone'], ['address', 'Street address'], ['city', 'City'], ['region', 'State / region'], ['postalCode', 'Postal code'], ['country', 'Country']].map(([name, label]) => <label key={name} className="text-xs font-medium">{label}<input name={name} required maxLength={200} className={input} /></label>)}<label className="text-xs"><input type="checkbox" name="isDefault" /> Set as default</label><button disabled={busy} className="bg-[#263d35] px-4 py-3 text-sm text-white disabled:opacity-60">Save address</button></form>}
+              </section>
+            </div>}
+            {section === 'notifications' && <section id="notifications" className="border border-[#e1e7df] bg-white p-5"><h2 className="font-semibold">Notifications</h2>{notifications.length ? <ul className="mt-3 divide-y divide-[#edf0eb]">{notifications.map((item) => <li key={item.id} className="py-3 text-sm"><p className="font-medium">{item.title}</p><p className="mt-1 whitespace-pre-wrap text-xs text-[#737970]">{item.body}</p>{item.link && <Link to={item.link} className="mt-2 inline-block text-xs underline">View details</Link>}</li>)}</ul> : <p className="mt-3 text-sm text-[#737970]">No notifications yet.</p>}</section>}
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+export default BuyerProfilePage

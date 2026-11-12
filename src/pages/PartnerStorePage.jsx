@@ -1,0 +1,182 @@
+import SiteName from '../components/SiteName.jsx'
+import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { Heart, Search, X } from 'lucide-react'
+import ProductCard from '../components/store/ProductCard.jsx'
+import { apiRequest } from '../lib/api.js'
+
+const PartnerStorePage = () => {
+  const { sellerId } = useParams()
+  const [store, setStore] = useState(null)
+  const [products, setProducts] = useState([])
+  const [activeTab, setActiveTab] = useState('top')
+  const [search, setSearch] = useState('')
+  const [activeCategory, setActiveCategory] = useState('All products')
+  const [sortBy, setSortBy] = useState('newest')
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followMessage, setFollowMessage] = useState('')
+  const [error, setError] = useState('')
+  const [loadedSellerId, setLoadedSellerId] = useState(null)
+  const isLoading = loadedSellerId !== sellerId
+
+  useEffect(() => {
+    let isCurrent = true
+
+    apiRequest(`/api/stores/${sellerId}`)
+      .then(({ store: storeData, products: storeProducts }) => {
+        if (!isCurrent) return
+        setError('')
+        setStore(storeData)
+        setProducts(storeProducts)
+      })
+      .catch((requestError) => {
+        if (isCurrent) setError(requestError.message)
+      })
+      .finally(() => {
+        if (isCurrent) setLoadedSellerId(sellerId)
+      })
+
+    return () => { isCurrent = false }
+  }, [sellerId])
+
+  useEffect(() => {
+    if (!store) return
+    let isCurrent = true
+    apiRequest(`/api/stores/${store.id}/follow`)
+      .then(({ isFollowing: following }) => { if (isCurrent) setIsFollowing(following) })
+      .catch(() => {})
+    return () => { isCurrent = false }
+  }, [store])
+
+  const categories = [...new Set(products.map((product) => product.category))].sort((first, second) => first.localeCompare(second))
+  const filteredProducts = products.filter((product) => {
+    const matchesCategory = activeCategory === 'All products' || product.category === activeCategory
+    const matchesSearch = `${product.name} ${product.category} ${product.description}`.toLowerCase().includes(search.trim().toLowerCase())
+    return matchesCategory && matchesSearch
+  })
+  const sortedProducts = [...filteredProducts].sort((first, second) => {
+    if (sortBy === 'rating') return second.rating - first.rating
+    if (sortBy === 'price-low') return first.price - second.price
+    if (sortBy === 'price-high') return second.price - first.price
+    return new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime()
+  })
+  const visibleProducts = activeTab === 'top'
+    ? [...filteredProducts].sort((first, second) => second.rating - first.rating).slice(0, 4)
+    : sortedProducts
+  const heroImage = products[0]?.imageUrl
+
+  const toggleFollow = async () => {
+    if (!store) return
+    setFollowMessage('')
+    try {
+      const result = await apiRequest(`/api/stores/${store.id}/follow`, { method: 'POST' })
+      setIsFollowing(result.isFollowing)
+      setStore((current) => current ? { ...current, followerCount: result.followerCount } : current)
+    } catch (requestError) {
+      setFollowMessage(requestError.message.includes('log in') ? 'Sign in to follow this store.' : requestError.message)
+    }
+  }
+
+  if (isLoading) {
+    return <main className="mx-auto max-w-5xl px-5 py-20 text-sm text-[#666]">Loading partner store…</main>
+  }
+
+  if (error || !store) {
+    return (
+      <main className="mx-auto max-w-xl px-5 py-24 text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a5a4d]">Partner stores</p>
+        <h1 className="mt-3 text-3xl font-semibold">Store unavailable</h1>
+        <p className="mt-3 text-sm text-[#737970]">{error || 'This store may have been removed.'}</p>
+        <Link to="/" className="mt-7 inline-flex border border-[#d9dbd5] px-4 py-3 text-sm font-medium">Back to <SiteName /></Link>
+      </main>
+    )
+  }
+
+  return (
+    <main className="min-h-screen bg-[#f7f9f5] text-[#142217]">
+      <header className="border-b border-[#e1e8df] bg-white">
+        <div className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 sm:px-8">
+          <Link to="/" className="text-[29px] font-black leading-none tracking-[-0.08em]"><SiteName /><span className="ml-1 text-[19px]">▰</span></Link>
+          <Link to="/" className="text-xs font-semibold uppercase tracking-wide underline underline-offset-4">All stores</Link>
+        </div>
+      </header>
+
+      <section className="relative isolate flex min-h-[280px] items-end overflow-hidden bg-[#183a28] sm:min-h-[350px]">
+        {heroImage && <img src={heroImage} alt="" className="absolute inset-0 -z-20 size-full object-cover opacity-35" />}
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#0b2114]/90 via-[#183a28]/75 to-[#183a28]/30" />
+        <div className="mx-auto w-full max-w-[1440px] px-5 py-10 text-white sm:px-8 sm:py-14">
+          <div className="flex items-center gap-4">
+            {store.logoUrl && <img src={store.logoUrl} alt={`${store.storeName} logo`} className="size-16 shrink-0 rounded-full border border-white/30 bg-white/10 object-cover sm:size-20" />}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#d3fa4b]"><SiteName /> partner store</p>
+              <h1 className="mt-2 max-w-3xl text-4xl font-semibold sm:text-5xl">{store.storeName}</h1>
+            </div>
+          </div>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-white/85">{store.storeDescription || `A curated collection from ${store.ownerName}.`}</p>
+          <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs text-white/80">
+            <span>Curated by {store.ownerName}</span>
+            <span>{products.length} products</span>
+            <span>{Number(store.followerCount || 0).toLocaleString()} followers</span>
+            <span>{Number(store.visitorCount || 0).toLocaleString()} visits</span>
+            <button type="button" onClick={toggleFollow} aria-pressed={isFollowing} className={`inline-flex min-h-9 items-center gap-2 border px-3 text-xs font-semibold ${isFollowing ? 'border-[#d3fa4b] bg-[#d3fa4b] text-[#142217]' : 'border-white/60 text-white hover:bg-white hover:text-[#142217]'}`}><Heart size={14} className={isFollowing ? 'fill-current' : ''} />{isFollowing ? 'Following · Unfollow' : 'Follow store'}</button>
+          </div>
+          {followMessage && <p role="status" className="mt-2 text-xs text-white">{followMessage} {followMessage.includes('Sign in') && <Link to="/login" className="underline">Log in</Link>}</p>}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-[1440px] px-5 py-10 sm:px-8 sm:py-14">
+        <div className="flex flex-col justify-between gap-5 border-b border-[#dfe4dc] pb-5 sm:flex-row sm:items-end">
+          <div>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8a5a4d]">The collection</p>
+            <h2 className="text-3xl font-semibold">Shop {store.storeName}</h2>
+          </div>
+          <label className="flex w-full items-center gap-3 border-b border-[#aeb3a9] pb-2 sm:max-w-[300px]">
+            <Search size={17} strokeWidth={1.6} />
+            <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search this store" className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-[#777]" />
+            {search && <button type="button" onClick={() => setSearch('')} aria-label="Clear store search" className="grid size-8 place-items-center"><X size={16} /></button>}
+          </label>
+        </div>
+
+        <div className="mt-6 flex gap-6 border-b border-[#dfe4dc]" role="tablist" aria-label={`${store.storeName} products`}>
+          <button type="button" role="tab" aria-selected={activeTab === 'top'} onClick={() => setActiveTab('top')} className={`border-b-2 px-1 pb-3 text-sm font-semibold ${activeTab === 'top' ? 'border-[#1f4a32] text-[#1f4a32]' : 'border-transparent text-[#737970]'}`}>
+            Top products
+          </button>
+          <button type="button" role="tab" aria-selected={activeTab === 'all'} onClick={() => setActiveTab('all')} className={`border-b-2 px-1 pb-3 text-sm font-semibold ${activeTab === 'all' ? 'border-[#1f4a32] text-[#1f4a32]' : 'border-transparent text-[#737970]'}`}>
+            All products <span className="ml-1 text-xs font-normal">({products.length})</span>
+          </button>
+        </div>
+
+        <div className={`mt-6 ${activeTab === 'all' ? 'grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]' : ''}`}>
+          {activeTab === 'all' && <aside className="border-r border-[#e5e8e2] pr-5">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#666]">Categories</h3>
+            <button type="button" onClick={() => setActiveCategory('All products')} aria-pressed={activeCategory === 'All products'} className={`mb-2 flex min-h-10 w-full items-center justify-between border-b border-[#eee] text-left text-sm ${activeCategory === 'All products' ? 'font-semibold text-[#1f4a32]' : 'text-[#555]'}`}>
+              All products <span>{products.length}</span>
+            </button>
+            {categories.map((category) => <button key={category} type="button" onClick={() => setActiveCategory(category)} aria-pressed={activeCategory === category} className={`flex min-h-10 w-full items-center justify-between border-b border-[#eee] text-left text-sm ${activeCategory === category ? 'font-semibold text-[#1f4a32]' : 'text-[#555]'}`}>
+              <span>{category}</span><span className="text-xs">{products.filter((product) => product.category === category).length}</span>
+            </button>)}
+          </aside>}
+          <div className="min-w-0">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-[#737970]">{visibleProducts.length} {visibleProducts.length === 1 ? 'product' : 'products'}{activeTab === 'top' ? ' · top rated' : ''}</p>
+              {activeTab === 'all' && <label className="flex items-center gap-2 text-xs text-[#666]">Sort
+                <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort store products" className="border border-[#ddd] bg-white px-2 py-2 text-xs text-[#222]">
+                  <option value="newest">Newest</option><option value="rating">Top rated</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option>
+                </select>
+              </label>}
+            </div>
+            {visibleProducts.length ? (
+              <div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-5 md:grid-cols-3 xl:grid-cols-4">
+                {visibleProducts.map((product) => <ProductCard key={product.id} product={product} />)}
+              </div>
+            ) : (
+              <p className="py-16 text-center text-sm text-[#737970]">{products.length ? 'No products match this selection.' : 'This partner store is getting its first products ready.'}</p>
+            )}
+          </div>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+export default PartnerStorePage
