@@ -20,7 +20,7 @@ const query=async(sql,params=[])=>{
 pg.Pool.prototype.query=query;
 pg.Pool.prototype.connect=async()=>({query,release(){}});
 pg.Pool.prototype.end=async()=>{};
-Object.assign(process.env,{DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
+Object.assign(process.env,{SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
 const { ObjectStorage } = await import('../dist-server/storage.js');
 const realPut=ObjectStorage.prototype.put,realGet=ObjectStorage.prototype.get,realVerify=ObjectStorage.prototype.verifyBucket;
 ObjectStorage.prototype.verifyBucket=async()=>{};
@@ -165,6 +165,23 @@ try{
    check('warehouse failed upload leaves no image rows',Number((await db.query('SELECT COUNT(*) AS count FROM shop.product_images')).rows[0].count)===imageCount);
   }finally{ObjectStorage.prototype.put=originalPut}
  }
+ // Warehouse navigation and full source data preservation.
+ const sourceCatalogItem={name:'Imported '+ 'long product title '.repeat(9),category:'Catalog Test / Nested category',price:19.95,compareAtPrice:25,description:'Complete description '.repeat(150),imageUrl:'https://example.test/main.jpg',imageUrls:Array.from({length:10},(_,i)=>`https://example.test/gallery-${i}.jpg`),colors:Array.from({length:13},(_,i)=>`Color ${i}`),sizes:Array.from({length:13},(_,i)=>`Size ${i}`),rating:0,source:{host:'example.test',listingId:'original-listing'},sourceDetails:{skus:[{skuId:'test-sku',sellingPrice:20,attrs:[{attrName:'size',attrValueName:'Size 1'}]}],des:'<p>Original description</p>'}};
+ const importedCatalogId=(await db.query('INSERT INTO shop.warehouse_products(product_json) VALUES ($1) RETURNING id',[JSON.stringify(sourceCatalogItem)])).rows[0].id;
+ for(let i=0;i<26;i++)await db.query('INSERT INTO shop.warehouse_products(product_json) VALUES ($1)',[JSON.stringify({...sourceCatalogItem,name:`Catalog fixture ${i}`,source:undefined,sourceDetails:undefined})]);
+ r=await req('/api/warehouse?category=Catalog%20Test',{},seller);
+ check('warehouse paginates matching descendants',r.status===200&&r.data.total===27&&r.data.products.length===24&&r.data.categories.some(c=>c.category===sourceCatalogItem.category),r.status);
+ check('warehouse lists omit large source variant payloads',r.data.products.every(p=>!p.sourceDetails));
+ r=await req('/api/warehouse?category=Catalog%20Test&page=2',{},seller);check('warehouse second page contains remaining products',r.status===200&&r.data.products.length===3,r.status);
+ r=await req('/api/warehouse?q=%25',{},seller);check('warehouse search treats wildcard text literally',r.status===200&&r.data.total===0,r.status);
+ r=await req('/api/warehouse?category=Catalog',{},seller);check('warehouse category does not match partial parent name',r.status===200&&r.data.total===0,r.status);
+ r=await req('/api/warehouse/'+importedCatalogId,{},seller);check('warehouse full details preserve source SKUs',r.status===200&&r.data.product.sourceDetails.skus[0].skuId==='test-sku',r.status);
+ r=await req('/api/warehouse/'+importedCatalogId,{},buyer);check('warehouse full details require seller or admin',r.status===403,r.status);
+ r=await req('/api/seller/warehouse/'+importedCatalogId+'/import',{method:'POST'},seller);
+ check('source import retains full name, category, description, gallery, sizes and colors',r.status===201&&r.data.product.name===sourceCatalogItem.name.trim()&&r.data.product.category===sourceCatalogItem.category&&r.data.product.description===sourceCatalogItem.description.trim()&&r.data.product.imageUrls.length===11&&r.data.product.sizes.length===13&&r.data.product.colors.length===13,r.status);
+ r=await req('/api/seller/warehouse/'+importedCatalogId+'/import',{method:'POST'},seller);check('source warehouse copy cannot be duplicated by one seller',r.status===409,r.status);
+ r=await req('/api/admin/warehouse/'+importedCatalogId,{method:'PUT',body:JSON.stringify({...sourceCatalogItem,name:'Edited imported catalog item',sourceDetails:{skus:[]}})},cookie);check('admin can edit long imported catalog entries',r.status===200,r.status);
+ r=await req('/api/warehouse/'+importedCatalogId,{},cookie);check('admin edit keeps original source metadata',r.status===200&&r.data.product.sourceDetails.skus[0].skuId==='test-sku'&&r.data.product.source.listingId==='original-listing',r.status);
  r=await req('/api/admin/warehouse',{method:'POST',body:JSON.stringify(warehouseForm)},seller);check('seller cannot upload into admin warehouse',r.status===403,r);
  r=await req('/api/admin/warehouse',{method:'POST',body:JSON.stringify({...warehouseForm,imageUploads:{primary:{type:'image/svg+xml',data:Buffer.from('<svg/>').toString('base64')}}})},cookie);check('warehouse rejects unsupported image types',r.status===400,r);
  if(product){

@@ -216,7 +216,7 @@ const SellerPage = () => {
 
           <form key={editingProduct?.id || 'new-product'} className="mt-6 space-y-4 bg-white p-5 sm:p-6" onSubmit={saveProduct}>
             <label className="block text-sm font-medium">Product name
-              <input name="name" value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} maxLength={120} required className="mt-2 h-11 w-full border border-[#d9dbd5] px-3 text-sm outline-none focus:border-black" placeholder="Example: Mira Everyday Tote" />
+              <input name="name" value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} maxLength={500} required className="mt-2 h-11 w-full border border-[#d9dbd5] px-3 text-sm outline-none focus:border-black" placeholder="Example: Mira Everyday Tote" />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-sm font-medium">Category
@@ -243,7 +243,7 @@ const SellerPage = () => {
             </label>
             <ProductImageFields key={imageFormVersion} form={productForm} setForm={setProductForm} uploads={imageUploads} setUploads={setImageUploads} onBusyChange={setIsReadingImages} onError={setMessage} />
             <label className="block text-sm font-medium">Description
-              <textarea name="description" value={productForm.description} onChange={(event) => setProductForm((current) => ({ ...current, description: event.target.value }))} maxLength={2000} rows={3} className="mt-2 w-full border border-[#d9dbd5] px-3 py-2 text-sm outline-none focus:border-black" placeholder="A few details about this product" />
+              <textarea name="description" value={productForm.description} onChange={(event) => setProductForm((current) => ({ ...current, description: event.target.value }))} maxLength={100000} rows={3} className="mt-2 w-full border border-[#d9dbd5] px-3 py-2 text-sm outline-none focus:border-black" placeholder="A few details about this product" />
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="isPublished" checked={productForm.isPublished} onChange={(event) => setProductForm((current) => ({ ...current, isPublished: event.target.checked }))} className="accent-black" /> Publish on the storefront

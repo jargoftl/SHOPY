@@ -273,6 +273,12 @@ CREATE TABLE IF NOT EXISTS warehouse_products (
     product_json TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')
   );
+ALTER TABLE warehouse_products ADD COLUMN IF NOT EXISTS category_path TEXT GENERATED ALWAYS AS ((product_json::jsonb)->>'category') STORED;
+ALTER TABLE warehouse_products ADD COLUMN IF NOT EXISTS product_name TEXT GENERATED ALWAYS AS ((product_json::jsonb)->>'name') STORED;
+CREATE INDEX IF NOT EXISTS warehouse_category_idx ON warehouse_products(category_path);
+ALTER TABLE warehouse_products ADD COLUMN IF NOT EXISTS source_host TEXT GENERATED ALWAYS AS ((product_json::jsonb)->'source'->>'host') STORED;
+ALTER TABLE warehouse_products ADD COLUMN IF NOT EXISTS source_listing_id TEXT GENERATED ALWAYS AS ((product_json::jsonb)->'source'->>'listingId') STORED;
+CREATE UNIQUE INDEX IF NOT EXISTS warehouse_source_listing_idx ON warehouse_products(source_host,source_listing_id);
 CREATE TABLE IF NOT EXISTS seller_product_stock (
     product_id BIGINT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
     quantity BIGINT NOT NULL CHECK(quantity >= 0)

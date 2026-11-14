@@ -12,6 +12,7 @@ import { isSellerEmailVerificationRequired, isEmailConfigured, sendAuthNotificat
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
 import { seedWarehouseSamples } from './warehouseSamples.ts'
+import { seedImportedWarehouse } from './warehouseCatalog.ts'
 
 type UserRole = 'customer' | 'seller' | 'admin'
 
@@ -464,20 +465,20 @@ const validateProduct = async (body: Record<string, unknown>, newImageIds: Set<s
     try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false }
   }
 
-  if (!name || name.length > 120) return { error: 'Product name is required and must be under 120 characters.' }
-  if (!category || category.length > 60) return { error: 'Enter a product category under 60 characters.' }
+  if (!name || name.length > 500) return { error: 'Product name is required and must be under 500 characters.' }
+  if (!category || category.length > 200) return { error: 'Enter a product category under 200 characters.' }
   if (!Number.isFinite(price) || price < 0 || price > 1000000) return { error: 'Enter a valid product price.' }
   if (compareAtPrice !== null && (!Number.isFinite(compareAtPrice) || compareAtPrice <= price || compareAtPrice > 1000000)) {
     return { error: 'Compare-at price must be greater than the sale price.' }
   }
   if (!(await validImage(imageUrl))) return { error: 'Choose a product image or enter a valid image URL.' }
-  if (imageUrls.length > 8 || colors.length > 12 || sizes.length > 12) return { error: 'Use up to 8 product images, 12 colors, and 12 sizes.' }
-  if (colors.some((color) => color.length > 40) || sizes.some((size) => size.length > 40)) return { error: 'Color and size options must be under 40 characters each.' }
+  if (imageUrls.length > 50 || colors.length > 300 || sizes.length > 200) return { error: 'Use up to 50 product images, 300 colors, and 200 sizes.' }
+  if (colors.some((color) => color.length > 200) || sizes.some((size) => size.length > 200)) return { error: 'Color and size options must be under 200 characters each.' }
   if (!Number.isFinite(rating) || rating < 0 || rating > 5) return { error: 'Product rating must be between 0 and 5.' }
   for (const galleryImage of imageUrls) {
     if (!(await validImage(galleryImage))) return { error: 'Choose valid product images or enter valid image URLs.' }
   }
-  if (description.length > 2000) return { error: 'Description must be under 2000 characters.' }
+  if (description.length > 100000) return { error: 'Description must be under 100000 characters.' }
 
   return {
     product: {
@@ -1198,9 +1199,28 @@ app.delete('/api/seller/products/:id', requireAuth, requireRole('seller', 'admin
 
 await seedWarehouseSamples(database)
 
-app.get('/api/warehouse', requireAuth, requireRole('seller', 'admin'), async (_req, res) => {
-  const rows = (await getRows<{ id: number, product_json: string, created_at: string }>('SELECT * FROM warehouse_products ORDER BY id DESC'))
-  return res.json({ products: rows.map((row) => ({ ...JSON.parse(row.product_json), id: row.id, createdAt: row.created_at })) })
+app.get('/api/warehouse', requireAuth, requireRole('seller', 'admin'), async (req, res) => {
+  const page = Math.max(1, Math.min(100000, Math.floor(Number(req.query.page) || 1)))
+  const pageSize = 24
+  const search = String(req.query.q || '').trim().slice(0, 200)
+  const category = String(req.query.category || '').trim().slice(0, 200)
+  const where = `WHERE (? = '' OR position(lower(?) in lower(product_name || ' ' || category_path)) > 0)
+    AND (? = '' OR category_path = ? OR position(? || ' / ' in category_path) = 1)`
+  const params = [search, search, category, category, category]
+  const total = (await getRow<{ count: number }>(`SELECT COUNT(*) AS count FROM warehouse_products ${where}`, ...params))!.count
+  const rows = await getRows<{ id: number, product_json: string, created_at: string }>(`
+    SELECT id, (product_json::jsonb - 'sourceDetails')::text AS product_json, created_at FROM warehouse_products ${where}
+    ORDER BY id DESC LIMIT ? OFFSET ?`, ...params, pageSize, Math.min(page - 1, 100000) * pageSize)
+  const categories = await getRows<{ category: string, count: number }>(`SELECT category_path AS category, COUNT(*) AS count FROM warehouse_products GROUP BY category_path ORDER BY category`)
+  const importComplete = Boolean(await getRow('SELECT 1 FROM schema_migrations WHERE name=?', 'shopyggful_catalog_2026_11_14_v1'))
+  const imported = (await getRow<{ count: number }>("SELECT COUNT(*) AS count FROM warehouse_products WHERE source_host='shopyggful.shop'"))!.count
+  return res.json({ products: rows.map((row) => ({ ...JSON.parse(row.product_json), id: row.id, createdAt: row.created_at })), categories, total, page, pageSize, catalogImport: { complete: importComplete, imported } })
+})
+
+app.get('/api/warehouse/:id', requireAuth, requireRole('seller', 'admin'), async (req, res) => {
+  const row = await getRow<{ id: number, product_json: string }>('SELECT id,product_json FROM warehouse_products WHERE id=?', Number(req.params.id))
+  if (!row) return res.status(404).json({ error: 'Warehouse product not found.' })
+  return res.json({ product: { ...JSON.parse(row.product_json), id: row.id } })
 })
 
 app.post('/api/admin/warehouse', requireAuth, requireRole('admin'), async (req, res) => {
@@ -1216,12 +1236,15 @@ app.post('/api/admin/warehouse', requireAuth, requireRole('admin'), async (req, 
 })
 
 app.put('/api/admin/warehouse/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  const existing = await getRow<{ product_json: string }>('SELECT product_json FROM warehouse_products WHERE id=?', Number(req.params.id))
+  if (!existing) return res.status(404).json({ error: 'Warehouse product not found.' })
+  const saved = JSON.parse(existing.product_json)
   const prepared = prepareProductImages(req.body ?? {})
   if ('error' in prepared) return res.status(400).json({ error: prepared.error })
   const result = await validateProduct(prepared.body, new Set(prepared.uploads.map((image) => image.id)))
   if ('error' in result) return res.status(400).json({ error: result.error })
   const updated = await database.transaction(async () => {
-    const record = await database.prepare('UPDATE warehouse_products SET product_json=? WHERE id=?').run(JSON.stringify(result.product), Number(req.params.id))
+    const record = await database.prepare('UPDATE warehouse_products SET product_json=? WHERE id=?').run(JSON.stringify({ ...result.product, ...(saved.sourceDetails ? { sourceDetails: saved.sourceDetails, source: saved.source } : {}) }), Number(req.params.id))
     if (!record.changes) return record
     for (const image of prepared.uploads) await database.prepare('INSERT INTO product_images (id, content_type, image) VALUES (?, ?, ?)').run(image.id, image.contentType, image.image)
     return record
@@ -2062,3 +2085,6 @@ if (process.env.NODE_ENV === 'production') {
 
 await seedAdmin()
 export const httpServer = app.listen(port, '0.0.0.0', () => console.log(`GGU API listening on port ${port}`))
+
+// Import in the background so the free web service can answer requests while catalog pages arrive.
+void seedImportedWarehouse(database).catch(() => console.error('Warehouse source import paused. Completed pages are saved; restarting resumes the import.'))
