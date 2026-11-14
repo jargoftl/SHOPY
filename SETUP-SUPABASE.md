@@ -49,7 +49,7 @@ SUPABASE_STORAGE_BUCKET="shop-uploads"
 
 Never put these secrets in React, `src/`, variables starting with `VITE_`, screenshots, GitHub, or chat. The provided .env.example contains placeholders only. The .gitignore excludes real environment files, databases, uploads and migration backups.
 
-TLS verification is enabled. If your connection reports an untrusted certificate, download the database root certificate from Supabase's database SSL settings and set `DATABASE_CA_CERT_PATH` to its absolute local path. Do not disable certificate verification.
+TLS verification is enabled. The app includes Supabase's public root CA automatically for Supabase database hosts and keeps Node's normal public certificate roots. Normal Supabase connections do not require a manually copied certificate or DATABASE_CA_CERT_PATH. That optional setting can still add a custom root certificate if needed; it does not replace the normal trust roots. Certificate and hostname checks remain enabled.
 
 Build and test:
 
@@ -114,7 +114,7 @@ Under **Environment**, add:
 
 Retain your existing admin and email environment settings where required. The old DATABASE_PATH is no longer used. Render supplies PORT; the server listens on 0.0.0.0 and uses it.
 
-If a database root certificate is required, add its public certificate as a Render Secret File named `supabase-root.crt` and set DATABASE_CA_CERT_PATH to `/etc/secrets/supabase-root.crt`.
+No Secret File is needed for a normal Supabase connection: its public root certificate is bundled automatically. If you already added DATABASE_CA_CERT_PATH with a valid certificate file, it remains supported alongside the bundled and system roots. For a custom root, add its public certificate as a Render Secret File and set DATABASE_CA_CERT_PATH to that file's absolute path.
 
 Use:
 
