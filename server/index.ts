@@ -339,6 +339,8 @@ app.disable('x-powered-by')
 app.set('trust proxy', 1)
 app.use(helmet())
 app.use('/api/seller/products', express.json({ limit: '24mb' }))
+app.use('/api/auth/register-seller', express.json({ limit: '3mb' }))
+app.use('/api/admin/warehouse', express.json({ limit: '24mb' }))
 app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser())
 
@@ -526,7 +528,10 @@ const prepareProductImages = (body: Record<string, unknown>): { body: Record<str
     if (!url) return { error: 'Choose PNG, JPEG or WebP images up to 2 MB each.' }
     addedGallery.push(url)
   }
-  return { body: { ...body, imageUrl, imageUrls: [...existingGallery, ...addedGallery] }, uploads }
+  const previousPrimary = typeof body.imageUrl === 'string' ? body.imageUrl : ''
+  const retainedGallery = existingGallery.filter((url) => url !== imageUrl && (primary == null || url !== previousPrimary))
+  const imageUrls = [...new Set([imageUrl, ...retainedGallery, ...addedGallery].filter(Boolean))]
+  return { body: { ...body, imageUrl, imageUrls }, uploads }
 }
 
 app.get('/api/product-images/:id', async (req, res) => {
@@ -597,6 +602,13 @@ app.post('/api/auth/verify-seller-email-code', authLimiter, async (req, res) => 
   return res.json({ verified: true })
 })
 
+const isValidStoreLogoUrl = async (value: string): Promise<boolean> => {
+  if (/^\/api\/product-images\/[a-f0-9]{64}$/.test(value)) {
+    return Boolean(await database.prepare('SELECT 1 FROM product_images WHERE id = ?').get(value.slice('/api/product-images/'.length)))
+  }
+  try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false }
+}
+
 const registerAccount = (role: UserRole): RequestHandler => async (req, res, next) => {
   try {
     const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : ''
@@ -604,6 +616,7 @@ const registerAccount = (role: UserRole): RequestHandler => async (req, res, nex
     const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : ''
     const password = typeof req.body.password === 'string' ? req.body.password : ''
     let sellerProfile = null
+    let logoUpload: ProductImageUpload | undefined
 
     if (!fullName || fullName.length > 100) return res.status(400).json({ error: 'Enter your name (up to 100 characters).' })
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ error: 'Enter a valid email address.' })
@@ -626,43 +639,49 @@ const registerAccount = (role: UserRole): RequestHandler => async (req, res, nex
         region: typeof req.body.region === 'string' ? req.body.region.trim() : '',
         postalCode: typeof req.body.postalCode === 'string' ? req.body.postalCode.trim() : '',
       }
+      if (req.body.storeLogoUpload !== undefined && req.body.storeLogoUpload !== null) {
+        const prepared = prepareProductImages({ imageUploads: { primary: req.body.storeLogoUpload } })
+        if ('error' in prepared) return res.status(400).json({ error: prepared.error })
+        logoUpload = prepared.uploads[0]
+        if (!logoUpload) return res.status(400).json({ error: 'Choose a PNG, JPEG or WebP logo up to 2 MB.' })
+        profile.storeLogoUrl = String(prepared.body.imageUrl)
+      }
       const requiredProfileFields = [profile.storeName, profile.country, profile.address, profile.city, profile.region, profile.postalCode]
       if (requiredProfileFields.some((value) => !value)) return res.status(400).json({ error: 'Complete all required seller profile fields.' })
       if (profile.storeName.length > 100 || profile.storeDescription.length > 500 || profile.storeLogoUrl.length > 2000 || profile.address.length > 200 || profile.city.length > 100 || profile.region.length > 100 || profile.postalCode.length > 20 || profile.country.length > 80) {
         return res.status(400).json({ error: 'One or more seller profile fields are too long.' })
       }
-      if (profile.storeLogoUrl) {
-        try {
-          const parsedLogoUrl = new URL(profile.storeLogoUrl)
-          if (!['http:', 'https:'].includes(parsedLogoUrl.protocol)) return res.status(400).json({ error: 'Store logos must use HTTP or HTTPS.' })
-        } catch {
-          return res.status(400).json({ error: 'Enter a valid store logo URL.' })
-        }
+      if (profile.storeLogoUrl && !logoUpload && !await isValidStoreLogoUrl(profile.storeLogoUrl)) {
+        return res.status(400).json({ error: 'Enter a valid store logo URL.' })
       }
       sellerProfile = profile
     }
 
     const passwordHash = await bcrypt.hash(password, 12)
-    const result = (await database.prepare(`
-      INSERT INTO users (full_name, email, phone, password_hash, role)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(fullName, email, phone || null, passwordHash, role))
-    const user = (await getRow<UserRow>('SELECT * FROM users WHERE id = ?', result.lastInsertRowid))!
-    if (role === 'customer') {
-      await database.prepare('INSERT INTO buyer_wallets (user_id, balance_cents) VALUES (?, 0)').run(user.id)
-      await database.prepare(`
-        INSERT INTO notifications (user_id, type, title, body, link)
-        SELECT id, 'buyer_signup', ?, ?, ? FROM users WHERE role = 'admin'
-      `).run(`New buyer #${user.id}`, `${fullName} (${email}) created a buyer profile.`, `/admin/users/${user.id}`)
-    }
-    if (sellerProfile) {
-      await database.prepare(`
-        INSERT INTO seller_profiles (user_id, store_name, store_description, logo_url, country, address, city, region, postal_code)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(user.id, sellerProfile.storeName, sellerProfile.storeDescription, sellerProfile.storeLogoUrl, sellerProfile.country, sellerProfile.address, sellerProfile.city, sellerProfile.region, sellerProfile.postalCode)
-      await database.prepare('DELETE FROM seller_email_verifications WHERE email = ?').run(email)
-      await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'seller_signup', ?, ?, ? FROM users WHERE role = 'admin'").run(`New seller #${user.id}`, `${fullName} (${email}) created ${sellerProfile.storeName}.`, `/admin/users/${user.id}`)
-    }
+    const user = await database.transaction(async () => {
+      const result = (await database.prepare(`
+        INSERT INTO users (full_name, email, phone, password_hash, role)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(fullName, email, phone || null, passwordHash, role))
+      const user = (await getRow<UserRow>('SELECT * FROM users WHERE id = ?', result.lastInsertRowid))!
+      if (role === 'customer') {
+        await database.prepare('INSERT INTO buyer_wallets (user_id, balance_cents) VALUES (?, 0)').run(user.id)
+        await database.prepare(`
+          INSERT INTO notifications (user_id, type, title, body, link)
+          SELECT id, 'buyer_signup', ?, ?, ? FROM users WHERE role = 'admin'
+        `).run(`New buyer #${user.id}`, `${fullName} (${email}) created a buyer profile.`, `/admin/users/${user.id}`)
+      }
+      if (sellerProfile) {
+        if (logoUpload) await database.prepare('INSERT INTO product_images (id, content_type, image) VALUES (?, ?, ?)').run(logoUpload.id, logoUpload.contentType, logoUpload.image)
+        await database.prepare(`
+          INSERT INTO seller_profiles (user_id, store_name, store_description, logo_url, country, address, city, region, postal_code)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(user.id, sellerProfile.storeName, sellerProfile.storeDescription, sellerProfile.storeLogoUrl, sellerProfile.country, sellerProfile.address, sellerProfile.city, sellerProfile.region, sellerProfile.postalCode)
+        await database.prepare('DELETE FROM seller_email_verifications WHERE email = ?').run(email)
+        await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'seller_signup', ?, ?, ? FROM users WHERE role = 'admin'").run(`New seller #${user.id}`, `${fullName} (${email}) created ${sellerProfile.storeName}.`, `/admin/users/${user.id}`)
+      }
+      return user
+    })()
     await createSession(user.id, res)
     await database.prepare('INSERT INTO auth_events (user_id, event_type) VALUES (?, ?)').run(user.id, 'registered')
     if (role === 'seller' && sellerProfile) {
@@ -984,13 +1003,8 @@ app.put('/api/seller/store', requireAuth, requireRole('seller', 'admin'), async 
   if (!storeName || storeName.length > 100) return res.status(400).json({ error: 'Store name is required and must be under 100 characters.' })
   if (storeDescription.length > 500) return res.status(400).json({ error: 'Store description must be under 500 characters.' })
   if (storeLogoUrl.length > 2000) return res.status(400).json({ error: 'Store logo URL must be under 2000 characters.' })
-  if (storeLogoUrl) {
-    try {
-      const parsedLogoUrl = new URL(storeLogoUrl)
-      if (!['http:', 'https:'].includes(parsedLogoUrl.protocol)) return res.status(400).json({ error: 'Store logos must use HTTP or HTTPS.' })
-    } catch {
-      return res.status(400).json({ error: 'Enter a valid store logo URL.' })
-    }
+  if (storeLogoUrl && !await isValidStoreLogoUrl(storeLogoUrl)) {
+    return res.status(400).json({ error: 'Enter a valid store logo URL.' })
   }
 
   const existingStore = (await getRow<{ user_id: number }>('SELECT user_id FROM seller_profiles WHERE user_id = ?', req.user!.id))
@@ -1190,16 +1204,28 @@ app.get('/api/warehouse', requireAuth, requireRole('seller', 'admin'), async (_r
 })
 
 app.post('/api/admin/warehouse', requireAuth, requireRole('admin'), async (req, res) => {
-  const result = (await validateProduct(req.body ?? {}))
+  const prepared = prepareProductImages(req.body ?? {})
+  if ('error' in prepared) return res.status(400).json({ error: prepared.error })
+  const result = await validateProduct(prepared.body, new Set(prepared.uploads.map((image) => image.id)))
   if ('error' in result) return res.status(400).json({ error: result.error })
-  const inserted = (await database.prepare('INSERT INTO warehouse_products (product_json) VALUES (?)').run(JSON.stringify(result.product)))
+  const inserted = await database.transaction(async () => {
+    for (const image of prepared.uploads) await database.prepare('INSERT INTO product_images (id, content_type, image) VALUES (?, ?, ?)').run(image.id, image.contentType, image.image)
+    return database.prepare('INSERT INTO warehouse_products (product_json) VALUES (?)').run(JSON.stringify(result.product))
+  })()
   return res.status(201).json({ product: { ...result.product, id: Number(inserted.lastInsertRowid) } })
 })
 
 app.put('/api/admin/warehouse/:id', requireAuth, requireRole('admin'), async (req, res) => {
-  const result = (await validateProduct(req.body ?? {}))
+  const prepared = prepareProductImages(req.body ?? {})
+  if ('error' in prepared) return res.status(400).json({ error: prepared.error })
+  const result = await validateProduct(prepared.body, new Set(prepared.uploads.map((image) => image.id)))
   if ('error' in result) return res.status(400).json({ error: result.error })
-  const updated = (await database.prepare('UPDATE warehouse_products SET product_json=? WHERE id=?').run(JSON.stringify(result.product), Number(req.params.id)))
+  const updated = await database.transaction(async () => {
+    const record = await database.prepare('UPDATE warehouse_products SET product_json=? WHERE id=?').run(JSON.stringify(result.product), Number(req.params.id))
+    if (!record.changes) return record
+    for (const image of prepared.uploads) await database.prepare('INSERT INTO product_images (id, content_type, image) VALUES (?, ?, ?)').run(image.id, image.contentType, image.image)
+    return record
+  })()
   if (!updated.changes) return res.status(404).json({ error: 'Warehouse product not found.' })
   return res.json({ product: { ...result.product, id: Number(req.params.id) } })
 })

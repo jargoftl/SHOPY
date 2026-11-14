@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../lib/api.js'
 import { catalogTaxonomy } from '../data/catalogTaxonomy.js'
 import SiteName from '../components/SiteName.jsx'
+import ProductImageFields, { productImagePayload } from '../components/ProductImageFields.jsx'
 
 const taxonomyCategoryGroups = catalogTaxonomy.map((category) => ({
   name: category.name,
@@ -23,10 +24,13 @@ const SellerPage = () => {
   const [categories, setCategories] = useState([])
   const [editingProduct, setEditingProduct] = useState(null)
   const [newCategory, setNewCategory] = useState('')
-  const [productForm, setProductForm] = useState({ name: '', category: '', price: '', compareAtPrice: '', imageUrl: '', description: '', isPublished: true })
+  const [productForm, setProductForm] = useState({ name: '', category: '', price: '', compareAtPrice: '', imageUrl: '', imageUrls: [], description: '', isPublished: true })
   const [message, setMessage] = useState(location.state?.welcome || 'Loading your seller workspace…')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [imageUploads, setImageUploads] = useState({ primary: null, gallery: [] })
+  const [isReadingImages, setIsReadingImages] = useState(false)
+  const [imageFormVersion, setImageFormVersion] = useState(0)
   const knownCategoryValues = new Set(taxonomyCategoryGroups.flatMap((group) => group.options.map((option) => option.value)))
   const additionalCategories = categories.filter((category) => !knownCategoryValues.has(category.name))
 
@@ -70,6 +74,7 @@ const SellerPage = () => {
   const saveProduct = async (event) => {
     event.preventDefault()
     const form = event.currentTarget
+    if (isReadingImages) return
     setIsSaving(true)
     setMessage('')
 
@@ -78,6 +83,7 @@ const SellerPage = () => {
         method: editingProduct ? 'PATCH' : 'POST',
         body: JSON.stringify({
           ...productForm,
+          ...productImagePayload(productForm, imageUploads),
           price: Number(productForm.price),
           compareAtPrice: productForm.compareAtPrice ? Number(productForm.compareAtPrice) : null,
         }),
@@ -91,7 +97,10 @@ const SellerPage = () => {
       }
       setMessage(editingProduct ? `Product “${product.name}” was updated.` : `Product “${product.name}” was added.`)
       setEditingProduct(null)
-      setProductForm({ name: '', category: '', price: '', compareAtPrice: '', imageUrl: '', description: '', isPublished: true })
+      setImageFormVersion((version) => version + 1)
+      setImageUploads({ primary: null, gallery: [] })
+      setIsReadingImages(false)
+      setProductForm({ name: '', category: '', price: '', compareAtPrice: '', imageUrl: '', imageUrls: [], description: '', isPublished: true })
       form.reset()
     } catch (error) {
       setMessage(error.message)
@@ -102,7 +111,12 @@ const SellerPage = () => {
 
   const editProduct = (product) => {
     setEditingProduct(product)
+    setImageFormVersion((version) => version + 1)
+    setImageUploads({ primary: null, gallery: [] })
+    setIsReadingImages(false)
     setProductForm({
+      ...product,
+      imageUrls: (product.imageUrls || []).filter((url) => url !== product.imageUrl),
       name: product.name,
       category: product.category,
       price: String(product.price),
@@ -142,7 +156,10 @@ const SellerPage = () => {
 
   const cancelEdit = () => {
     setEditingProduct(null)
-    setProductForm({ name: '', category: '', price: '', compareAtPrice: '', imageUrl: '', description: '', isPublished: true })
+    setImageFormVersion((version) => version + 1)
+    setImageUploads({ primary: null, gallery: [] })
+    setIsReadingImages(false)
+    setProductForm({ name: '', category: '', price: '', compareAtPrice: '', imageUrl: '', imageUrls: [], description: '', isPublished: true })
   }
 
   const deleteProduct = async (productId) => {
@@ -191,8 +208,8 @@ const SellerPage = () => {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-[1440px] gap-8 px-5 py-9 md:grid-cols-[minmax(280px,0.8fr)_1.2fr] md:px-10 md:py-12">
-        <section>
+      <main className="mx-auto grid max-w-[1440px] gap-8 px-5 py-9 md:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] md:px-10 md:py-12">
+        <section className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a5a4d]">Catalog tools</p>
           <h1 className="mt-2 text-3xl font-semibold">{editingProduct ? 'Edit product' : 'Add a product'}</h1>
           <p className="mt-2 text-sm text-[#737970]">Published items become visible on the storefront.</p>
@@ -224,16 +241,14 @@ const SellerPage = () => {
             <label className="block text-sm font-medium">Compare-at price <span className="font-normal text-[#777]">(optional, must be higher than current price)</span>
               <input name="compareAtPrice" type="number" value={productForm.compareAtPrice} onChange={(event) => setProductForm((current) => ({ ...current, compareAtPrice: event.target.value }))} min="0" max="1000000" step="0.01" className="mt-2 h-11 w-full border border-[#d9dbd5] px-3 text-sm outline-none focus:border-black" placeholder="Original price" />
             </label>
-            <label className="block text-sm font-medium">Product image URL
-              <input name="imageUrl" type="url" value={productForm.imageUrl} onChange={(event) => setProductForm((current) => ({ ...current, imageUrl: event.target.value }))} maxLength={2000} required className="mt-2 h-11 w-full border border-[#d9dbd5] px-3 text-sm outline-none focus:border-black" placeholder="https://example.com/image.jpg" />
-            </label>
+            <ProductImageFields key={imageFormVersion} form={productForm} setForm={setProductForm} uploads={imageUploads} setUploads={setImageUploads} onBusyChange={setIsReadingImages} onError={setMessage} />
             <label className="block text-sm font-medium">Description
               <textarea name="description" value={productForm.description} onChange={(event) => setProductForm((current) => ({ ...current, description: event.target.value }))} maxLength={2000} rows={3} className="mt-2 w-full border border-[#d9dbd5] px-3 py-2 text-sm outline-none focus:border-black" placeholder="A few details about this product" />
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="isPublished" checked={productForm.isPublished} onChange={(event) => setProductForm((current) => ({ ...current, isPublished: event.target.checked }))} className="accent-black" /> Publish on the storefront
             </label>
-            <button disabled={isSaving} type="submit" className="w-full bg-black px-4 py-3 text-sm font-semibold text-white disabled:opacity-60">{isSaving ? 'Saving product…' : editingProduct ? 'Save changes' : 'Add product'}</button>
+            <button disabled={isSaving || isReadingImages} type="submit" className="w-full bg-black px-4 py-3 text-sm font-semibold text-white disabled:opacity-60">{isSaving ? 'Saving product…' : editingProduct ? 'Save changes' : 'Add product'}</button>
             {editingProduct && <button type="button" onClick={cancelEdit} className="w-full border border-[#ccc] px-4 py-3 text-sm">Cancel editing</button>}
           </form>
 
@@ -254,7 +269,7 @@ const SellerPage = () => {
           </details>
         </section>
 
-        <section>
+        <section className="min-w-0">
           <div className="mb-5 flex items-end justify-between gap-4">
             <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a5a4d]">Your catalog</p><h2 className="mt-2 text-2xl font-semibold">Products <span className="text-base font-normal text-[#777]">({products.length})</span></h2></div>
             <Link to="/" className="text-xs underline underline-offset-4">View storefront</Link>

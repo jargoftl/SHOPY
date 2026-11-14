@@ -1,5 +1,5 @@
 import SiteName from '../../components/SiteName.jsx'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AuthLayout from '../../components/AuthLayout.jsx'
 import { apiRequest } from '../../lib/api.js'
@@ -23,10 +23,56 @@ const SellerRegister = () => {
   const [message, setMessage] = useState('')
   const [isSendingCode, setIsSendingCode] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [logoUpload, setLogoUpload] = useState(null)
+  const [isReadingLogo, setIsReadingLogo] = useState(false)
+  const logoInput = useRef(null)
+  const logoReadVersion = useRef(0)
+
+  const clearLogoUpload = () => {
+    logoReadVersion.current += 1
+    setLogoUpload(null)
+    setIsReadingLogo(false)
+    if (logoInput.current) logoInput.current.value = ''
+  }
+
+  const chooseLogo = (event) => {
+    const file = event.target.files?.[0]
+    logoReadVersion.current += 1
+    setLogoUpload(null)
+    setIsReadingLogo(false)
+    setMessage('')
+    if (!file) return
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || !file.size || file.size > 2 * 1024 * 1024) {
+      if (logoInput.current) logoInput.current.value = ''
+      setMessage('Choose a PNG, JPEG or WebP logo up to 2 MB.')
+      return
+    }
+    const version = logoReadVersion.current
+    setIsReadingLogo(true)
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (version !== logoReadVersion.current) return
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      const data = result.split(',')[1]
+      if (!data) setMessage('This logo could not be read. Please choose it again.')
+      else {
+        setLogoUpload({ type: file.type, data, name: file.name })
+        setForm((current) => ({ ...current, storeLogoUrl: '' }))
+      }
+      setIsReadingLogo(false)
+    }
+    reader.onerror = () => {
+      if (version !== logoReadVersion.current) return
+      setIsReadingLogo(false)
+      setMessage('This logo could not be read. Please choose it again.')
+    }
+    reader.readAsDataURL(file)
+  }
 
   const updateForm = (event) => {
     const { name, value } = event.target
     setForm((current) => ({ ...current, [name]: value }))
+    if (name === 'storeLogoUrl') clearLogoUpload()
     if (name === 'email') {
       setCodeSent(false)
       setDevelopmentCode('')
@@ -113,6 +159,7 @@ const SellerRegister = () => {
           storeName: form.storeName,
           storeDescription: form.storeDescription,
           storeLogoUrl: form.storeLogoUrl,
+          ...(logoUpload ? { storeLogoUpload: { type: logoUpload.type, data: logoUpload.data } } : {}),
           country: form.country,
           address: form.address,
           city: form.city,
@@ -196,20 +243,30 @@ const SellerRegister = () => {
       )}
 
       {step === 1 && (
-        <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); setMessage(''); setStep(2) }}>
+        <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (isReadingLogo) return; setMessage(''); setStep(2) }}>
           <p className="text-sm leading-6 text-[#666]">Set the public details for your seller workspace. You can edit these later.</p>
           <label className="block text-sm font-medium">Store or workspace name
             <input name="storeName" value={form.storeName} onChange={updateForm} maxLength={100} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Your shop name" />
           </label>
-          <label className="block text-sm font-medium">Shop logo URL <span className="font-normal text-[#777]">(optional)</span>
-            <input name="storeLogoUrl" value={form.storeLogoUrl} onChange={updateForm} type="url" maxLength={2000} className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="https://example.com/your-logo.jpg" />
-          </label>
-          {form.storeLogoUrl && <img src={form.storeLogoUrl} alt="Store logo preview" className="size-16 rounded-full border border-[#e4e4e4] bg-white object-cover" />}
+          <div className="space-y-3">
+            <label className="block text-sm font-medium">Shop logo <span className="font-normal text-[#777]">(optional)</span>
+              <input ref={logoInput} name="storeLogoFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseLogo} aria-describedby="store-logo-help" className="mt-2 block w-full border border-[#d9dce2] p-2 text-xs file:mr-3 file:border-0 file:bg-[#f3f4f1] file:px-3 file:py-2 file:text-xs file:font-medium" />
+            </label>
+            <p id="store-logo-help" className="text-xs text-[#777]">Choose a PNG, JPEG or WebP image up to 2 MB.</p>
+            {isReadingLogo && <p role="status" className="text-xs text-[#777]">Preparing logo…</p>}
+            {(logoUpload || form.storeLogoUrl) && <div className="flex items-center gap-3">
+              <img src={logoUpload ? `data:${logoUpload.type};base64,${logoUpload.data}` : form.storeLogoUrl} alt="Store logo preview" className="size-16 rounded-full border border-[#e4e4e4] bg-white object-cover" />
+              {logoUpload && <div className="min-w-0"><p className="truncate text-xs text-[#666]">{logoUpload.name}</p><button type="button" onClick={clearLogoUpload} className="mt-1 text-xs underline underline-offset-2">Remove logo</button></div>}
+            </div>}
+            <label className="block text-xs font-medium text-[#777]">Or use a logo URL
+              <input name="storeLogoUrl" value={form.storeLogoUrl} onChange={updateForm} type="url" maxLength={2000} className="mt-2 h-11 w-full border border-[#d9dce2] px-3 text-sm outline-none focus:border-black" placeholder="https://example.com/your-logo.jpg" />
+            </label>
+          </div>
           <label className="block text-sm font-medium">About your store
             <textarea name="storeDescription" value={form.storeDescription} onChange={updateForm} maxLength={500} rows={4} className="mt-2 w-full border border-[#d9dce2] px-3 py-2 outline-none focus:border-black" placeholder="What will you sell?" />
           </label>
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
-          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(0)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" className="h-12 bg-black text-sm font-semibold text-white">Continue to profile</button></div>
+          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(0)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isReadingLogo} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">Continue to profile</button></div>
         </form>
       )}
 
@@ -252,7 +309,7 @@ const SellerRegister = () => {
             I agree to the seller terms and understand this demo does not collect SSNs or transmit identity-document files.
           </label>
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
-          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isSubmitting} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">{isSubmitting ? 'Submitting…' : 'Submit seller profile'}</button></div>
+          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isSubmitting || isReadingLogo} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">{isSubmitting ? 'Submitting…' : 'Submit seller profile'}</button></div>
         </form>
       )}
 

@@ -120,6 +120,56 @@ try{
   globalThis.fetch=async(url,options)=>String(url)==='https://api.brevo.com/v3/smtp/email'?new Response('{}',{status:503}):actualFetch(url,options);
   r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:'outage@example.test'})});check('provider outage does not bypass verification',r.status===503&&r.data.verificationRequired!==false&&!r.data.developmentCode,r);
  }finally{globalThis.fetch=actualFetch;process.env.BREVO_API_KEY='';process.env.EMAIL_FROM='';process.env.SELLER_EMAIL_VERIFICATION='auto'}
+ // Logo uploads use the existing image API and private Storage, and failed uploads roll back signup.
+ const logoForm={...sellerForm,email:'logo-seller@example.test',storeLogoUpload:{type:'image/png',data:png.toString('base64')}};
+ r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(logoForm)});check('seller signup with uploaded logo',r.status===201,r);
+ const logoSellerId=r.data.user?.id,logoCookie=r.cookie;
+ if(logoSellerId){
+  r=await req('/api/seller/store',{},logoCookie);const logoUrl=r.data.store?.storeLogoUrl;
+  check('uploaded logo has a stable public image URL',r.status===200&&/^\/api\/product-images\/[a-f0-9]{64}$/.test(logoUrl||''),r);
+  if(logoUrl){const image=await fetch(base+logoUrl);check('logo image returns original bytes',image.ok&&Buffer.from(await image.arrayBuffer()).equals(png));}
+  r=await req('/api/stores/'+logoSellerId);check('public store retains uploaded logo',r.status===200&&JSON.stringify(r.data).includes(logoUrl),r);
+  r=await req('/api/seller/store',{method:'PUT',body:JSON.stringify({storeName:'Updated Logo Shop',storeDescription:'Updated',storeLogoUrl:logoUrl})},logoCookie);check('store edit preserves uploaded logo URL',r.status===200,r);
+ }
+ for(const [label,upload] of [['SVG',{type:'image/svg+xml',data:Buffer.from('<svg/>').toString('base64')}],['mismatched image',{type:'image/jpeg',data:png.toString('base64')}],['oversized image',{type:'image/png',data:Buffer.concat([png,Buffer.alloc(2*1024*1024)]).toString('base64')}]]){
+  const email=label.split(' ')[0]+'-invalid@example.test';
+  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify({...sellerForm,email,storeLogoUpload:upload})});check('reject '+label+' logo',r.status===400,r);
+  check('invalid logo creates no account '+label,(await db.query('SELECT id FROM shop.users WHERE email=$1',[email])).rows.length===0);
+ }
+ const putBeforeFailure=ObjectStorage.prototype.put;
+ try{
+  ObjectStorage.prototype.put=async()=>{throw new Error('Simulated upload failure')};
+  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify({...logoForm,email:'failed-logo@example.test'})});check('Storage failure reported',r.status===500,r);
+  check('failed logo upload rolls back account',(await db.query("SELECT id FROM shop.users WHERE email='failed-logo@example.test'")).rows.length===0);
+ }finally{ObjectStorage.prototype.put=putBeforeFailure}
+ // Create/edit warehouse images and galleries, then import without losing stable URLs.
+ const jpeg=Buffer.from([255,216,255,224,0,16,74,70,73,70,0,1,255,217]);
+ const warehouseForm={name:'Uploaded warehouse item',category:'Bags',price:25,description:'Uploaded photos',imageUploads:{primary:{type:'image/png',data:png.toString('base64')},gallery:[{type:'image/jpeg',data:jpeg.toString('base64')}]}};
+ r=await req('/api/admin/warehouse',{method:'POST',body:JSON.stringify(warehouseForm)},cookie);check('admin warehouse create with uploaded images',r.status===201,r);
+ let warehouse=r.data.product;
+ if(warehouse){
+  check('warehouse main image appears first in gallery',warehouse.imageUrls.length===2&&warehouse.imageUrls[0]===warehouse.imageUrl,r);
+  for(const [i,url] of warehouse.imageUrls.entries()){const image=await fetch(base+url);check('warehouse image '+i+' persists',image.ok&&Buffer.from(await image.arrayBuffer()).equals(i===0?png:jpeg));}
+  r=await req('/api/seller/warehouse/'+warehouse.id+'/import',{method:'POST'},seller);check('warehouse import retains uploaded images',r.status===201&&r.data.product.imageUrl===warehouse.imageUrl&&r.data.product.imageUrls.length===2,r);
+  r=await req('/api/admin/warehouse/'+warehouse.id,{method:'PUT',body:JSON.stringify({...warehouse,imageUploads:{primary:{type:'image/jpeg',data:jpeg.toString('base64')}}})},cookie);check('warehouse main image replacement',r.status===200,r);
+  const replacement=r.data.product;
+  check('replacement is first and old main removed from gallery',replacement?.imageUrl!==warehouse.imageUrl&&replacement?.imageUrls[0]===replacement?.imageUrl&&!replacement?.imageUrls.includes(warehouse.imageUrl),r);
+  if(replacement)warehouse=replacement;
+  r=await req('/api/admin/warehouse/'+warehouse.id,{method:'PUT',body:JSON.stringify({...warehouse,name:'Edited without replacing photos'})},cookie);check('warehouse edit preserves saved relative image URLs',r.status===200&&r.data.product.imageUrl===warehouse.imageUrl,r);
+  const imageCount=Number((await db.query('SELECT COUNT(*) AS count FROM shop.product_images')).rows[0].count);
+  const originalPut=ObjectStorage.prototype.put;
+  try{
+   ObjectStorage.prototype.put=async()=>{throw new Error('Simulated warehouse upload failure')};
+   r=await req('/api/admin/warehouse/'+warehouse.id,{method:'PUT',body:JSON.stringify({...warehouse,name:'Should roll back',imageUploads:warehouseForm.imageUploads})},cookie);check('warehouse failed upload reported',r.status===500,r);
+   const row=(await db.query('SELECT product_json FROM shop.warehouse_products WHERE id=$1',[warehouse.id])).rows[0];check('warehouse failed upload preserves existing item',JSON.parse(row.product_json).name==='Edited without replacing photos');
+   check('warehouse failed upload leaves no image rows',Number((await db.query('SELECT COUNT(*) AS count FROM shop.product_images')).rows[0].count)===imageCount);
+  }finally{ObjectStorage.prototype.put=originalPut}
+ }
+ r=await req('/api/admin/warehouse',{method:'POST',body:JSON.stringify(warehouseForm)},seller);check('seller cannot upload into admin warehouse',r.status===403,r);
+ r=await req('/api/admin/warehouse',{method:'POST',body:JSON.stringify({...warehouseForm,imageUploads:{primary:{type:'image/svg+xml',data:Buffer.from('<svg/>').toString('base64')}}})},cookie);check('warehouse rejects unsupported image types',r.status===400,r);
+ if(product){
+  r=await req('/api/seller/products/'+product.id,{method:'PATCH',body:JSON.stringify({...product,imageUploads:warehouseForm.imageUploads})},seller);check('seller edit accepts main and gallery uploads',r.status===200&&r.data.product.imageUrls.length===2&&r.data.product.imageUrls[0]===r.data.product.imageUrl,r);
+ }
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.
  const storageFetch=globalThis.fetch;
  Object.assign(process.env,{SUPABASE_URL:'https://storage.example.test',SUPABASE_SERVICE_ROLE_KEY:'test-only-placeholder',SUPABASE_STORAGE_BUCKET:'shop-uploads'});

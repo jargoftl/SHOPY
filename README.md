@@ -52,7 +52,7 @@ The seller bell shows red for unread notifications and green when there are none
 
 ## Seller product management
 
-The admin can create, edit and remove items in the shared product warehouse on `/admin`. Sellers can search it from Product Management and add a copy to their own catalog, published to both their store and the marketplace. The seller can subsequently edit or unpublish that copy using the existing product editor. Changes or removal in the warehouse do not change copies already made. Existing seller-created products remain available. The editor and warehouse form use the shared category and subcategory list.
+The admin can create, edit and remove items in the shared product warehouse on `/admin`. Both the warehouse form and seller product create/edit form accept a main image plus up to seven additional images from the device (PNG, JPEG or WebP, 2 MB each), with previews and removal before saving. Existing image URL options and saved images remain supported. Sellers can search it from Product Management and add a copy to their own catalog, published to both their store and the marketplace. The seller can subsequently edit or unpublish that copy using the existing product editor. Changes or removal in the warehouse do not change copies already made. Existing seller-created products remain available. The editor and warehouse form use the shared category and subcategory list.
 
 On the first API startup after this update, 21 clearly labeled sample products are added to the shared warehouse, one for each category. Prices and images are illustrative, not actual offers; sample images may not depict the item. Admins can remove each sample in the warehouse. Removed samples do not reappear after restart; existing seller copies, if any, must be removed separately.
 
@@ -82,7 +82,7 @@ The TypeScript Express API is in `server/index.ts`; Email notifications are in `
 - `GET /api/categories`, `GET /api/seller/categories`, `POST /api/seller/categories`, and `DELETE /api/seller/categories/:id` manage shared catalog categories.
 - `GET /api/admin/users`, `GET /api/admin/products`, `GET /api/admin/events`, and `PATCH /api/admin/users/:id/role` support the owner dashboard.
 
-Seller profile review is at `GET /api/admin/sellers`. The demo stores seller contact/workspace details only; local image previews are not uploaded and SSNs are not collected.
+Seller profile review is at `GET /api/admin/sellers`. Seller signup accepts an optional PNG, JPEG or WebP shop logo up to 2 MB, with a preview and removal before submission. Uploaded logos persist in private Supabase Storage and are served through the public image API; the logo URL option remains available. Identity-document examples are not uploaded and SSNs are not collected.
 
 ## Email setup
 

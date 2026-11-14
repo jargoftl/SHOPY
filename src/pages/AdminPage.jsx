@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiRequest } from '../lib/api.js'
 import AdminPurchases from '../components/AdminPurchases.jsx'
+import AdminWarehouse from '../components/AdminWarehouse.jsx'
 import { useSiteSettings } from '../context/siteSettings.js'
 
 const AdminPage = () => {
@@ -158,6 +159,7 @@ const AdminPage = () => {
           </details>
         </section>
 
+        <AdminWarehouse />
         <AdminPurchases selectedNumber={selectedOrder} />
 
         <section className="mb-8 border border-[#263c2d] bg-[#0d1b12]">

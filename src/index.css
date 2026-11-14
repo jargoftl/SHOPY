@@ -56,7 +56,6 @@ body {
   animation: app-loading-cut 2s infinite;
 }
 
-.app-loading-label { font-size: 0.875rem; }
 
 @keyframes app-loading-cut {
   0%, 75%, 100% { clip-path: inset(0); }

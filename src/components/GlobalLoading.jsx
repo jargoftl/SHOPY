@@ -29,6 +29,6 @@ export default function GlobalLoading() {
 
   if (!visible || !active) return null
   return <dialog ref={dialog} onCancel={(event) => event.preventDefault()} aria-label="Loading" data-preserve-theme className="app-loading">
-    <div role="status" aria-live="polite" className="app-loading-content"><span className="app-loading-name"><SiteName /></span><span className="app-loading-label">Loading…</span></div>
+    <div role="status" aria-live="polite" className="app-loading-content"><span className="app-loading-name"><SiteName /></span></div>
   </dialog>
 }
