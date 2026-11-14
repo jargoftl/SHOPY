@@ -1,4 +1,16 @@
-export const apiRequest = async (path, options = {}) => {
+let activeRequests = 0
+const reportActivity = () => window.dispatchEvent(new CustomEvent('app:request-activity', { detail: activeRequests }))
+export const getActiveRequests = () => activeRequests
+
+const track = async (operation, background) => {
+  if (!background) { activeRequests += 1; reportActivity() }
+  try { return await operation() }
+  finally { if (!background) { activeRequests -= 1; reportActivity() } }
+}
+
+export const trackedFetch = (path, options = {}, background = false) => track(() => fetch(path, options), background)
+
+export const apiRequest = (path, { background = false, ...options } = {}) => track(async () => {
   const headers = {
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     ...options.headers,
@@ -22,4 +34,4 @@ export const apiRequest = async (path, options = {}) => {
   }
 
   return data
-}
+}, background)

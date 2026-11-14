@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { BarChart3, Bell, Boxes, ChevronRight, CircleDollarSign, LayoutDashboard, LogOut, Menu, MessageSquare, Package, Store, Users, X } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
+import SellerNotificationBell from '../components/SellerNotificationBell.jsx'
+import RewardsBalance from '../components/RewardsBalance.jsx'
 
 const SellerDashboardPage = () => {
   const navigate = useNavigate()
@@ -113,7 +115,8 @@ const SellerDashboardPage = () => {
 
   const navigation = [
     { label: 'Dashboard', href: '/seller', icon: LayoutDashboard, active: true },
-    { label: 'Store products', href: isPreviewMode ? '/seller/login' : '/seller/products', icon: Package },
+    { label: 'Shop orders', href: isPreviewMode ? '/seller/login' : '/seller/orders', icon: Boxes },
+    { label: 'My purchases', href: isPreviewMode ? '/seller/login' : '/orders', icon: Package },
     { label: 'Store profile', href: isPreviewMode ? '/seller/login' : '/seller/products#store-profile', icon: Store },
     { label: 'Messages', href: isPreviewMode ? '/seller/login' : '/messages', icon: MessageSquare },
     { label: 'Notifications', href: isPreviewMode ? '/seller/login' : '/messages?view=notifications', icon: Bell },
@@ -133,6 +136,9 @@ const SellerDashboardPage = () => {
         {navigation.map(({ label, href, icon: Icon, active }) => <Link key={label} to={href} onClick={() => setMobileMenuOpen(false)} className={`flex min-h-11 items-center gap-3 px-3 text-xs font-medium ${active ? 'bg-[#edf2ff] text-[#3267dc]' : 'text-[#68716b] hover:bg-[#f4f6f4] hover:text-[#1d2b22]'}`}>
           <Icon size={16} /><span>{label}</span>{label === 'Messages' && <ChevronRight className="ml-auto" size={14} />}
         </Link>)}
+        <details className="text-xs text-[#68716b]"><summary className="flex min-h-11 cursor-pointer items-center gap-3 px-3 font-medium"><Package size={16} /> Product management <ChevronRight className="ml-auto" size={14} /></summary>
+          <div className="space-y-1 pl-8">{[['Store products', '/seller/products'], ['Product warehouse', '/seller/warehouse'], ['Refund requests', '/seller/refunds'], ['Product reviews', '/seller/reviews']].map(([label, href]) => <Link key={href} to={isPreviewMode ? '/seller/login' : href} onClick={() => setMobileMenuOpen(false)} className="block rounded px-3 py-2 hover:bg-[#f4f6f4]">{label}</Link>)}</div>
+        </details>
       </nav>
       {user.role === 'admin' && <div className="mx-4 border-t border-[#e7e9e7] py-3"><Link to="/admin" className="flex min-h-10 items-center gap-3 px-2 text-xs font-medium text-[#68716b] hover:text-[#1d2b22]"><Users size={16} />Admin dashboard</Link></div>}
       <div className="mt-auto border-t border-[#e7e9e7] p-4"><button type="button" onClick={() => isPreviewMode ? navigate('/seller/login') : logOut()} className="flex min-h-10 w-full items-center gap-3 px-2 text-xs font-medium text-[#68716b] hover:text-[#b34037]"><LogOut size={16} />{isPreviewMode ? 'Exit preview' : 'Log out'}</button></div>
@@ -153,7 +159,7 @@ const SellerDashboardPage = () => {
         <header className="sticky top-0 z-30 flex min-h-14 items-center justify-between border-b border-[#e5e8e8] bg-white/95 px-4 backdrop-blur sm:px-7">
           <div className="flex items-center gap-3"><button type="button" onClick={() => setMobileMenuOpen((open) => !open)} aria-label={mobileMenuOpen ? 'Close seller navigation' : 'Open seller navigation'} className="grid size-9 place-items-center border border-[#e4e7e4] lg:hidden">{mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}</button><h1 className="text-sm font-semibold">Dashboard</h1>{isPreviewMode && <span className="border border-[#eadfc7] bg-[#fff9eb] px-2 py-1 text-[10px] font-semibold text-[#71521e]">PREVIEW</span>}</div>
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link to={isPreviewMode ? '/seller/login' : '/messages?view=notifications'} aria-label="Notifications" title="Notifications" className="relative grid size-9 place-items-center text-[#677169] hover:bg-[#f4f6f4]"><Bell size={17} /><span className="absolute right-1 top-1 size-2 rounded-full bg-[#ed5362]" /></Link>
+            <SellerNotificationBell preview={isPreviewMode} />
             <span className="hidden max-w-48 truncate text-xs text-[#737b75] xl:block">{user.email}</span>
             <Link to={isPreviewMode ? '/seller/login' : '/seller/products#product-form'} className="hidden min-h-9 items-center bg-[#3189ec] px-3 text-xs font-semibold text-white hover:bg-[#2675ca] sm:flex">Create offer</Link>
             <button type="button" onClick={() => isPreviewMode ? navigate('/seller/login') : logOut()} className="min-h-9 bg-[#e44e59] px-3 text-xs font-semibold text-white hover:bg-[#c73944]">{isPreviewMode ? 'Exit preview' : 'Log out'}</button>
@@ -162,14 +168,17 @@ const SellerDashboardPage = () => {
 
         <nav className="flex min-h-11 items-center gap-1 overflow-x-auto border-b border-[#e5e8e8] bg-white px-3 sm:px-6" aria-label="Seller workspace tabs">
           <Link to="/seller" className="shrink-0 border-b-2 border-[#3267dc] px-3 py-3 text-[11px] font-medium text-[#3267dc]">Dashboard</Link>
-          {['Shop order', 'Financial statement', 'My wallet', 'Deposit', 'Withdraw', 'Fund record'].map((tab) => <button key={tab} type="button" disabled title="This dashboard section is not connected yet" className="shrink-0 border-b-2 border-transparent px-3 py-3 text-[11px] text-[#9aa19b]">{tab}</button>)}
+          <Link to={isPreviewMode ? '/seller/login' : '/seller/orders'} className="shrink-0 px-3 py-3 text-[11px] text-[#3267dc]">Shop orders</Link>
+          {[['Store products', '/seller/products'], ['Product warehouse', '/seller/warehouse'], ['Refund requests', '/seller/refunds'], ['Product reviews', '/seller/reviews']].map(([label, href]) => <Link key={href} to={isPreviewMode ? '/seller/login' : href} className="shrink-0 px-3 py-3 text-[11px] text-[#3267dc]">{label}</Link>)}
+          {['Financial statement', 'My wallet', 'Deposit', 'Withdraw', 'Fund record'].map((tab) => <button key={tab} type="button" disabled title="This dashboard section is not connected yet" className="shrink-0 border-b-2 border-transparent px-3 py-3 text-[11px] text-[#9aa19b]">{tab}</button>)}
           <Link to={isPreviewMode ? '/seller/login' : '/seller/products'} className="shrink-0 border-b-2 border-transparent px-3 py-3 text-[11px] text-[#59645c] hover:border-[#dfe5df]">Store products</Link>
         </nav>
 
         {mobileMenuOpen && <div className="fixed inset-0 z-40 bg-black/30 lg:hidden" onMouseDown={(event) => { if (event.target === event.currentTarget) setMobileMenuOpen(false) }}><aside className="flex h-full w-[min(84vw,300px)] flex-col bg-white shadow-xl">{sidebar}</aside></div>}
 
         <main className="mx-auto max-w-[1600px] space-y-5 p-4 sm:p-6 lg:p-7">
-          {isPreviewMode && <section className="flex flex-wrap items-center justify-between gap-3 border border-[#eadfc7] bg-[#fff9eb] px-4 py-3 text-xs"><span>Previewing the dashboard with demo-store data. Sign in to manage your own account.</span><Link to="/seller/login" className="font-semibold underline underline-offset-4">Seller login</Link></section>}
+          {isPreviewMode && <section className="flex flex-wrap items-center justify-between gap-3 border border-[#eadfc7] bg-[#fff9eb] px-4 py-3 text-xs"><span>Previewing the dashboard with sample store data. Sign in to manage your own account.</span><Link to="/seller/login" className="font-semibold underline underline-offset-4">Seller login</Link></section>}
+          {!isPreviewMode && user.role === 'seller' && <RewardsBalance />}
           {!store && <section className="flex flex-wrap items-center justify-between gap-3 border border-[#eadfc7] bg-[#fff9eb] px-4 py-3 text-xs"><span>Your public store profile is not set up yet.</span><Link to="/seller/products#store-profile" className="font-semibold underline underline-offset-4">Set up store profile</Link></section>}
           <section className="bg-white p-4 shadow-[0_1px_5px_rgba(27,39,31,0.06)] sm:p-5">
             <div className="mb-4 flex items-center justify-between gap-4"><div><h2 className="text-sm font-semibold">Account overview</h2><p className="mt-1 text-[11px] text-[#7b847d]">A live view of your seller store</p></div><Link to="/seller/products" className="text-xs font-medium text-[#3267dc] hover:underline">Manage catalog</Link></div>
@@ -258,7 +267,7 @@ const SellerDashboardPage = () => {
 
             <aside className="bg-white p-5 shadow-[0_1px_5px_rgba(27,39,31,0.06)]">
               <h2 className="text-sm font-semibold">Store status</h2>
-              <p className="mt-1 text-[11px] text-[#7b847d]">Orders are not connected in this demo.</p>
+              <p className="mt-1 text-[11px] text-[#7b847d]">Orders are not connected to these dashboard figures.</p>
               <div className="mt-5 space-y-4">
                 <div className="flex items-center justify-between text-xs"><span className="text-[#68716b]">Products listed</span><strong>{store?.productCount ?? 0}</strong></div>
                 <div className="flex items-center justify-between text-xs"><span className="text-[#68716b]">Store visits</span><strong>{Number(store?.visitorCount || 0).toLocaleString()}</strong></div>

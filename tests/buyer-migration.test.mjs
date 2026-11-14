@@ -65,3 +65,48 @@ test('existing balances are reset once and future adjustments persist', async ()
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+test('existing account and buyer wallet amounts combine once', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'balance-merge-test-'))
+  const dbPath = join(directory, 'test.db')
+  const db = new Database(dbPath)
+  db.exec(`
+    CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, phone TEXT, password_hash TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE buyer_wallets (user_id INTEGER PRIMARY KEY REFERENCES users(id), balance_cents INTEGER NOT NULL DEFAULT 0 CHECK (balance_cents >= 0));
+    CREATE TABLE reward_balances (user_id INTEGER PRIMARY KEY REFERENCES users(id), balance_units INTEGER NOT NULL DEFAULT 0 CHECK (balance_units >= 0));
+    CREATE TABLE schema_migrations (name TEXT PRIMARY KEY);
+    INSERT INTO schema_migrations (name) VALUES ('reset_buyer_demo_balances_v1');
+    INSERT INTO users (full_name, email, password_hash, role) VALUES ('Buyer', 'buyer@example.test', 'unusable', 'customer'), ('Seller', 'seller@example.test', 'unusable', 'seller');
+    INSERT INTO buyer_wallets (user_id, balance_cents) VALUES (1, 1234), (2, 200);
+    INSERT INTO reward_balances (user_id, balance_units) VALUES (1, 5600), (2, 3000);
+  `)
+  db.close()
+  const reservation = createServer().listen(0, '127.0.0.1')
+  await once(reservation, 'listening')
+  const port = reservation.address().port
+  await new Promise((resolve) => reservation.close(resolve))
+  const env = { PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: 'test', PORT: String(port), DATABASE_PATH: dbPath, ADMIN_EMAIL: 'admin@example.test', ADMIN_PASSWORD: 'test-admin-password', SMTP_HOST: '', SMTP_PORT: '', SMTP_USER: '', SMTP_PASSWORD: '', EMAIL_FROM: '' }
+  let server
+  const start = async () => {
+    server = spawn(process.execPath, ['dist-server/index.js'], { env, stdio: 'ignore' })
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      try { await fetch(`http://127.0.0.1:${port}/api/health`); return } catch { await new Promise((resolve) => setTimeout(resolve, 100)) }
+    }
+    assert.fail('API did not start')
+  }
+  const stop = async () => { server.kill('SIGTERM'); if (server.exitCode === null && server.signalCode === null) await once(server, 'exit') }
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await start()
+      const current = new Database(dbPath, { readonly: true })
+      assert.equal(current.prepare('SELECT balance_units FROM reward_balances WHERE user_id = 1').get().balance_units, 6834)
+      assert.equal(current.prepare('SELECT balance_units FROM reward_balances WHERE user_id = 2').get().balance_units, 3200)
+      assert.equal(current.prepare('SELECT SUM(balance_cents) AS total FROM buyer_wallets').get().total, 0)
+      current.close()
+      await stop()
+    }
+  } finally {
+    if (server && server.exitCode === null && server.signalCode === null) await stop()
+    await rm(directory, { recursive: true, force: true })
+  }
+})

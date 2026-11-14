@@ -24,6 +24,13 @@ import BuyerProfilePage from './pages/BuyerProfilePage.jsx'
 import ForgotPassword from './pages/logings/ForgotPassword.jsx'
 import ResetPassword from './pages/logings/ResetPassword.jsx'
 import AdminUserDetailsPage from './pages/AdminUserDetailsPage.jsx'
+import PurchasePage from './pages/PurchasePage.jsx'
+import MyPurchasesPage from './pages/MyPurchasesPage.jsx'
+import SellerOrdersPage from './pages/SellerOrdersPage.jsx'
+import SellerManagementPage from './pages/SellerManagementPage.jsx'
+import ThemeToggle from './components/ThemeToggle.jsx'
+import GlobalLoading from './components/GlobalLoading.jsx'
+import OrderNotifications from './components/OrderNotifications.jsx'
 
 const categories = ['Everything', 'Home', 'Wear', 'Objects', 'Outdoors']
 
@@ -233,6 +240,8 @@ const AnimatedRoutes = () => {
             <Route path="/cart" element={<CartPage />} />
             <Route path="/billing" element={<BillingPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />
+            <Route path="/purchase/:id" element={<PurchasePage />} />
+            <Route path="/orders" element={<MyPurchasesPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -244,7 +253,11 @@ const AnimatedRoutes = () => {
             <Route path="/admin/users/:userId" element={<AdminUserDetailsPage />} />
             <Route path="/admin/seller-metrics" element={<AdminSellerMetricsPage />} />
             <Route path="/seller" element={<SellerDashboardPage />} />
+            <Route path="/seller/orders" element={<SellerOrdersPage />} />
             <Route path="/seller/products" element={<SellerPage />} />
+            <Route path="/seller/warehouse" element={<SellerManagementPage view="warehouse" />} />
+            <Route path="/seller/refunds" element={<SellerManagementPage view="refunds" />} />
+            <Route path="/seller/reviews" element={<SellerManagementPage view="reviews" />} />
             <Route path="/seller/register" element={<SellerRegister />} />
             <Route path="/previous-storefront" element={<Storefront />} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -252,6 +265,9 @@ const AnimatedRoutes = () => {
         </motion.div>
       </AnimatePresence>
       <MobileBottomNav />
+      <ThemeToggle />
+      <OrderNotifications />
+      <GlobalLoading />
     </>
   )
 }

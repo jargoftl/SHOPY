@@ -7,8 +7,11 @@ import helmet from 'helmet'
 import { rateLimit } from 'express-rate-limit'
 import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { dirname, isAbsolute, resolve } from 'node:path'
 import { isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
+import { registerManualOrders } from './manualOrders.ts'
+import { allocateOrderNumber } from './orderNumbers.ts'
+import { seedWarehouseSamples } from './warehouseSamples.ts'
 
 type UserRole = 'customer' | 'seller' | 'admin'
 
@@ -19,6 +22,7 @@ interface UserRow {
   phone: string | null
   password_hash: string
   role: UserRole
+  suspended: number
   created_at: string
   token_hash?: string
 }
@@ -119,8 +123,14 @@ const getRows = <Row>(sql: string, ...parameters: unknown[]): Row[] =>
 const app = express()
 const port = Number(process.env.PORT) || 3001
 const cookieName = 'ggu_session'
-const sessionDurationMs = 7 * 24 * 60 * 60 * 1000
-const databasePath = resolve(process.env.DATABASE_PATH || 'data/shop.db')
+const sessionDurationMs = 365 * 24 * 60 * 60 * 1000
+const sessionRenewalWindowMs = 30 * 24 * 60 * 60 * 1000
+const configuredDatabasePath = process.env.DATABASE_PATH || (process.env.NODE_ENV === 'production' ? '' : 'data/shop.db')
+if (!configuredDatabasePath) throw new Error('DATABASE_PATH must point to a persistent mounted directory in production.')
+if (process.env.NODE_ENV === 'production' && !isAbsolute(configuredDatabasePath)) {
+  throw new Error('DATABASE_PATH must be an absolute path in production.')
+}
+const databasePath = resolve(configuredDatabasePath)
 
 mkdirSync(dirname(databasePath), { recursive: true })
 
@@ -158,6 +168,15 @@ database.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS account_admin_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    admin_id INTEGER NOT NULL REFERENCES users(id),
+    action TEXT NOT NULL,
+    details TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS seller_email_verifications (
     email TEXT PRIMARY KEY,
     code_hash TEXT NOT NULL,
@@ -181,6 +200,13 @@ database.exec(`
     rating REAL NOT NULL DEFAULT 0 CHECK (rating >= 0 AND rating <= 5),
     seller_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     is_published INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS product_images (
+    id TEXT PRIMARY KEY,
+    content_type TEXT NOT NULL,
+    image BLOB NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -238,6 +264,20 @@ database.exec(`
   CREATE TABLE IF NOT EXISTS buyer_wallets (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     balance_cents INTEGER NOT NULL DEFAULT 0 CHECK (balance_cents >= 0)
+  );
+
+  CREATE TABLE IF NOT EXISTS reward_balances (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    balance_units INTEGER NOT NULL DEFAULT 0 CHECK (balance_units >= 0)
+  );
+  CREATE TABLE IF NOT EXISTS reward_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    admin_id INTEGER NOT NULL REFERENCES users(id),
+    adjustment_units INTEGER NOT NULL,
+    balance_units INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS buyer_addresses (
@@ -351,6 +391,14 @@ database.transaction(() => {
   }
 })()
 
+database.transaction(() => {
+  if (!getRow<{ name: string }>("SELECT name FROM schema_migrations WHERE name = 'unify_account_balances_v1'")) {
+    database.prepare('INSERT INTO reward_balances (user_id, balance_units) SELECT user_id, balance_cents FROM buyer_wallets WHERE balance_cents > 0 ON CONFLICT(user_id) DO UPDATE SET balance_units = reward_balances.balance_units + excluded.balance_units').run()
+    database.prepare('UPDATE buyer_wallets SET balance_cents = 0 WHERE balance_cents > 0').run()
+    database.prepare("INSERT INTO schema_migrations (name) VALUES ('unify_account_balances_v1')").run()
+  }
+})()
+
 const walletRequestColumns = database.prepare('PRAGMA table_info(buyer_wallet_requests)').all() as Array<{ name: string }>
 if (!walletRequestColumns.some((column) => column.name === 'payment_coin')) database.exec("ALTER TABLE buyer_wallet_requests ADD COLUMN payment_coin TEXT NOT NULL DEFAULT ''")
 if (!walletRequestColumns.some((column) => column.name === 'wallet_address')) database.exec("ALTER TABLE buyer_wallet_requests ADD COLUMN wallet_address TEXT NOT NULL DEFAULT ''")
@@ -387,6 +435,11 @@ if (!getRow<{ name: string }>("SELECT name FROM schema_migrations WHERE name = '
   } finally {
     database.pragma('foreign_keys = ON')
   }
+}
+
+const userColumns = database.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>
+if (!userColumns.some((column) => column.name === 'suspended')) {
+  database.exec('ALTER TABLE users ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0 CHECK (suspended IN (0, 1))')
 }
 
 const productColumns = database.prepare('PRAGMA table_info(products)').all() as Array<{ name: string }>
@@ -640,7 +693,9 @@ const seedAdmin = async (): Promise<void> => {
 }
 
 app.disable('x-powered-by')
+app.set('trust proxy', 1)
 app.use(helmet())
+app.use('/api/seller/products', express.json({ limit: '24mb' }))
 app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser())
 
@@ -655,7 +710,7 @@ const setSessionCookie = (res: Response, token: string): void => {
   res.cookie(cookieName, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.COOKIE_SECURE === 'true',
+    secure: process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true',
     path: '/',
     maxAge: sessionDurationMs,
   })
@@ -665,7 +720,7 @@ const clearSessionCookie = (res: Response): void => {
   res.clearCookie(cookieName, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.COOKIE_SECURE === 'true',
+    secure: process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true',
     path: '/',
   })
 }
@@ -682,8 +737,8 @@ const requireAuth: RequestHandler = (req, res, next) => {
   const token = req.cookies[cookieName]
   if (!token) return res.status(401).json({ error: 'Please log in to continue.' })
 
-  const session = getRow<UserRow>(`
-    SELECT users.*, sessions.token_hash
+  const session = getRow<UserRow & { session_expires_at: string }>(`
+    SELECT users.*, sessions.token_hash, sessions.expires_at AS session_expires_at
     FROM sessions
     JOIN users ON users.id = sessions.user_id
     WHERE sessions.token_hash = ? AND sessions.expires_at > ?
@@ -692,6 +747,16 @@ const requireAuth: RequestHandler = (req, res, next) => {
   if (!session) {
     clearSessionCookie(res)
     return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
+  }
+  if (session.suspended) {
+    clearSessionCookie(res)
+    return res.status(403).json({ error: 'Your account is suspended. Contact the administrator.' })
+  }
+
+  if (Date.parse(session.session_expires_at) - Date.now() <= sessionRenewalWindowMs) {
+    const expiresAt = new Date(Date.now() + sessionDurationMs).toISOString()
+    database.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?').run(expiresAt, session.token_hash)
+    setSessionCookie(res, token)
   }
 
   req.user = session
@@ -725,7 +790,7 @@ app.put('/api/admin/site-settings', requireAuth, requireRole('admin'), (req, res
   return res.json({ siteName })
 })
 
-const validateProduct = (body: Record<string, unknown>): { product: ProductInput } | { error: string } => {
+const validateProduct = (body: Record<string, unknown>, newImageIds: Set<string> = new Set()): { product: ProductInput } | { error: string } => {
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   const category = typeof body.category === 'string' ? body.category.trim() : ''
   const description = typeof body.description === 'string' ? body.description.trim() : ''
@@ -746,11 +811,12 @@ const validateProduct = (body: Record<string, unknown>): { product: ProductInput
     : []
   const rating = Number(body.rating ?? 0)
 
-  let parsedImageUrl
-  try {
-    parsedImageUrl = new URL(imageUrl)
-  } catch {
-    return { error: 'Enter a valid product image URL.' }
+  const validImage = (value: string) => {
+    if (/^\/api\/product-images\/[a-f0-9]{64}$/.test(value)) {
+      const id = value.slice('/api/product-images/'.length)
+      return newImageIds.has(id) || Boolean(database.prepare('SELECT 1 FROM product_images WHERE id = ?').get(id))
+    }
+    try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false }
   }
 
   if (!name || name.length > 120) return { error: 'Product name is required and must be under 120 characters.' }
@@ -759,17 +825,12 @@ const validateProduct = (body: Record<string, unknown>): { product: ProductInput
   if (compareAtPrice !== null && (!Number.isFinite(compareAtPrice) || compareAtPrice <= price || compareAtPrice > 1000000)) {
     return { error: 'Compare-at price must be greater than the sale price.' }
   }
-  if (!['http:', 'https:'].includes(parsedImageUrl.protocol)) return { error: 'Product images must use HTTP or HTTPS.' }
+  if (!validImage(imageUrl)) return { error: 'Choose a product image or enter a valid image URL.' }
   if (imageUrls.length > 8 || colors.length > 12 || sizes.length > 12) return { error: 'Use up to 8 product images, 12 colors, and 12 sizes.' }
   if (colors.some((color) => color.length > 40) || sizes.some((size) => size.length > 40)) return { error: 'Color and size options must be under 40 characters each.' }
   if (!Number.isFinite(rating) || rating < 0 || rating > 5) return { error: 'Product rating must be between 0 and 5.' }
   for (const galleryImage of imageUrls) {
-    try {
-      const parsedGalleryUrl = new URL(galleryImage)
-      if (!['http:', 'https:'].includes(parsedGalleryUrl.protocol)) return { error: 'Product images must use HTTP or HTTPS.' }
-    } catch {
-      return { error: 'Enter valid URLs for all product images.' }
-    }
+    if (!validImage(galleryImage)) return { error: 'Choose valid product images or enter valid image URLs.' }
   }
   if (description.length > 2000) return { error: 'Description must be under 2000 characters.' }
 
@@ -790,6 +851,48 @@ const validateProduct = (body: Record<string, unknown>): { product: ProductInput
     },
   }
 }
+
+type ProductImageUpload = { id: string, contentType: string, image: Buffer }
+const prepareProductImages = (body: Record<string, unknown>): { body: Record<string, unknown>, uploads: ProductImageUpload[] } | { error: string } => {
+  const raw = body.imageUploads
+  if (raw === undefined) return { body, uploads: [] }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: 'Invalid product image upload.' }
+  const { primary, gallery } = raw as { primary?: unknown, gallery?: unknown }
+  if (gallery !== undefined && (!Array.isArray(gallery) || gallery.length > 7)) return { error: 'Choose up to seven additional gallery images.' }
+  const uploads: ProductImageUpload[] = []
+  const decode = (value: unknown): string | null => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const { type, data } = value as { type?: unknown, data?: unknown }
+    if (typeof type !== 'string' || typeof data !== 'string' || !['image/png', 'image/jpeg', 'image/webp'].includes(type) || data.length > 2796204 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(data)) return null
+    const image = Buffer.from(data, 'base64')
+    if (!image.length || image.length > 2 * 1024 * 1024) return null
+    const png = image.length >= 8 && image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    const jpeg = image.length >= 3 && image[0] === 255 && image[1] === 216 && image[2] === 255
+    const webp = image.length >= 12 && image.toString('ascii', 0, 4) === 'RIFF' && image.toString('ascii', 8, 12) === 'WEBP'
+    if (!(type === 'image/png' && png) && !(type === 'image/jpeg' && jpeg) && !(type === 'image/webp' && webp)) return null
+    const id = randomBytes(32).toString('hex')
+    uploads.push({ id, contentType: type, image })
+    return `/api/product-images/${id}`
+  }
+  const imageUrl = primary === undefined || primary === null ? body.imageUrl : decode(primary)
+  if (primary != null && !imageUrl) return { error: 'Choose PNG, JPEG or WebP images up to 2 MB each.' }
+  const existingGallery = Array.isArray(body.imageUrls) ? body.imageUrls : []
+  const addedGallery: string[] = []
+  for (const item of (gallery ?? []) as unknown[]) {
+    const url = decode(item)
+    if (!url) return { error: 'Choose PNG, JPEG or WebP images up to 2 MB each.' }
+    addedGallery.push(url)
+  }
+  return { body: { ...body, imageUrl, imageUrls: [...existingGallery, ...addedGallery] }, uploads }
+}
+
+app.get('/api/product-images/:id', (req, res) => {
+  const id = String(req.params.id)
+  if (!/^[a-f0-9]{64}$/.test(id)) return res.status(404).json({ error: 'Image not found.' })
+  const image = getRow<{ image: Buffer, content_type: string }>('SELECT image, content_type FROM product_images WHERE id = ?', id)
+  if (!image) return res.status(404).json({ error: 'Image not found.' })
+  return res.set('Cache-Control', 'public, max-age=31536000, immutable').set('X-Content-Type-Options', 'nosniff').type(image.content_type).send(image.image)
+})
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -949,11 +1052,14 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
     if (!user || !await bcrypt.compare(password, user.password_hash)) {
       return res.status(401).json({ error: 'Email or password is incorrect.' })
     }
+    const currentUser = getRow<UserRow>('SELECT * FROM users WHERE id = ?', user.id)
+    if (!currentUser || currentUser.suspended) return res.status(403).json({ error: 'Your account is suspended. Contact the administrator.' })
+    if (req.body.loginType === 'seller' && !['seller', 'admin'].includes(currentUser.role)) return res.status(403).json({ error: 'This account is not a seller account. Use customer login instead.' })
 
-    createSession(user.id, res)
-    database.prepare('INSERT INTO auth_events (user_id, event_type) VALUES (?, ?)').run(user.id, 'login')
-    const emailNotifications = await sendAuthNotifications(user, 'login', getSiteName())
-    return res.json({ user: publicUser(user), emailNotifications })
+    createSession(currentUser.id, res)
+    database.prepare('INSERT INTO auth_events (user_id, event_type) VALUES (?, ?)').run(currentUser.id, 'login')
+    const emailNotifications = await sendAuthNotifications(currentUser, 'login', getSiteName())
+    return res.json({ user: publicUser(currentUser), emailNotifications })
   } catch (error: unknown) {
     return next(error)
   }
@@ -1066,7 +1172,7 @@ app.get('/api/stores', (_req, res) => {
       seller_profiles.visitor_count
     FROM seller_profiles
     JOIN users ON users.id = seller_profiles.user_id
-    WHERE users.role = 'seller'
+    WHERE users.role = 'seller' AND users.suspended = 0
     ORDER BY seller_profiles.created_at DESC, users.id DESC
   `).map((store) => ({
     id: store.user_id,
@@ -1085,7 +1191,6 @@ app.get('/api/stores', (_req, res) => {
 app.get('/api/stores/:sellerId', (req, res) => {
   const sellerId = Number(req.params.sellerId)
   if (!Number.isSafeInteger(sellerId)) return res.status(404).json({ error: 'Store not found.' })
-  database.prepare('UPDATE seller_profiles SET visitor_count = visitor_count + 1 WHERE user_id = ?').run(sellerId)
   const store = getRow<{
     user_id: number
     full_name: string
@@ -1101,9 +1206,11 @@ app.get('/api/stores/:sellerId', (req, res) => {
       seller_profiles.visitor_count
     FROM seller_profiles
     JOIN users ON users.id = seller_profiles.user_id
-    WHERE users.id = ? AND users.role = 'seller'
+    WHERE users.id = ? AND users.role = 'seller' AND users.suspended = 0
   `, sellerId)
   if (!store) return res.status(404).json({ error: 'Store not found.' })
+  database.prepare('UPDATE seller_profiles SET visitor_count = visitor_count + 1 WHERE user_id = ?').run(sellerId)
+  store.visitor_count += 1
   const token = req.cookies[cookieName]
   if (token) {
     const visitor = getRow<{ id: number }>(`
@@ -1158,7 +1265,7 @@ app.post('/api/stores/:sellerId/follow', requireAuth, (req, res) => {
   const sellerId = Number(req.params.sellerId)
   if (!Number.isSafeInteger(sellerId)) return res.status(404).json({ error: 'Store not found.' })
   if (sellerId === req.user!.id) return res.status(400).json({ error: 'You cannot follow your own store.' })
-  const store = getRow<{ user_id: number }>('SELECT user_id FROM seller_profiles WHERE user_id = ?', sellerId)
+  const store = getRow<{ user_id: number }>("SELECT p.user_id FROM seller_profiles p JOIN users u ON u.id = p.user_id WHERE p.user_id = ? AND u.role = 'seller' AND u.suspended = 0", sellerId)
   if (!store) return res.status(404).json({ error: 'Store not found.' })
 
   const existingFollow = getRow<{ user_id: number }>(
@@ -1287,7 +1394,7 @@ app.get('/api/products', (req, res) => {
   const category = typeof req.query.category === 'string' ? req.query.category.trim() : ''
   const products = getRows<ProductRow>(`
     SELECT * FROM products
-    WHERE is_published = 1 AND seller_id IS NOT NULL AND name LIKE ? AND (? = '' OR category = ?)
+    WHERE is_published = 1 AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0) AND name LIKE ? AND (? = '' OR category = ?)
     ORDER BY created_at DESC, id DESC
   `, search, category, category).map(publicProduct)
   return res.json({ products })
@@ -1296,7 +1403,7 @@ app.get('/api/products', (req, res) => {
 app.get('/api/discounts', (_req, res) => {
   const products = getRows<ProductRow>(`
     SELECT * FROM products
-    WHERE is_published = 1 AND seller_id IS NOT NULL AND compare_at_price IS NOT NULL AND compare_at_price > price
+    WHERE is_published = 1 AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0) AND compare_at_price IS NOT NULL AND compare_at_price > price
     ORDER BY created_at DESC, id DESC
   `).map(publicProduct)
   return res.json({ products })
@@ -1304,7 +1411,7 @@ app.get('/api/discounts', (_req, res) => {
 
 app.get('/api/products/:id', (req, res) => {
   const product = getRow<ProductRow>(`SELECT * FROM products
-    WHERE id = ? AND seller_id IS NOT NULL AND (is_published = 1 OR is_store_published = 1)
+    WHERE id = ? AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0) AND (is_published = 1 OR is_store_published = 1)
   `, Number(req.params.id))
   if (!product) return res.status(404).json({ error: 'Product not found.' })
   const seller = product.seller_id ? getRow<{
@@ -1321,8 +1428,19 @@ app.get('/api/products/:id', (req, res) => {
     JOIN users ON users.id = seller_profiles.user_id
     WHERE users.id = ?
   `, product.seller_id) : undefined
+  const parentCategory = product.category.split(' / ')[0]
+  const relatedProducts = getRows<ProductRow>(`
+    SELECT * FROM products
+    WHERE id != ? AND seller_id IS NOT NULL AND is_published = 1 AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0)
+      AND (category = ? OR substr(category, 1, length(?) + 3) = ? || ' / ')
+    ORDER BY CASE WHEN category = ? THEN 0 ELSE 1 END, created_at DESC, id DESC
+    LIMIT 8
+  `, product.id, parentCategory, parentCategory, parentCategory, product.category).map(publicProduct)
   return res.json({
-    product: publicProduct(product),
+    product: {
+      ...publicProduct(product),
+      sellerReportedStock: getRow<{ quantity: number }>('SELECT quantity FROM seller_product_stock WHERE product_id = ?', product.id)?.quantity ?? null,
+    },
     store: seller ? {
       id: product.seller_id,
       storeName: seller.store_name,
@@ -1332,6 +1450,7 @@ app.get('/api/products/:id', (req, res) => {
       visitorCount: seller.visitor_count,
       productCount: getRow<{ count: number }>('SELECT COUNT(*) AS count FROM products WHERE seller_id = ? AND is_store_published = 1', product.seller_id)?.count ?? 0,
     } : null,
+    relatedProducts,
   })
 })
 
@@ -1343,15 +1462,25 @@ app.get('/api/seller/products', requireAuth, requireRole('seller', 'admin'), (re
 })
 
 app.post('/api/seller/products', requireAuth, requireRole('seller', 'admin'), (req, res) => {
-  const validation = validateProduct(req.body)
+  const prepared = prepareProductImages(req.body ?? {})
+  if ('error' in prepared) return res.status(400).json({ error: prepared.error })
+  const validation = validateProduct(prepared.body, new Set(prepared.uploads.map((image) => image.id)))
   if ('error' in validation) return res.status(400).json({ error: validation.error })
+  const stock: unknown = req.body.stockQuantity
+  if (stock !== undefined && stock !== null && (typeof stock !== 'number' || !Number.isSafeInteger(stock) || stock < 0 || stock > 1000000000)) return res.status(400).json({ error: 'Enter a whole stock count between 0 and 1,000,000,000.' })
   const { name, category, price, compareAtPrice, description, imageUrl, imageUrls, colors, sizes, rating, isPublished, isStorePublished } = validation.product
-  const result = database.prepare(`
-    INSERT INTO products (name, category, price, compare_at_price, description, image_url, image_urls_json, colors_json, sizes_json, rating, seller_id, is_published, is_store_published)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(name, category, price, compareAtPrice, description, imageUrl, JSON.stringify(imageUrls), JSON.stringify(colors), JSON.stringify(sizes), rating, req.user!.id, Number(isPublished), Number(isStorePublished))
-  insertCategory.run(category)
-  const product = getRow<ProductRow>('SELECT * FROM products WHERE id = ?', result.lastInsertRowid)!
+  const productId = database.transaction(() => {
+    const insertImage = database.prepare('INSERT INTO product_images (id, content_type, image) VALUES (?, ?, ?)')
+    for (const image of prepared.uploads) insertImage.run(image.id, image.contentType, image.image)
+    const result = database.prepare(`
+      INSERT INTO products (name, category, price, compare_at_price, description, image_url, image_urls_json, colors_json, sizes_json, rating, seller_id, is_published, is_store_published)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(name, category, price, compareAtPrice, description, imageUrl, JSON.stringify(imageUrls), JSON.stringify(colors), JSON.stringify(sizes), rating, req.user!.id, Number(isPublished), Number(isStorePublished))
+    if (typeof stock === 'number') database.prepare('INSERT INTO seller_product_stock (product_id, quantity) VALUES (?, ?)').run(result.lastInsertRowid, stock)
+    insertCategory.run(category)
+    return result.lastInsertRowid
+  })()
+  const product = getRow<ProductRow>('SELECT * FROM products WHERE id = ?', productId)!
   return res.status(201).json({ product: publicProduct(product) })
 })
 
@@ -1361,7 +1490,7 @@ app.patch('/api/seller/products/:id', requireAuth, requireRole('seller', 'admin'
   if (!existing) return res.status(404).json({ error: 'Product not found.' })
   if (req.user!.role !== 'admin' && existing.seller_id !== req.user!.id) return res.status(403).json({ error: 'You can only edit your own products.' })
 
-  const validation = validateProduct({
+  const prepared = prepareProductImages({
     name: req.body.name ?? existing.name,
     category: req.body.category ?? existing.category,
     price: req.body.price ?? existing.price,
@@ -1374,14 +1503,26 @@ app.patch('/api/seller/products/:id', requireAuth, requireRole('seller', 'admin'
     rating: req.body.rating ?? existing.rating,
     isPublished: req.body.isPublished ?? Boolean(existing.is_published),
     isStorePublished: req.body.isStorePublished ?? Boolean(existing.is_store_published),
+    imageUploads: req.body.imageUploads,
   })
+  if ('error' in prepared) return res.status(400).json({ error: prepared.error })
+  const validation = validateProduct(prepared.body, new Set(prepared.uploads.map((image) => image.id)))
   if ('error' in validation) return res.status(400).json({ error: validation.error })
+  const stock: unknown = req.body.stockQuantity
+  if (stock !== undefined && stock !== null && (typeof stock !== 'number' || !Number.isSafeInteger(stock) || stock < 0 || stock > 1000000000)) return res.status(400).json({ error: 'Enter a whole stock count between 0 and 1,000,000,000.' })
+  if (stock !== undefined && existing.seller_id !== req.user!.id) return res.status(403).json({ error: 'Only the product owner can update its stock count.' })
   const { name, category, price, compareAtPrice, description, imageUrl, imageUrls, colors, sizes, rating, isPublished, isStorePublished } = validation.product
-  database.prepare(`
-    UPDATE products SET name = ?, category = ?, price = ?, compare_at_price = ?, description = ?, image_url = ?, image_urls_json = ?, colors_json = ?, sizes_json = ?, rating = ?, is_published = ?, is_store_published = ?
-    WHERE id = ?
-  `).run(name, category, price, compareAtPrice, description, imageUrl, JSON.stringify(imageUrls), JSON.stringify(colors), JSON.stringify(sizes), rating, Number(isPublished), Number(isStorePublished), productId)
-  insertCategory.run(category)
+  database.transaction(() => {
+    const insertImage = database.prepare('INSERT INTO product_images (id, content_type, image) VALUES (?, ?, ?)')
+    for (const image of prepared.uploads) insertImage.run(image.id, image.contentType, image.image)
+    database.prepare(`
+      UPDATE products SET name = ?, category = ?, price = ?, compare_at_price = ?, description = ?, image_url = ?, image_urls_json = ?, colors_json = ?, sizes_json = ?, rating = ?, is_published = ?, is_store_published = ?
+      WHERE id = ?
+    `).run(name, category, price, compareAtPrice, description, imageUrl, JSON.stringify(imageUrls), JSON.stringify(colors), JSON.stringify(sizes), rating, Number(isPublished), Number(isStorePublished), productId)
+    if (stock === null) database.prepare('DELETE FROM seller_product_stock WHERE product_id = ?').run(productId)
+    else if (typeof stock === 'number') database.prepare('INSERT INTO seller_product_stock (product_id, quantity) VALUES (?, ?) ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity').run(productId, stock)
+    insertCategory.run(category)
+  })()
   return res.json({ product: publicProduct(getRow<ProductRow>('SELECT * FROM products WHERE id = ?', productId)!) })
 })
 
@@ -1392,6 +1533,84 @@ app.delete('/api/seller/products/:id', requireAuth, requireRole('seller', 'admin
   if (req.user!.role !== 'admin' && existing.seller_id !== req.user!.id) return res.status(403).json({ error: 'You can only delete your own products.' })
   database.prepare('DELETE FROM products WHERE id = ?').run(productId)
   return res.json({ ok: true })
+})
+
+database.exec(`
+  CREATE TABLE IF NOT EXISTS warehouse_products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS seller_product_stock (
+    product_id INTEGER PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL CHECK(quantity >= 0)
+  );
+  CREATE TABLE IF NOT EXISTS seller_warehouse_imports (
+    seller_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    warehouse_id INTEGER NOT NULL REFERENCES warehouse_products(id) ON DELETE CASCADE,
+    product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    PRIMARY KEY (seller_id, warehouse_id)
+  );
+`)
+seedWarehouseSamples(database)
+
+app.get('/api/warehouse', requireAuth, requireRole('seller', 'admin'), (_req, res) => {
+  const rows = getRows<{ id: number, product_json: string, created_at: string }>('SELECT * FROM warehouse_products ORDER BY id DESC')
+  return res.json({ products: rows.map((row) => ({ ...JSON.parse(row.product_json), id: row.id, createdAt: row.created_at })) })
+})
+
+app.post('/api/admin/warehouse', requireAuth, requireRole('admin'), (req, res) => {
+  const result = validateProduct(req.body ?? {})
+  if ('error' in result) return res.status(400).json({ error: result.error })
+  const inserted = database.prepare('INSERT INTO warehouse_products (product_json) VALUES (?)').run(JSON.stringify(result.product))
+  return res.status(201).json({ product: { ...result.product, id: Number(inserted.lastInsertRowid) } })
+})
+
+app.put('/api/admin/warehouse/:id', requireAuth, requireRole('admin'), (req, res) => {
+  const result = validateProduct(req.body ?? {})
+  if ('error' in result) return res.status(400).json({ error: result.error })
+  const updated = database.prepare('UPDATE warehouse_products SET product_json=? WHERE id=?').run(JSON.stringify(result.product), Number(req.params.id))
+  if (!updated.changes) return res.status(404).json({ error: 'Warehouse product not found.' })
+  return res.json({ product: { ...result.product, id: Number(req.params.id) } })
+})
+
+app.delete('/api/admin/warehouse/:id', requireAuth, requireRole('admin'), (req, res) => {
+  const removed = database.prepare('DELETE FROM warehouse_products WHERE id=?').run(Number(req.params.id))
+  if (!removed.changes) return res.status(404).json({ error: 'Warehouse product not found.' })
+  return res.json({ ok: true })
+})
+
+app.post('/api/seller/warehouse/:id/import', requireAuth, requireRole('seller'), (req, res) => {
+  const row = getRow<{ product_json: string }>('SELECT product_json FROM warehouse_products WHERE id=?', Number(req.params.id))
+  if (!row) return res.status(404).json({ error: 'Warehouse product not found.' })
+  if (getRow('SELECT 1 FROM seller_warehouse_imports WHERE seller_id=? AND warehouse_id=?', req.user!.id, Number(req.params.id))) return res.status(409).json({ error: 'You already added this warehouse product. Edit it in Store products.' })
+  const validation = validateProduct(JSON.parse(row.product_json))
+  if ('error' in validation) return res.status(400).json({ error: validation.error })
+  const { name, category, price, compareAtPrice, description, imageUrl, imageUrls, colors, sizes, rating } = validation.product
+  const productId = database.transaction(() => {
+    const result = database.prepare(`
+      INSERT INTO products (name, category, price, compare_at_price, description, image_url, image_urls_json, colors_json, sizes_json, rating, seller_id, is_published, is_store_published)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
+    `).run(name, category, price, compareAtPrice, description, imageUrl, JSON.stringify(imageUrls), JSON.stringify(colors), JSON.stringify(sizes), rating, req.user!.id)
+    database.prepare('INSERT INTO seller_warehouse_imports (seller_id,warehouse_id,product_id) VALUES (?,?,?)').run(req.user!.id, Number(req.params.id), result.lastInsertRowid)
+    insertCategory.run(category)
+    return result.lastInsertRowid
+  })()
+  return res.status(201).json({ product: publicProduct(getRow<ProductRow>('SELECT * FROM products WHERE id=?', productId)!) })
+})
+
+app.get('/api/seller/stock', requireAuth, requireRole('seller', 'admin'), (req, res) => {
+  const stock = getRows<{ productId: number, quantity: number }>('SELECT s.product_id AS productId,s.quantity FROM seller_product_stock s JOIN products p ON p.id=s.product_id WHERE p.seller_id=?', req.user!.id)
+  return res.json({ stock })
+})
+
+app.put('/api/seller/products/:id/stock', requireAuth, requireRole('seller', 'admin'), (req, res) => {
+  const product = getRow<ProductRow>('SELECT * FROM products WHERE id=?', Number(req.params.id))
+  if (!product || product.seller_id !== req.user!.id) return res.status(404).json({ error: 'Product not found.' })
+  const quantity: unknown = req.body?.quantity
+  if (!Number.isSafeInteger(quantity) || typeof quantity !== 'number' || quantity < 0 || quantity > 1000000000) return res.status(400).json({ error: 'Enter a whole stock count between 0 and 1,000,000,000.' })
+  database.prepare('INSERT INTO seller_product_stock (product_id,quantity) VALUES (?,?) ON CONFLICT(product_id) DO UPDATE SET quantity=excluded.quantity').run(product.id, quantity)
+  return res.json({ quantity })
 })
 
 const getConversationMessages = (sellerId: number, currentUserId: number) => {
@@ -1425,6 +1644,34 @@ const getConversationMessages = (sellerId: number, currentUserId: number) => {
   }))
 }
 
+app.get('/api/rewards', requireAuth, requireRole('customer', 'seller'), (req, res) => {
+  const balance = getRow<{ balanceUnits: number }>('SELECT balance_units AS balanceUnits FROM reward_balances WHERE user_id = ?', req.user!.id)
+  return res.json({ balanceUnits: balance?.balanceUnits ?? 0 })
+})
+
+app.patch('/api/admin/users/:id/rewards', requireAuth, requireRole('admin'), (req, res) => {
+  const userId = Number(req.params.id)
+  const adjustmentUnits = req.body?.adjustmentUnits
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : ''
+  if (!Number.isSafeInteger(userId) || userId < 1 || !Number.isSafeInteger(adjustmentUnits) || adjustmentUnits === 0 || !reason || reason.length > 500) {
+    return res.status(400).json({ error: 'Enter a valid reward adjustment and a reason (up to 500 characters).' })
+  }
+  const user = getRow<{ role: UserRole }>("SELECT role FROM users WHERE id = ? AND role IN ('customer', 'seller')", userId)
+  if (!user) return res.status(404).json({ error: 'Account not found.' })
+  const balanceUnits = database.transaction(() => {
+    const balance = getRow<{ balance_units: number }>('SELECT balance_units FROM reward_balances WHERE user_id = ?', userId)?.balance_units ?? 0
+    const next = balance + adjustmentUnits
+    if (!Number.isSafeInteger(next) || next < 0 || next > 10000000000) return null
+    database.prepare('INSERT INTO reward_balances (user_id, balance_units) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance_units = excluded.balance_units').run(userId, next)
+    database.prepare('INSERT INTO reward_history (user_id, admin_id, adjustment_units, balance_units, reason) VALUES (?, ?, ?, ?, ?)').run(userId, req.user!.id, adjustmentUnits, next, reason)
+    const amount = (Math.abs(adjustmentUnits) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    database.prepare('INSERT INTO notifications (user_id, type, title, body, link) VALUES (?, ?, ?, ?, ?)').run(userId, adjustmentUnits > 0 ? 'reward' : 'reward_adjustment', adjustmentUnits > 0 ? 'Balance added' : 'Balance updated', `$${amount} ${adjustmentUnits > 0 ? 'added to' : 'removed from'} your store-credit balance.`, user.role === 'seller' ? '/seller' : '/profile')
+    return next
+  })()
+  if (balanceUnits === null) return res.status(400).json({ error: 'The resulting balance must be between $0 and $100,000,000.' })
+  return res.json({ balanceUnits })
+})
+
 app.get('/api/notifications', requireAuth, (req, res) => {
   const notifications = getRows<{
     id: number
@@ -1447,7 +1694,8 @@ app.get('/api/notifications', requireAuth, (req, res) => {
     isRead: Boolean(notification.read_at),
     createdAt: notification.created_at,
   }))
-  return res.json({ notifications })
+  const unreadCount = getRow<{ count: number }>('SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL', req.user!.id)!.count
+  return res.json({ notifications, unreadCount })
 })
 
 app.patch('/api/notifications/read-all', requireAuth, (req, res) => {
@@ -1584,15 +1832,14 @@ const walletRequests = (userId?: number) => getRows<{
 
 app.get('/api/buyer/profile', requireAuth, requireRole('customer'), (req, res) => {
   const userId = req.user!.id
-  const wallet = getRow<{ balanceCents: number }>('SELECT balance_cents AS balanceCents FROM buyer_wallets WHERE user_id = ?', userId)
-  if (!wallet) return res.status(500).json({ error: 'Buyer wallet is unavailable.' })
+  const wallet = getRow<{ balanceCents: number }>('SELECT balance_units AS balanceCents FROM reward_balances WHERE user_id = ?', userId) ?? { balanceCents: 0 }
   const requests = walletRequests(userId)
   const follows = getRows<{ sellerId: number, storeName: string }>(`
     SELECT p.user_id AS sellerId, p.store_name AS storeName FROM store_follows f
-    JOIN seller_profiles p ON p.user_id = f.seller_id WHERE f.user_id = ? ORDER BY f.created_at DESC
+    JOIN seller_profiles p ON p.user_id = f.seller_id JOIN users u ON u.id = p.user_id WHERE f.user_id = ? AND u.suspended = 0 AND u.role = 'seller' ORDER BY f.created_at DESC
   `, userId)
   const hasTransactionPassword = Boolean(getRow('SELECT user_id FROM buyer_security WHERE user_id = ?', userId))
-  const favorites = getRows<ProductRow>('SELECT p.* FROM products p JOIN buyer_favorites f ON f.product_id = p.id WHERE f.user_id = ? ORDER BY f.created_at DESC', userId).map(publicProduct)
+  const favorites = getRows<ProductRow>('SELECT p.* FROM products p JOIN buyer_favorites f ON f.product_id = p.id WHERE f.user_id = ? AND EXISTS (SELECT 1 FROM users u WHERE u.id = p.seller_id AND u.suspended = 0) ORDER BY f.created_at DESC', userId).map(publicProduct)
   return res.json({ user: publicUser(req.user!), wallet, addresses: buyerAddresses(userId), visits: buyerVisits(userId), requests, follows, coins: buyerCoins, favorites, hasTransactionPassword })
 })
 
@@ -1603,7 +1850,7 @@ app.get('/api/buyer/favorites/:id', requireAuth, requireRole('customer'), (req, 
 })
 app.put('/api/buyer/favorites/:id', requireAuth, requireRole('customer'), (req, res) => {
   const id = Number(req.params.id)
-  if (!Number.isSafeInteger(id) || !getRow('SELECT id FROM products WHERE id = ? AND seller_id IS NOT NULL AND (is_published = 1 OR is_store_published = 1)', id)) return res.status(404).json({ error: 'Product not found.' })
+  if (!Number.isSafeInteger(id) || !getRow('SELECT id FROM products WHERE id = ? AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0) AND (is_published = 1 OR is_store_published = 1)', id)) return res.status(404).json({ error: 'Product not found.' })
   database.prepare('INSERT OR IGNORE INTO buyer_favorites (user_id, product_id) VALUES (?, ?)').run(req.user!.id, id)
   return res.json({ ok: true })
 })
@@ -1657,10 +1904,10 @@ app.post('/api/buyer/cancellation-request', authLimiter, requireAuth, requireRol
   return res.status(201).json({ ok: true })
 })
 
-const demoOrders = (userId: number) => getRows<{ id: number, status: string, totalCents: number, createdAt: string, billingJson: string, paymentMethod: string }>(
-  'SELECT id, status, total_cents AS totalCents, created_at AS createdAt, billing_json AS billingJson, payment_method AS paymentMethod FROM demo_orders WHERE user_id = ? ORDER BY id DESC', userId
+const demoOrders = (userId: number) => getRows<{ id: number, orderNumber: number, status: string, totalCents: number, createdAt: string, billingJson: string, paymentMethod: string }>(
+  "SELECT d.id, n.number AS orderNumber, d.status, d.total_cents AS totalCents, d.created_at AS createdAt, d.billing_json AS billingJson, d.payment_method AS paymentMethod FROM demo_orders d JOIN order_numbers n ON n.kind = 'demo' AND n.order_id = d.id WHERE d.user_id = ? ORDER BY d.id DESC", userId
 ).map((order) => ({
-  id: order.id, status: order.status, totalCents: order.totalCents, createdAt: order.createdAt, paymentMethod: order.paymentMethod, billing: JSON.parse(order.billingJson),
+  id: order.id, orderNumber: order.orderNumber, status: order.status, totalCents: order.totalCents, createdAt: order.createdAt, paymentMethod: order.paymentMethod, billing: JSON.parse(order.billingJson),
   items: getRows('SELECT product_id AS productId, name, price_cents AS priceCents, quantity, color, size, image_url AS imageUrl FROM demo_order_items WHERE order_id = ?', order.id),
   history: getRows('SELECT status, created_at AS createdAt FROM demo_order_status_history WHERE order_id = ? ORDER BY id', order.id),
 }))
@@ -1679,7 +1926,7 @@ app.post('/api/buyer/orders', requireAuth, requireRole('customer'), (req, res) =
         typeof item.selectedColor !== 'string' || item.selectedColor.length > 100 || typeof item.selectedSize !== 'string' || item.selectedSize.length > 100) {
       return res.status(400).json({ error: 'Invalid test order item.' })
     }
-    const product = getRow<ProductRow>('SELECT * FROM products WHERE id = ? AND seller_id IS NOT NULL AND (is_published = 1 OR is_store_published = 1)', item.id)
+    const product = getRow<ProductRow>('SELECT * FROM products WHERE id = ? AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0) AND (is_published = 1 OR is_store_published = 1)', item.id)
     if (!product) return res.status(400).json({ error: 'A product is no longer available. Update your cart.' })
     snapshots.push({ product, quantity: item.quantity, color: item.selectedColor, size: item.selectedSize })
   }
@@ -1690,6 +1937,7 @@ app.post('/api/buyer/orders', requireAuth, requireRole('customer'), (req, res) =
   const id = database.transaction(() => {
     const result = database.prepare('INSERT INTO demo_orders (user_id, total_cents, billing_json, payment_method) VALUES (?, ?, ?, ?)').run(req.user!.id, total, JSON.stringify(Object.fromEntries(billingFields.map((field) => [field, billing[field].trim()]))), paymentMethod)
     const orderId = Number(result.lastInsertRowid)
+    allocateOrderNumber(database, 'demo', orderId)
     const insert = database.prepare('INSERT INTO demo_order_items (order_id, product_id, name, price_cents, quantity, color, size, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     for (const item of snapshots) insert.run(orderId, item.product.id, item.product.name, Math.round(item.product.price * 100), item.quantity, item.color, item.size, item.product.image_url)
     database.prepare("INSERT INTO demo_order_status_history (order_id, status) VALUES (?, 'pending')").run(orderId)
@@ -1702,12 +1950,12 @@ app.patch('/api/admin/demo-orders/:id', requireAuth, requireRole('admin'), (req,
   const id = Number(req.params.id)
   const status = req.body.status
   if (!Number.isSafeInteger(id) || !['pending', 'on_the_way', 'delivered', 'returned'].includes(status)) return res.status(400).json({ error: 'Invalid test order status.' })
-  const order = getRow<{ user_id: number, status: string }>('SELECT user_id, status FROM demo_orders WHERE id = ?', id)
+  const order = getRow<{ user_id: number, status: string, order_number: number }>("SELECT d.user_id, d.status, n.number AS order_number FROM demo_orders d JOIN order_numbers n ON n.kind='demo' AND n.order_id=d.id WHERE d.id = ?", id)
   if (!order) return res.status(404).json({ error: 'Test order not found.' })
   if (order.status !== status) database.transaction(() => {
     database.prepare('UPDATE demo_orders SET status = ? WHERE id = ?').run(status, id)
     database.prepare('INSERT INTO demo_order_status_history (order_id, status) VALUES (?, ?)').run(id, status)
-    database.prepare("INSERT INTO notifications (user_id, type, title, body, link) VALUES (?, 'demo_order', ?, ?, '/profile/orders')").run(order.user_id, `Test order #${id} updated`, `Test status: ${status.replaceAll('_', ' ')}. No real fulfillment is tracked.`)
+    database.prepare("INSERT INTO notifications (user_id, type, title, body, link) VALUES (?, 'demo_order', ?, ?, '/profile/orders')").run(order.user_id, `Test order #${order.order_number} updated`, `Test status: ${status.replaceAll('_', ' ')}. No real fulfillment is tracked.`)
   })()
   return res.json({ ok: true })
 })
@@ -1831,8 +2079,8 @@ app.get('/api/admin/receipts/:id', requireAuth, requireRole('admin'), (req, res)
 
 app.get('/api/admin/buyers', requireAuth, requireRole('admin'), (_req, res) => {
   const buyers = getRows<{ id: number, fullName: string, email: string, phone: string | null, createdAt: string, balanceCents: number }>(`
-    SELECT u.id, u.full_name AS fullName, u.email, u.phone, u.created_at AS createdAt, w.balance_cents AS balanceCents
-    FROM users u JOIN buyer_wallets w ON w.user_id = u.id WHERE u.role = 'customer' ORDER BY u.id DESC
+    SELECT u.id, u.full_name AS fullName, u.email, u.phone, u.created_at AS createdAt, COALESCE(w.balance_units, 0) AS balanceCents
+    FROM users u LEFT JOIN reward_balances w ON w.user_id = u.id WHERE u.role = 'customer' ORDER BY u.id DESC
   `).map((buyer) => ({ ...buyer, visits: buyerVisits(buyer.id), addresses: buyerAddresses(buyer.id) }))
   const requests = walletRequests()
   return res.json({ buyers, requests })
@@ -1840,21 +2088,29 @@ app.get('/api/admin/buyers', requireAuth, requireRole('admin'), (_req, res) => {
 
 app.patch('/api/admin/buyers/:id/balance', requireAuth, requireRole('admin'), (req, res) => {
   const userId = Number(req.params.id)
-  const { balanceCents } = req.body
+  const { balanceCents, adjustmentCents } = req.body
   const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : ''
-  if (!Number.isSafeInteger(userId) || !Number.isSafeInteger(balanceCents) || balanceCents < 0 || balanceCents > 100000000 || !reason || reason.length > 500) {
-    return res.status(400).json({ error: 'Enter a valid demo balance and a reason (up to 500 characters).' })
+  const isAdjustment = adjustmentCents !== undefined && balanceCents === undefined
+  if (!Number.isSafeInteger(userId) || !(isAdjustment ? Number.isSafeInteger(adjustmentCents) && adjustmentCents !== 0 : Number.isSafeInteger(balanceCents) && adjustmentCents === undefined) || !reason || reason.length > 500) {
+    return res.status(400).json({ error: 'Enter a valid manual wallet balance and a reason (up to 500 characters).' })
   }
   const wallet = getRow<{ balance_cents: number }>(`
-    SELECT w.balance_cents FROM buyer_wallets w JOIN users u ON u.id = w.user_id WHERE u.id = ? AND u.role = 'customer'
+    SELECT COALESCE(w.balance_units, 0) AS balance_cents FROM users u LEFT JOIN reward_balances w ON w.user_id = u.id WHERE u.id = ? AND u.role = 'customer'
   `, userId)
   if (!wallet) return res.status(404).json({ error: 'Buyer not found.' })
+  const newBalance = isAdjustment ? wallet.balance_cents + adjustmentCents : balanceCents
+  if (!Number.isSafeInteger(newBalance) || newBalance < 0 || newBalance > 10000000000) return res.status(400).json({ error: 'The resulting balance must be between $0 and $100,000,000.' })
   database.transaction(() => {
-    database.prepare('UPDATE buyer_wallets SET balance_cents = ? WHERE user_id = ?').run(balanceCents, userId)
-    database.prepare('INSERT INTO buyer_balance_history (user_id, admin_id, old_cents, new_cents, reason) VALUES (?, ?, ?, ?, ?)').run(userId, req.user!.id, wallet.balance_cents, balanceCents, reason)
-    database.prepare("INSERT INTO notifications (user_id, type, title, body, link) VALUES (?, 'balance', 'Demo balance updated', ?, '/profile/wallet')").run(userId, reason)
+    database.prepare('INSERT INTO reward_balances (user_id, balance_units) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance_units = excluded.balance_units').run(userId, newBalance)
+    database.prepare('INSERT INTO buyer_balance_history (user_id, admin_id, old_cents, new_cents, reason) VALUES (?, ?, ?, ?, ?)').run(userId, req.user!.id, wallet.balance_cents, newBalance, reason)
+    database.prepare('INSERT INTO reward_history (user_id, admin_id, adjustment_units, balance_units, reason) VALUES (?, ?, ?, ?, ?)').run(userId, req.user!.id, newBalance - wallet.balance_cents, newBalance, reason)
+    if (newBalance !== wallet.balance_cents) {
+      const difference = newBalance - wallet.balance_cents
+      const amount = (Math.abs(difference) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      database.prepare('INSERT INTO notifications (user_id, type, title, body, link) VALUES (?, ?, ?, ?, ?)').run(userId, difference > 0 ? 'reward' : 'reward_adjustment', difference > 0 ? 'Balance added' : 'Balance updated', `$${amount} ${difference > 0 ? 'added to' : 'removed from'} your store-credit balance.`, '/profile/wallet')
+    }
   })()
-  return res.json({ balanceCents })
+  return res.json({ balanceCents: newBalance })
 })
 
 app.patch('/api/admin/buyer-requests/:id', requireAuth, requireRole('admin'), (req, res) => {
@@ -1897,11 +2153,11 @@ app.get('/api/admin/users', requireAuth, requireRole('admin'), (_req, res) => {
 app.get('/api/admin/users/:id/details', requireAuth, requireRole('admin'), (req, res) => {
   const userId = Number(req.params.id)
   if (!Number.isSafeInteger(userId) || userId < 1) return res.status(404).json({ error: 'User not found.' })
-  const user = getRow<{ id: number, fullName: string, email: string, phone: string | null, role: UserRole, createdAt: string }>(`
-    SELECT id, full_name AS fullName, email, phone, role, created_at AS createdAt FROM users WHERE id = ?
+  const user = getRow<{ id: number, fullName: string, email: string, phone: string | null, role: UserRole, suspended: number, createdAt: string }>(`
+    SELECT id, full_name AS fullName, email, phone, role, suspended, created_at AS createdAt FROM users WHERE id = ?
   `, userId)
   if (!user) return res.status(404).json({ error: 'User not found.' })
-  const wallet = getRow<{ balanceCents: number }>('SELECT balance_cents AS balanceCents FROM buyer_wallets WHERE user_id = ?', userId)
+  const wallet = getRow<{ balanceCents: number }>('SELECT balance_units AS balanceCents FROM reward_balances WHERE user_id = ?', userId) ?? { balanceCents: 0 }
   const seller = getRow(`
     SELECT store_name AS storeName, store_description AS storeDescription, logo_url AS logoUrl,
       country, address, city, region, postal_code AS postalCode, verification_status AS verificationStatus,
@@ -1914,13 +2170,46 @@ app.get('/api/admin/users/:id/details', requireAuth, requireRole('admin'), (req,
       u.full_name AS adminName FROM buyer_balance_history h JOIN users u ON u.id = h.admin_id WHERE h.user_id = ? ORDER BY h.id DESC
   `, userId)
   const balanceResets = getRows('SELECT previous_cents AS previousCents, reset_at AS resetAt FROM buyer_balance_reset_audit WHERE user_id = ? ORDER BY reset_at DESC', userId)
+  const rewards = getRow<{ balanceUnits: number }>('SELECT balance_units AS balanceUnits FROM reward_balances WHERE user_id = ?', userId) ?? { balanceUnits: 0 }
+  const rewardHistory = getRows('SELECT h.id, h.adjustment_units AS adjustmentUnits, h.balance_units AS balanceUnits, h.reason, h.created_at AS createdAt, u.full_name AS adminName FROM reward_history h JOIN users u ON u.id = h.admin_id WHERE h.user_id = ? ORDER BY h.id DESC LIMIT 200', userId)
+  const balancePurchases = getRows("SELECT h.order_id AS orderId, n.number AS orderNumber, h.amount_cents AS amountCents, h.balance_after_cents AS balanceCents, h.created_at AS createdAt FROM balance_purchase_history h JOIN order_numbers n ON n.kind = 'purchase' AND n.order_id = h.order_id WHERE h.user_id = ? ORDER BY h.order_id DESC LIMIT 200", userId)
   const products = getRows<ProductRow>('SELECT * FROM products WHERE seller_id = ? ORDER BY id DESC', userId).map(publicProduct)
   const cancellationRequests = getRows('SELECT id, status, created_at AS createdAt FROM cancellation_requests WHERE user_id = ? ORDER BY id DESC', userId)
   const favorites = getRows<ProductRow>('SELECT p.* FROM products p JOIN buyer_favorites f ON f.product_id = p.id WHERE f.user_id = ? ORDER BY f.created_at DESC', userId).map(publicProduct)
   const follows = getRows('SELECT p.user_id AS sellerId, p.store_name AS storeName FROM store_follows f JOIN seller_profiles p ON p.user_id = f.seller_id WHERE f.user_id = ? ORDER BY f.created_at DESC', userId)
   const metricsRow = getRow<{ metrics_json: string }>('SELECT metrics_json FROM seller_dashboard_metrics WHERE user_id = ?', userId)
   const sellerMetrics = metricsRow ? JSON.parse(metricsRow.metrics_json) : null
-  return res.json({ user, wallet: wallet || null, seller: seller || null, addresses: buyerAddresses(userId), visits: buyerVisits(userId), requests: walletRequests(userId), events, balanceHistory, balanceResets, products, orders: demoOrders(userId), cancellationRequests, favorites, follows, sellerMetrics })
+  const accountHistory = getRows('SELECT h.action, h.details, h.created_at AS createdAt, u.full_name AS adminName FROM account_admin_history h JOIN users u ON u.id = h.admin_id WHERE h.user_id = ? ORDER BY h.id DESC', userId)
+  return res.json({ user, wallet: wallet || null, seller: seller || null, addresses: buyerAddresses(userId), visits: buyerVisits(userId), requests: walletRequests(userId), events, balanceHistory, balanceResets, rewards, rewardHistory, balancePurchases, products, orders: demoOrders(userId), cancellationRequests, favorites, follows, sellerMetrics, accountHistory })
+})
+
+app.patch('/api/admin/users/:id/suspension', requireAuth, requireRole('admin'), (req, res) => {
+  const userId = Number(req.params.id)
+  const { suspended } = req.body
+  const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : ''
+  if (!Number.isSafeInteger(userId) || userId < 1 || typeof suspended !== 'boolean' || !reason || reason.length > 500) return res.status(400).json({ error: 'Provide a valid account status and reason (up to 500 characters).' })
+  const user = getRow<{ role: UserRole, suspended: number }>('SELECT role, suspended FROM users WHERE id = ?', userId)
+  if (!user || user.role === 'admin') return res.status(404).json({ error: 'User not found or admin accounts cannot be suspended.' })
+  if (Boolean(user.suspended) === suspended) return res.status(409).json({ error: 'The account already has that status.' })
+  database.transaction(() => {
+    database.prepare('UPDATE users SET suspended = ? WHERE id = ?').run(suspended ? 1 : 0, userId)
+    if (suspended) database.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId)
+    database.prepare('INSERT INTO account_admin_history (user_id, admin_id, action, details) VALUES (?, ?, ?, ?)').run(userId, req.user!.id, suspended ? 'Suspended' : 'Restored', reason)
+  })()
+  return res.json({ suspended })
+})
+
+app.patch('/api/admin/users/:id/store-name', requireAuth, requireRole('admin'), (req, res) => {
+  const userId = Number(req.params.id)
+  const storeName = typeof req.body.storeName === 'string' ? req.body.storeName.trim() : ''
+  if (!Number.isSafeInteger(userId) || userId < 1 || !storeName || storeName.length > 100) return res.status(400).json({ error: 'Enter a store name up to 100 characters.' })
+  const store = getRow<{ store_name: string }>("SELECT p.store_name FROM seller_profiles p JOIN users u ON u.id = p.user_id WHERE u.id = ? AND u.role = 'seller'", userId)
+  if (!store) return res.status(404).json({ error: 'Seller store not found.' })
+  database.transaction(() => {
+    database.prepare('UPDATE seller_profiles SET store_name = ? WHERE user_id = ?').run(storeName, userId)
+    database.prepare('INSERT INTO account_admin_history (user_id, admin_id, action, details) VALUES (?, ?, ?, ?)').run(userId, req.user!.id, 'Store renamed', `${store.store_name} → ${storeName}`)
+  })()
+  return res.json({ storeName })
 })
 
 app.patch('/api/admin/users/:id/role', requireAuth, requireRole('admin'), (req, res) => {
@@ -2101,13 +2390,14 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), (_req, res) => {
   return res.json({ events })
 })
 
+registerManualOrders(app, database, requireAuth, requireRole)
 app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found.' }))
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   console.error(error)
-  if (typeof error === 'object' && error !== null && 'type' in error && error.type === 'entity.too.large') return res.status(413).json({ error: 'The upload is too large. Screenshots must be at most 2 MB.' })
+  if (typeof error === 'object' && error !== null && 'type' in error && error.type === 'entity.too.large') return res.status(413).json({ error: 'The upload is too large. Images must be at most 2 MB each.' })
   return res.status(500).json({ error: 'Something went wrong on the server.' })
 })
 
 await seedAdmin()
-app.listen(port, () => console.log(`GGU API listening on http://localhost:${port}`))
+app.listen(port, '0.0.0.0', () => console.log(`GGU API listening on port ${port}`))

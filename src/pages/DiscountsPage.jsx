@@ -1,9 +1,9 @@
-import SiteName from '../components/SiteName.jsx'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { apiRequest } from '../lib/api.js'
 import ProductCard from '../components/store/ProductCard.jsx'
+import SiteName from '../components/SiteName.jsx'
 
 const DiscountsPage = () => {
   const [products, setProducts] = useState([])

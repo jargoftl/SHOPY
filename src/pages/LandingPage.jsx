@@ -1,11 +1,13 @@
-import SiteName from '../components/SiteName.jsx'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { apiRequest } from '../lib/api.js'
 import { useCart } from '../context/CartContext.jsx'
 import SellerAccessModal from '../components/modals/SellerAccessModal.jsx'
+import StoreOwnerCallout from '../components/store/StoreOwnerCallout.jsx'
+import ProductCard from '../components/store/ProductCard.jsx'
 import StoreFooter from '../components/store/StoreFooter.jsx'
+import SiteName from '../components/SiteName.jsx'
 import {
   ChevronDown,
   ChevronRight,
@@ -238,7 +240,7 @@ const categoryTranslations = {
 }
 
 const LandingPage = () => {
-  const { addItem, itemCount } = useCart()
+  const { itemCount } = useCart()
   const [language, setLanguage] = useState('en')
   const [activeCategory, setActiveCategory] = useState('All')
   const [products, setProducts] = useState([])
@@ -251,7 +253,6 @@ const LandingPage = () => {
   const [sellerModalOpen, setSellerModalOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const [addedProductId, setAddedProductId] = useState(null)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
 
@@ -270,8 +271,8 @@ const LandingPage = () => {
   useEffect(() => {
     let isCurrent = true
 
-    Promise.all([apiRequest('/api/products'), apiRequest('/api/categories'), apiRequest('/api/stores')])
-      .then(([productData, categoryData, storeData]) => {
+    Promise.all([apiRequest('/api/products'), apiRequest('/api/categories')])
+      .then(([productData, categoryData]) => {
         if (!isCurrent) return
         if (import.meta.env.DEV) {
           console.log('Catalog API response:', {
@@ -281,7 +282,6 @@ const LandingPage = () => {
         }
         setProducts(productData.products)
         setCategories(categoryData.categories)
-        setStores(storeData.stores)
       })
       .catch((error) => {
         if (isCurrent) setLoadError(error.message)
@@ -290,6 +290,18 @@ const LandingPage = () => {
         if (isCurrent) setIsLoading(false)
       })
 
+    return () => { isCurrent = false }
+  }, [])
+
+  useEffect(() => {
+    let isCurrent = true
+    apiRequest('/api/stores')
+      .then(({ stores: storeData }) => {
+        if (isCurrent) setStores(storeData)
+      })
+      .catch(() => {
+        if (isCurrent) setStores([])
+      })
     return () => { isCurrent = false }
   }, [])
 
@@ -311,13 +323,6 @@ const LandingPage = () => {
     setActiveMenu('')
     setMobileMenuOpen(false)
     document.getElementById('products')?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  const addToBag = (productId) => {
-    const product = products.find((item) => item.id === productId)
-    if (product) addItem(product)
-    setAddedProductId(productId)
-    window.setTimeout(() => setAddedProductId(null), 1200)
   }
 
   return (
@@ -359,7 +364,6 @@ const LandingPage = () => {
                 return <button key={key} type="button" onClick={() => setSellerModalOpen(true)} className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#1f5a37]">{label}</button>
               }
 
-              if (key === 'Partnership') return <Link key={key} to="/seller/register" className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#1f5a37]">{label}</Link>
               if (key === 'Product') return <Link key={key} to="/products" className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#1f5a37]">{label}</Link>
               if (key === 'Discounts') return <Link key={key} to="/discounts" className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#1f5a37]">{label}</Link>
 
@@ -388,7 +392,7 @@ const LandingPage = () => {
             >
               {searchOpen ? <X size={20} strokeWidth={1.6} /> : <Search size={20} strokeWidth={1.6} />}
             </button>
-            <Link to="/profile" aria-label="Buyer profile" className="grid size-10 place-items-center">
+            <Link to="/login" aria-label="Log in or create an account" className="grid size-10 place-items-center">
               <UserRound size={20} strokeWidth={1.6} />
             </Link>
             <label className="hidden items-center gap-1.5 sm:flex" aria-label="Choose language">
@@ -454,15 +458,14 @@ const LandingPage = () => {
               const keys = ['Home', 'Category', 'Product', 'Discounts', 'Partnership', 'Seller']
               const key = keys[index]
 
-              if (key === 'Home') return <a key={key} href="#top" onClick={() => setMobileMenuOpen(false)} className="flex min-h-14 items-center justify-between border-b border-[#e7e7e7] text-xs font-medium uppercase">{label}<ChevronRight size={18} /></a>
-              if (key === 'Seller') return <button key={key} type="button" onClick={() => { setMobileMenuOpen(false); setSellerModalOpen(true) }} className="flex min-h-14 w-full items-center justify-between border-b border-[#e7e7e7] text-xs font-medium uppercase">{label}<ChevronRight size={18} /></button>
-              if (key === 'Partnership') return <Link key={key} to="/seller/register" onClick={() => setMobileMenuOpen(false)} className="flex min-h-14 items-center justify-between border-b border-[#e7e7e7] text-xs font-medium uppercase">{label}<ChevronRight size={18} /></Link>
-              if (key === 'Product') return <Link key={key} to="/products" onClick={() => setMobileMenuOpen(false)} className="flex min-h-14 items-center justify-between border-b border-[#e7e7e7] text-xs font-medium uppercase">{label}<ChevronRight size={18} /></Link>
-              if (key === 'Discounts') return <Link key={key} to="/discounts" onClick={() => setMobileMenuOpen(false)} className="flex min-h-14 items-center justify-between border-b border-[#e7e7e7] text-xs font-medium uppercase">{label}<ChevronRight size={18} /></Link>
+              if (key === 'Home') return <a key={key} href="#top" onClick={() => setMobileMenuOpen(false)} className="flex min-h-14 items-center justify-between border-b border-[#e7e7e7] text-sm font-medium uppercase">{label}<ChevronRight size={18} /></a>
+              if (key === 'Seller') return <button key={key} type="button" onClick={() => { setMobileMenuOpen(false); setSellerModalOpen(true) }} className="flex min-h-14 w-full items-center justify-between border-b border-[#e7e7e7] text-sm font-medium uppercase">{label}<ChevronRight size={18} /></button>
+              if (key === 'Product') return <Link key={key} to="/products" onClick={() => setMobileMenuOpen(false)} className="flex min-h-14 items-center justify-between border-b border-[#e7e7e7] text-sm font-medium uppercase">{label}<ChevronRight size={18} /></Link>
+              if (key === 'Discounts') return <Link key={key} to="/discounts" onClick={() => setMobileMenuOpen(false)} className="flex min-h-14 items-center justify-between border-b border-[#e7e7e7] text-sm font-medium uppercase">{label}<ChevronRight size={18} /></Link>
 
               return (
                 <div key={key} className="border-b border-[#e7e7e7]">
-                  <button type="button" onClick={() => setActiveMenu((menu) => (menu === key ? '' : key))} className="flex min-h-14 w-full items-center justify-between text-xs font-medium uppercase">
+                  <button type="button" onClick={() => setActiveMenu((menu) => (menu === key ? '' : key))} className="flex min-h-14 w-full items-center justify-between text-sm font-medium uppercase">
                     {label}<ChevronDown size={16} className={`transition-transform ${activeMenu === key ? 'rotate-180' : ''}`} />
                   </button>
                   {activeMenu === key && (
@@ -533,33 +536,20 @@ const LandingPage = () => {
           </div>
         </section>
 
-        <section className="mx-auto max-w-[1440px] px-4 py-12 sm:px-7 sm:py-16 lg:px-10">
-          <div className="mb-6 flex items-end justify-between gap-4 border-b border-[#e5e5e5] pb-4">
-            <div>
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8a5a4d]">Independent partners</p>
-              <h2 className="text-2xl font-semibold sm:text-3xl">Shop partner stores</h2>
-            </div>
-            <button type="button" onClick={() => setSellerModalOpen(true)} className="shrink-0 text-xs font-semibold underline underline-offset-4">Become a partner</button>
+        {stores.length > 0 && <section className="mx-auto max-w-[1440px] px-4 py-12 sm:px-7 lg:px-10">
+          <div className="mb-5 flex items-end justify-between gap-4 border-b border-[#e1e8df] pb-4">
+            <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#52715b]">Independent sellers</p><h2 className="mt-2 text-2xl font-semibold sm:text-3xl">Discover partner stores</h2></div>
+            <Link to="/products" className="shrink-0 text-xs font-semibold underline underline-offset-4">Explore marketplace</Link>
           </div>
-          {stores.length ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {stores.slice(0, 6).map((store) => (
-                <Link key={store.id} to={`/stores/${store.id}`} className="group flex min-h-32 items-center gap-4 border border-[#e5e5e5] bg-white p-4 transition-colors hover:border-[#1f4a32]">
-                  <div className="grid size-20 shrink-0 place-items-center overflow-hidden bg-[#e8eee8] text-2xl font-semibold text-[#1f4a32]">
-                    {store.logoUrl || store.imageUrl ? <img src={store.logoUrl || store.imageUrl} alt="" loading="lazy" className="size-full object-cover transition-transform duration-500 group-hover:scale-105" /> : store.storeName.slice(0, 1).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-semibold">{store.storeName}</h3>
-                    <p className="mt-1 line-clamp-2 text-xs text-[#737970]">{store.storeDescription || `Partner store by ${store.ownerName}`}</p>
-                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-[#8a5a4d]">{store.productCount} {store.productCount === 1 ? 'product' : 'products'} <span className="ml-1 text-black">Visit store →</span></p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="border border-dashed border-[#d6dbd5] px-5 py-8 text-center text-sm text-[#737970]">Partner stores will appear here as sellers join.</p>
-          )}
-        </section>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {stores.slice(0, 4).map((store) => <Link key={store.id} to={`/stores/${store.id}`} className="group overflow-hidden border border-[#e2e8e1] bg-white transition-colors hover:border-[#1f5a37]">
+              <img src={store.imageUrl || store.logoUrl || 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80'} alt={store.storeName} loading="lazy" className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-[1.025]" />
+              <div className="p-3 sm:p-4"><h3 className="truncate text-sm font-semibold">{store.storeName}</h3><p className="mt-1 truncate text-xs text-[#728074]">{store.ownerName} · {store.productCount} products</p><p className="mt-2 line-clamp-2 text-xs leading-5 text-[#59675d]">{store.storeDescription}</p></div>
+            </Link>)}
+          </div>
+        </section>}
+
+        <StoreOwnerCallout />
 
         <section id="products" className="mx-auto max-w-[1440px] scroll-mt-8 px-4 py-14 sm:px-7 sm:py-20 lg:px-10">
           <div className="mb-7 flex flex-col justify-between gap-5 border-b border-[#e5e5e5] pb-5 sm:flex-row sm:items-end">
@@ -582,21 +572,7 @@ const LandingPage = () => {
             <p role="status" className="py-16 text-center text-sm text-[#8a3c2d]">{loadError}</p>
           ) : visibleProducts.length ? (
             <div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:gap-x-5 md:grid-cols-3 lg:grid-cols-4">
-                  {visibleProducts.slice(0, 8).map((product) => (
-                <article key={product.id} className="group min-w-0">
-                  <Link to={`/products/${product.id}`} aria-label={`View ${product.name} details`} className="relative block aspect-[4/5] overflow-hidden bg-[#f3f3f3]">
-                    <img src={product.imageUrl} alt={product.name} loading="lazy" className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.035]" />
-                    <span className="absolute left-2 top-2 bg-white px-2 py-1 text-[9px] font-semibold uppercase tracking-wide sm:left-3 sm:top-3">{categoryLabel(product.category)}</span>
-                  </Link>
-                  <div className="flex items-start justify-between gap-2 pt-3">
-                    <div className="min-w-0"><Link to={`/products/${product.id}`} className="block truncate text-xs font-medium hover:underline sm:text-sm">{product.name}</Link><p className="mt-1 text-[11px] text-[#777]">{product.description || text.productNote}</p></div>
-                    <span className="shrink-0 text-xs sm:text-sm">${product.price}</span>
-                  </div>
-                  <button type="button" onClick={() => addToBag(product.id)} className="mt-3 w-full rounded-md bg-[#1f4a32] py-2.5 text-[10px] font-bold uppercase tracking-wide text-white transition-colors hover:bg-[#c8f135] hover:text-[#142217] sm:text-xs">
-                    {addedProductId === product.id ? text.added : text.addToBag}
-                  </button>
-                </article>
-              ))}
+                  {visibleProducts.slice(0, 8).map((product) => <ProductCard key={product.id} product={product} />)}
             </div>
           ) : (
             <p className="py-16 text-center text-sm text-[#666]">{text.empty}</p>

@@ -1,5 +1,5 @@
 export const calculateOrderTotals = (subtotal) => {
-  const shipping = subtotal === 0 || subtotal >= 75 ? 0 : 7.95
-  const tax = Math.round((subtotal + shipping) * 0.08 * 100) / 100
-  return { shipping, tax, total: Math.round((subtotal + shipping + tax) * 100) / 100 }
+  const subtotalCents = Math.round(subtotal * 100)
+  const taxCents = Math.floor(subtotalCents * 3 / 100)
+  return { shipping: 0, tax: taxCents / 100, total: (subtotalCents + taxCents) / 100 }
 }

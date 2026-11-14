@@ -10,7 +10,7 @@ export function SiteSettingsProvider({ children }) {
   const refresh = useCallback(async () => {
     const requestVersion = version.current
     try {
-      const settings = await apiRequest('/api/site-settings', { cache: 'no-store' })
+      const settings = await apiRequest('/api/site-settings', { cache: 'no-store', background: true })
       if (requestVersion === version.current) {
         setSiteName(settings.siteName)
         setError('')

@@ -1,12 +1,25 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AuthLayout from '../../components/AuthLayout.jsx'
 import { apiRequest } from '../../lib/api.js'
 
 const Login = () => {
   const navigate = useNavigate()
-  const [message, setMessage] = useState('')
+  const location = useLocation()
+  const [message, setMessage] = useState(location.state?.sessionNotice || '')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isCheckingSession, setIsCheckingSession] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    apiRequest('/api/auth/me', { background: true })
+      .then(({ user }) => {
+        if (active) navigate(user.role === 'admin' ? '/admin' : user.role === 'seller' ? '/seller' : '/profile', { replace: true })
+      })
+      .catch((error) => { if (active && error.status !== 401) setMessage(error.message) })
+      .finally(() => { if (active) setIsCheckingSession(false) })
+    return () => { active = false }
+  }, [navigate])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -29,6 +42,7 @@ const Login = () => {
 
   return (
     <AuthLayout>
+      {isCheckingSession ? <p role="status" className="text-sm text-[#666]">Checking your account…</p> : <>
       <div className="mb-7">
         <p className="mb-2 text-xs font-bold tracking-[0.14em] text-[#c87800]">WELCOME BACK</p>
         <h1 className="text-4xl font-bold tracking-tight">Log in</h1>
@@ -47,6 +61,7 @@ const Login = () => {
       </form>
       <p className="mt-7 text-center text-sm text-[#666]">New here? <Link to="/register" className="font-semibold text-black underline underline-offset-2">Create an account</Link></p>
       <p className="mt-3 text-center text-sm text-[#666]">Selling? <Link to="/seller/login" className="font-semibold text-black underline underline-offset-2">Seller login</Link></p>
+      </>}
     </AuthLayout>
   )
 }

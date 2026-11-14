@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:net'
 import { once } from 'node:events'
+import { createHash } from 'node:crypto'
+import Database from 'better-sqlite3'
 
 test('buyer profiles, addresses, visits and manual requests', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'ggu-buyer-test-'))
@@ -26,7 +28,8 @@ test('buyer profiles, addresses, visits and manual requests', async () => {
       headers: { ...(cookie ? { Cookie: cookie } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     })
-    return { status: response.status, data: await response.json(), cookie: response.headers.get('set-cookie')?.split(';')[0] }
+    const setCookie = response.headers.get('set-cookie')
+    return { status: response.status, data: await response.json(), cookie: setCookie?.split(';')[0], setCookie }
   }
   try {
     let ready = false
@@ -39,10 +42,34 @@ test('buyer profiles, addresses, visits and manual requests', async () => {
     assert.equal((await request('/api/auth/forgot-password', { method: 'POST', body: { email: 'buyer@example.test' } })).status, 503)
     const admin = await request('/api/auth/login', { method: 'POST', body: { email: 'admin@example.test', password: 'test-admin-password' } })
     assert.equal(admin.status, 200)
+    assert.match(admin.setCookie, /Max-Age=31536000/)
+    assert.match(admin.setCookie, /HttpOnly/)
+    assert.match(admin.setCookie, /SameSite=Lax/)
+    const adminSecond = await request('/api/auth/login', { method: 'POST', body: { email: 'admin@example.test', password: 'test-admin-password', loginType: 'seller' } })
+    assert.equal(adminSecond.status, 200)
+    assert.equal((await request('/api/auth/me', { cookie: admin.cookie })).status, 200)
+    assert.equal((await request('/api/auth/logout', { cookie: adminSecond.cookie, method: 'POST' })).status, 200)
+    assert.equal((await request('/api/auth/me', { cookie: adminSecond.cookie })).status, 401)
+    assert.equal((await request('/api/auth/me', { cookie: admin.cookie })).status, 200)
     const registration = await request('/api/auth/register', { method: 'POST', body: { fullName: 'Test Buyer', email: 'buyer@example.test', password: 'buyer-password' } })
     assert.equal(registration.status, 201)
     const buyer = registration.cookie
     const buyerId = registration.data.user.id
+    const buyerSecond = await request('/api/auth/login', { method: 'POST', body: { email: 'buyer@example.test', password: 'buyer-password' } })
+    assert.equal((await request('/api/auth/me', { cookie: buyer })).status, 200)
+    assert.equal((await request('/api/auth/logout', { cookie: buyerSecond.cookie, method: 'POST' })).status, 200)
+    assert.equal((await request('/api/auth/me', { cookie: buyerSecond.cookie })).status, 401)
+    assert.equal((await request('/api/auth/me', { cookie: buyer })).status, 200)
+    assert.equal((await request('/api/auth/login', { cookie: buyer, method: 'POST', body: { email: 'buyer@example.test', password: 'buyer-password', loginType: 'seller' } })).status, 403)
+    assert.equal((await request('/api/auth/me', { cookie: buyer })).status, 200)
+    const database = new Database(join(directory, 'test.db'))
+    const tokenHash = createHash('sha256').update(buyer.split('=')[1]).digest('hex')
+    database.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?').run(new Date(Date.now() + 7 * 86400000).toISOString(), tokenHash)
+    const renewed = await request('/api/auth/me', { cookie: buyer })
+    assert.equal(renewed.status, 200)
+    assert.match(renewed.setCookie, /Max-Age=31536000/)
+    assert.ok(Date.parse(database.prepare('SELECT expires_at FROM sessions WHERE token_hash = ?').get(tokenHash).expires_at) > Date.now() + 330 * 86400000)
+    database.close()
     assert.equal((await request('/api/admin/site-settings', { cookie: buyer, method: 'PUT', body: { siteName: 'New Store' } })).status, 403)
     assert.equal((await request('/api/admin/site-settings', { cookie: admin.cookie, method: 'PUT' })).status, 400)
     for (const siteName of ['', '   ', 'x'.repeat(81), 'Bad\nName']) {
@@ -74,6 +101,41 @@ test('buyer profiles, addresses, visits and manual requests', async () => {
     const other = await request('/api/auth/register', { method: 'POST', body: { fullName: 'Other Buyer', email: 'other@example.test', password: 'buyer-password' } })
     assert.equal((await request(`/api/buyer/addresses/${newAddressId}/default`, { cookie: other.cookie, method: 'PATCH' })).status, 404)
     assert.equal((await request('/api/buyer/profile', { cookie: other.cookie })).data.addresses.length, 0)
+    const rewardSeller = await request('/api/auth/register', { method: 'POST', body: { fullName: 'Reward Seller', email: 'rewards@example.test', password: 'seller-password' } })
+    assert.equal(rewardSeller.status, 201)
+    const rewardSellerId = rewardSeller.data.user.id
+    assert.equal((await request(`/api/admin/users/${rewardSellerId}/role`, { cookie: admin.cookie, method: 'PATCH', body: { role: 'seller' } })).status, 200)
+    const sellerSecond = await request('/api/auth/login', { method: 'POST', body: { email: 'rewards@example.test', password: 'seller-password', loginType: 'seller' } })
+    assert.equal(sellerSecond.status, 200)
+    assert.equal((await request('/api/auth/me', { cookie: rewardSeller.cookie })).status, 200)
+    assert.equal((await request('/api/auth/logout', { cookie: sellerSecond.cookie, method: 'POST' })).status, 200)
+    assert.equal((await request('/api/auth/me', { cookie: sellerSecond.cookie })).status, 401)
+    assert.equal((await request('/api/auth/me', { cookie: rewardSeller.cookie })).status, 200)
+    assert.equal((await request('/api/rewards')).status, 401)
+    assert.equal((await request('/api/rewards', { cookie: admin.cookie })).status, 403)
+    assert.equal((await request('/api/rewards', { cookie: buyer })).data.balanceUnits, 0)
+    assert.equal((await request('/api/rewards', { cookie: rewardSeller.cookie })).data.balanceUnits, 0)
+    const buyerRewards = `/api/admin/users/${buyerId}/rewards`
+    const sellerRewards = `/api/admin/users/${rewardSellerId}/rewards`
+    assert.equal((await request(buyerRewards, { method: 'PATCH', body: { adjustmentUnits: 100, reason: 'Grant' } })).status, 401)
+    assert.equal((await request(sellerRewards, { cookie: buyer, method: 'PATCH', body: { adjustmentUnits: 100, reason: 'Grant' } })).status, 403)
+    assert.equal((await request(buyerRewards, { cookie: admin.cookie, method: 'PATCH', body: { adjustmentUnits: 0, reason: 'Invalid' } })).status, 400)
+    assert.equal((await request(buyerRewards, { cookie: admin.cookie, method: 'PATCH', body: { adjustmentUnits: 1.5, reason: 'Invalid' } })).status, 400)
+    assert.equal((await request(buyerRewards, { cookie: admin.cookie, method: 'PATCH', body: { adjustmentUnits: 100, reason: ' ' } })).status, 400)
+    assert.equal((await request(buyerRewards, { cookie: admin.cookie, method: 'PATCH', body: { adjustmentUnits: 1250, reason: 'Welcome reward' } })).data.balanceUnits, 1250)
+    assert.equal((await request(buyerRewards, { cookie: admin.cookie, method: 'PATCH', body: { adjustmentUnits: 250, reason: 'Additional reward' } })).data.balanceUnits, 1500)
+    assert.equal((await request(buyerRewards, { cookie: admin.cookie, method: 'PATCH', body: { adjustmentUnits: -500, reason: 'Correction' } })).data.balanceUnits, 1000)
+    assert.equal((await request(buyerRewards, { cookie: admin.cookie, method: 'PATCH', body: { adjustmentUnits: -1001, reason: 'Too much' } })).status, 400)
+    assert.equal((await request(sellerRewards, { cookie: admin.cookie, method: 'PATCH', body: { adjustmentUnits: 725, reason: 'Seller reward' } })).data.balanceUnits, 725)
+    assert.equal((await request('/api/rewards', { cookie: buyer })).data.balanceUnits, 1000)
+    assert.equal((await request('/api/rewards', { cookie: rewardSeller.cookie })).data.balanceUnits, 725)
+    assert.equal((await request('/api/rewards', { cookie: other.cookie })).data.balanceUnits, 0)
+    const rewardDetails = await request(`/api/admin/users/${buyerId}/details`, { cookie: admin.cookie })
+    assert.equal(rewardDetails.data.rewards.balanceUnits, 1000)
+    assert.equal(rewardDetails.data.rewardHistory.length, 3)
+    assert.equal(rewardDetails.data.rewardHistory[0].reason, 'Correction')
+    assert.ok((await request('/api/notifications', { cookie: buyer })).data.notifications.some((item) => item.type === 'reward' && item.title === 'Balance added'))
+    assert.ok((await request('/api/notifications', { cookie: rewardSeller.cookie })).data.notifications.some((item) => item.type === 'reward' && item.link === '/seller'))
     const stores = await request('/api/stores')
     assert.ok(stores.data.stores.length)
     const sellerDetails = await request(`/api/admin/users/${stores.data.stores[0].id}/details`, { cookie: admin.cookie })
@@ -167,13 +229,51 @@ test('buyer profiles, addresses, visits and manual requests', async () => {
     assert.equal((await request(`/api/admin/buyer-requests/${id}`, { cookie: admin.cookie, method: 'PATCH', body: { status: 'confirmed', instructions: 'Reviewed manually' } })).status, 200)
     assert.equal((await request(`/api/admin/buyer-requests/${id}`, { cookie: admin.cookie, method: 'PATCH', body: { status: 'confirmed' } })).status, 409)
     profile = await request('/api/buyer/profile', { cookie: buyer })
-    assert.equal(profile.data.wallet.balanceCents, 0)
+    assert.equal(profile.data.wallet.balanceCents, 1000)
     assert.equal((await request(`/api/admin/buyers/${buyerId}/balance`, { cookie: admin.cookie, method: 'PATCH', body: { balanceCents: 999, reason: 'Test adjustment' } })).status, 200)
     profile = await request('/api/buyer/profile', { cookie: buyer })
     assert.equal(profile.data.wallet.balanceCents, 999)
     assert.equal((await request(`/api/admin/buyers/${buyerId}/balance`, { cookie: admin.cookie, method: 'PATCH', body: { balanceCents: 200, reason: 'Reduce balance' } })).status, 200)
     profile = await request('/api/buyer/profile', { cookie: buyer })
     assert.equal(profile.data.wallet.balanceCents, 200)
+    assert.equal((await request(`/api/admin/buyers/${buyerId}/balance`, { cookie: buyer, method: 'PATCH', body: { adjustmentCents: 100, reason: 'Not allowed' } })).status, 403)
+    assert.equal((await request(`/api/admin/buyers/${buyerId}/balance`, { cookie: admin.cookie, method: 'PATCH', body: { adjustmentCents: 300, reason: 'Add' } })).data.balanceCents, 500)
+    assert.equal((await request(`/api/admin/buyers/${buyerId}/balance`, { cookie: admin.cookie, method: 'PATCH', body: { adjustmentCents: -150, reason: 'Subtract' } })).data.balanceCents, 350)
+    assert.equal((await request(`/api/admin/buyers/${buyerId}/balance`, { cookie: admin.cookie, method: 'PATCH', body: { adjustmentCents: -351, reason: 'Too much' } })).status, 400)
+    assert.equal((await request('/api/rewards', { cookie: buyer })).data.balanceUnits, 350)
+    const balanceDetails = await request(`/api/admin/users/${buyerId}/details`, { cookie: admin.cookie })
+    assert.equal(balanceDetails.data.balanceHistory[0].oldCents, 500)
+    assert.equal(balanceDetails.data.balanceHistory[0].newCents, 350)
+    assert.equal(balanceDetails.data.balanceHistory[0].reason, 'Subtract')
+    const sellerId = sellerDetails.data.user.id
+    const sellerAction = `/api/admin/users/${sellerId}`
+    assert.equal((await request(`${sellerAction}/store-name`, { cookie: buyer, method: 'PATCH', body: { storeName: 'Forbidden' } })).status, 403)
+    assert.equal((await request(`${sellerAction}/store-name`, { cookie: admin.cookie, method: 'PATCH', body: { storeName: ' ' } })).status, 400)
+    assert.equal((await request(`${sellerAction}/store-name`, { cookie: admin.cookie, method: 'PATCH', body: { storeName: 'Renamed store' } })).status, 200)
+    assert.equal((await request(`/api/stores/${sellerId}`)).data.store.storeName, 'Renamed store')
+    assert.equal((await request(`/api/admin/users/${admin.data.user.id}/suspension`, { cookie: admin.cookie, method: 'PATCH', body: { suspended: true, reason: 'No' } })).status, 404)
+    assert.equal((await request(`${sellerAction}/suspension`, { cookie: buyer, method: 'PATCH', body: { suspended: true, reason: 'No' } })).status, 403)
+    assert.equal((await request(`${sellerAction}/suspension`, { cookie: admin.cookie, method: 'PATCH', body: { suspended: true, reason: 'Rule violation' } })).status, 200)
+    assert.equal((await request(`/api/stores/${sellerId}`)).status, 404)
+    assert.ok(!(await request('/api/stores')).data.stores.some((item) => item.id === sellerId))
+    assert.ok(!(await request('/api/products')).data.products.some((item) => item.sellerId === sellerId))
+    assert.ok(!(await request('/api/discounts')).data.products.some((item) => item.sellerId === sellerId))
+    assert.equal((await request(`/api/products/${product.id}`)).status, 404)
+    assert.equal((await request('/api/buyer/profile', { cookie: buyer })).data.favorites.length, 0)
+    assert.equal((await request('/api/buyer/orders', { cookie: buyer, method: 'POST', body: orderBody })).status, 400)
+    assert.equal((await request('/api/admin/payment-wallets/BTC', { cookie: admin.cookie, method: 'PUT', body: { network: 'Bitcoin', address: 'test-address', usdRate: '100000' } })).status, 200)
+    const purchaseBody = { items: orderBody.items, billing: { ...address, email: 'buyer@example.test' }, coin: 'BTC', requestKey: '12345678-1234-1234-1234-123456789012' }
+    assert.equal((await request('/api/purchases', { cookie: buyer, method: 'POST', body: purchaseBody })).status, 400)
+    assert.equal((await request(`${sellerAction}/suspension`, { cookie: admin.cookie, method: 'PATCH', body: { suspended: false, reason: 'Restored' } })).status, 200)
+    assert.equal((await request(`/api/products/${product.id}`)).status, 200)
+    assert.equal((await request('/api/buyer/profile', { cookie: buyer })).data.favorites.length, 1)
+    assert.equal((await request(`${sellerAction}/details`, { cookie: admin.cookie })).data.accountHistory.length, 3)
+    const otherId = other.data.user.id
+    assert.equal((await request(`/api/admin/users/${otherId}/suspension`, { cookie: admin.cookie, method: 'PATCH', body: { suspended: true, reason: 'Review' } })).status, 200)
+    assert.equal((await request('/api/auth/me', { cookie: other.cookie })).status, 401)
+    assert.equal((await request('/api/auth/login', { method: 'POST', body: { email: 'other@example.test', password: 'buyer-password' } })).status, 403)
+    assert.equal((await request(`/api/admin/users/${otherId}/suspension`, { cookie: admin.cookie, method: 'PATCH', body: { suspended: false, reason: 'Review complete' } })).status, 200)
+    assert.equal((await request('/api/auth/login', { method: 'POST', body: { email: 'other@example.test', password: 'buyer-password' } })).status, 200)
     const buyers = await request('/api/admin/buyers', { cookie: admin.cookie })
     assert.ok(buyers.data.buyers.some((item) => item.id === buyerId && item.visits.length === 1))
     assert.ok(!JSON.stringify(buyers.data).includes('password'))
@@ -181,12 +281,16 @@ test('buyer profiles, addresses, visits and manual requests', async () => {
     assert.equal((await request('/api/buyer/requests', { cookie: buyer, method: 'POST', body: { kind: 'withdrawal', coin: 'BTC', amountCents: 100, destination: 'test wallet', transactionPassword: 'transaction-secret' } })).status, 201)
     assert.equal((await request(`/api/buyer/favorites/${product.id}`, { cookie: buyer, method: 'DELETE' })).status, 200)
     assert.equal((await request('/api/buyer/profile', { cookie: buyer })).data.favorites.length, 0)
+    const buyerOtherSession = await request('/api/auth/login', { method: 'POST', body: { email: 'buyer@example.test', password: 'buyer-password' } })
     assert.equal((await request('/api/buyer/password', { cookie: buyer, method: 'PUT', body: { currentPassword: 'wrong', newPassword: 'new-buyer-password' } })).status, 400)
     assert.equal((await request('/api/buyer/password', { cookie: buyer, method: 'PUT', body: { currentPassword: 'buyer-password', newPassword: 'new-buyer-password' } })).status, 200)
+    assert.equal((await request('/api/auth/me', { cookie: buyerOtherSession.cookie })).status, 401)
     assert.equal((await request('/api/auth/login', { method: 'POST', body: { email: 'buyer@example.test', password: 'buyer-password' } })).status, 401)
-    assert.equal((await request('/api/auth/login', { method: 'POST', body: { email: 'buyer@example.test', password: 'new-buyer-password' } })).status, 200)
+    const newSession = await request('/api/auth/login', { method: 'POST', body: { email: 'buyer@example.test', password: 'new-buyer-password' } })
+    assert.equal(newSession.status, 200)
+    assert.equal((await request('/api/auth/me', { cookie: buyer })).status, 200)
     assert.equal((await request(`/api/seller/products/${product.id}`, { cookie: admin.cookie, method: 'DELETE' })).status, 200)
-    const savedItem = (await request('/api/buyer/orders', { cookie: buyer })).data.orders[0].items[0]
+    const savedItem = (await request('/api/buyer/orders', { cookie: newSession.cookie })).data.orders[0].items[0]
     assert.equal(savedItem.productId, null)
     assert.equal(savedItem.imageUrl, product.imageUrl)
     server.kill('SIGTERM')
@@ -197,6 +301,9 @@ test('buyer profiles, addresses, visits and manual requests', async () => {
       try { restoredSettings = await request('/api/site-settings'); break } catch { await new Promise((resolve) => setTimeout(resolve, 100)) }
     }
     assert.equal(restoredSettings?.data.siteName, 'New Store')
+    assert.equal((await request('/api/auth/me', { cookie: admin.cookie })).status, 200)
+    assert.equal((await request('/api/rewards', { cookie: newSession.cookie })).data.balanceUnits, 350)
+    assert.equal((await request('/api/rewards', { cookie: rewardSeller.cookie })).data.balanceUnits, 725)
   } finally {
     server.kill('SIGTERM')
     if (server.exitCode === null && server.signalCode === null) await once(server, 'exit')

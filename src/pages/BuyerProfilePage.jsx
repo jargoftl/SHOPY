@@ -5,7 +5,7 @@ import { ArrowDownLeft, ArrowUpRight, Bell, Heart, History, MapPin, MessageCircl
 import { AiOutlineDashboard } from 'react-icons/ai'
 import { FaWallet } from 'react-icons/fa'
 import { IoCopyOutline } from 'react-icons/io5'
-import { apiRequest } from '../lib/api.js'
+import { apiRequest, trackedFetch } from '../lib/api.js'
 import AmountInput from '../components/AmountInput.jsx'
 import WalletModal from '../components/WalletModal.jsx'
 import BuyerExtras from '../components/BuyerExtras.jsx'
@@ -80,7 +80,7 @@ const BuyerProfilePage = () => {
     apiRequest('/api/auth/me')
       .then(({ user }) => {
         if (user.role !== 'customer') {
-          navigate(user.role === 'admin' ? '/admin' : '/seller', { replace: true })
+          navigate(section === 'orders' ? '/orders' : user.role === 'admin' ? '/admin' : '/seller', { replace: true, state: location.state })
           return null
         }
         return Promise.all([apiRequest('/api/buyer/profile'), apiRequest('/api/notifications')])
@@ -92,14 +92,14 @@ const BuyerProfilePage = () => {
         else setError(err.message)
       })
     return () => { active = false }
-  }, [navigate, updateProfile])
+  }, [navigate, section, updateProfile, location.state])
 
   useEffect(() => {
     if (!profileLoaded || busy) return
     let active = true
     const timer = window.setInterval(async () => {
       try {
-        const [data, alerts] = await Promise.all([apiRequest('/api/buyer/profile'), apiRequest('/api/notifications')])
+        const [data, alerts] = await Promise.all([apiRequest('/api/buyer/profile', { background: true }), apiRequest('/api/notifications', { background: true })])
         if (active) {
           updateProfile(data)
           setNotifications(alerts.notifications)
@@ -170,7 +170,7 @@ const BuyerProfilePage = () => {
     }
     setBusy(true); setError(''); setNotice('')
     try {
-      const response = await fetch(`/api/buyer/requests/${requestId}/receipt`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': file.type }, body: file })
+      const response = await trackedFetch(`/api/buyer/requests/${requestId}/receipt`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': file.type }, body: file })
       if (!response.ok) {
         const result = await response.json()
         throw new Error(result.error || 'Screenshot upload failed.')
@@ -240,7 +240,7 @@ const BuyerProfilePage = () => {
               <button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setTransactionPassword(''); setActiveDeposit(null); setCoin(''); setKind('deposit') }} className="flex items-center justify-center gap-3 border border-[#e1e7df] bg-white p-6 text-sm font-semibold hover:border-[#315941] disabled:opacity-60"><ArrowDownLeft size={22} /> Deposit request</button>
               <button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setTransactionPassword(''); setActiveDeposit(null); setCoin('BTC'); setKind('withdrawal') }} className="flex items-center justify-center gap-3 border border-[#e1e7df] bg-white p-6 text-sm font-semibold hover:border-[#315941] disabled:opacity-60"><ArrowUpRight size={22} /> Withdrawal request</button>
             </section>
-            <p className="text-xs leading-5 text-[#737970]">Select a coin to send a deposit request. The administrator will send the wallet and network here. Enter the amount, then upload a screenshot for manual review. No crypto is processed or verified here; confirmation does not change the demo balance.</p>
+            <p className="text-xs leading-5 text-[#737970]">Select a coin to send a deposit request. The administrator will send the wallet and network here. Enter the amount, then upload a screenshot for manual review. No crypto is processed or verified here; confirmation does not automatically change your balance.</p>
             {kind && <section className="space-y-4 border border-[#e1e7df] bg-white p-5">
               <div className="flex justify-between"><h2 className="font-semibold">{kind === 'deposit' ? 'Deposit' : 'Withdrawal'} request</h2><button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setKind(''); setTransactionPassword('') }} className="text-sm underline disabled:opacity-60">Close</button></div>
               {activeRequest ? <>

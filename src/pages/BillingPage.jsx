@@ -2,8 +2,7 @@ import SiteName from '../components/SiteName.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext.jsx'
-import { calculateOrderTotals } from '../lib/orderTotals.js'
-import { apiRequest } from '../lib/api.js'
+import { apiRequest, trackedFetch } from '../lib/api.js'
 import { applyBillingAddress, mergeBillingDefaults } from '../lib/billingDefaults.js'
 
 const BillingPage = () => {
@@ -14,12 +13,11 @@ const BillingPage = () => {
   const [addresses, setAddresses] = useState([])
   const [billing, setBilling] = useState(location.state?.billing || {})
   const editedFields = useRef(new Set())
-  const totals = calculateOrderTotals(subtotal)
 
   useEffect(() => {
     let active = true
     const loadAddresses = async () => {
-      const response = await fetch('/api/auth/me', { credentials: 'include' })
+      const response = await trackedFetch('/api/auth/me', { credentials: 'include' })
       if (response.status === 401) return
       if (!response.ok) throw new Error('Could not load your saved billing addresses.')
       const { user } = await response.json()
@@ -91,8 +89,8 @@ const BillingPage = () => {
           </form>
           <aside className="h-fit border border-[#e5e5e5] p-5 sm:p-6">
             <h2 className="text-lg font-semibold">Order total</h2>
-            <dl className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><dt>Subtotal</dt><dd>${subtotal.toFixed(2)}</dd></div><div className="flex justify-between"><dt>Shipping</dt><dd>{totals.shipping ? `$${totals.shipping.toFixed(2)}` : 'Free'}</dd></div><div className="flex justify-between"><dt>Estimated tax</dt><dd>${totals.tax.toFixed(2)}</dd></div><div className="flex justify-between border-t border-[#e5e5e5] pt-4 text-base font-semibold"><dt>Total</dt><dd>${totals.total.toFixed(2)}</dd></div></dl>
-            <p className="mt-4 text-[10px] leading-5 text-[#777]">Demo checkout only. No real payment is collected.</p>
+            <dl className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><dt>Estimated subtotal</dt><dd>${subtotal.toFixed(2)}</dd></div><div className="flex justify-between"><dt>Shipping</dt><dd>Free</dd></div><div className="flex justify-between"><dt>Tax</dt><dd>Up to 3%</dd></div></dl>
+            <p className="mt-4 text-[10px] leading-5 text-[#777]">Final prices and tax are calculated when the order is submitted.</p>
           </aside>
         </div>
       </main>

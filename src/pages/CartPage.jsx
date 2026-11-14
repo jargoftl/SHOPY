@@ -54,7 +54,7 @@ const CartPage = () => {
                 <div className="flex justify-between border-t border-[#e5e5e5] pt-4 text-base font-semibold"><dt>Total</dt><dd>${totals.total.toFixed(2)}</dd></div>
               </dl>
               <Link to="/billing" className="mt-6 flex min-h-12 items-center justify-center bg-black px-4 text-sm font-semibold text-white">Continue to billing</Link>
-              <p className="mt-3 text-[10px] leading-5 text-[#777]">Taxes and shipping are estimates for this checkout demo.</p>
+              <p className="mt-3 text-[10px] leading-5 text-[#777]">Estimated totals. Final product prices and tax are calculated when the order is submitted.</p>
             </aside>
           </div>
         )}

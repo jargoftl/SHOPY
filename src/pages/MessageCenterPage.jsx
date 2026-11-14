@@ -76,8 +76,10 @@ const MessageCenterPage = () => {
     try {
       await apiRequest(`/api/notifications/${notificationId}/read`, { method: 'PATCH' })
       setNotifications((current) => current.map((item) => item.id === notificationId ? { ...item, isRead: true } : item))
+      return true
     } catch (error) {
       setMessage(error.message)
+      return false
     }
   }
 
@@ -162,13 +164,13 @@ const MessageCenterPage = () => {
             </div>
             <div className={`divide-y ${isAdmin ? 'divide-[#263c2d]' : 'divide-[#eee]'}`}>
               {notifications.map((notification) => (
-                <article key={notification.id} className="flex items-start gap-3 px-5 py-4">
-                  <span className={`mt-1.5 size-2 shrink-0 rounded-full ${notification.isRead ? 'bg-transparent' : isAdmin ? 'bg-[#c8f135]' : 'bg-[#1f4a32]'}`} />
+                <article key={notification.id} className={`flex items-start gap-3 px-5 py-4 ${isAdmin && notification.isRead ? 'bg-white text-[#20231f]' : isAdmin ? 'bg-[#14281b]' : ''}`}>
+                  <span className={`mt-1.5 size-2 shrink-0 rounded-full ${user?.role === 'seller' ? (notification.isRead ? 'bg-[#2f925a]' : 'bg-[#d84250]') : notification.isRead ? 'bg-transparent' : isAdmin ? 'bg-[#c8f135]' : 'bg-[#1f4a32]'}`} />
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-semibold">{notification.title}</h3>
-                    <p className={`mt-1 text-sm ${isAdmin ? 'text-[#c9d2c8]' : 'text-[#666]'}`}>{notification.body}</p>
-                    {notification.link && <Link to={notification.link} className="mt-2 inline-block text-xs underline underline-offset-4">View details</Link>}
-                    <time className={`mt-2 block text-[10px] ${isAdmin ? 'text-[#9baa9d]' : 'text-[#888]'}`}>{new Date(`${notification.createdAt.replace(' ', 'T')}Z`).toLocaleString()}</time>
+                    <h3 className="text-sm font-semibold">{notification.title}{user?.role === 'seller' && <span className="sr-only"> · {notification.isRead ? 'Read' : 'Unread'}</span>}</h3>
+                    <p className={`mt-1 text-sm ${isAdmin && !notification.isRead ? 'text-[#c9d2c8]' : 'text-[#666]'}`}>{notification.body}</p>
+                    {notification.link && <Link to={notification.link} onClick={async (event) => { if (!notification.isRead) { event.preventDefault(); if (await markNotificationRead(notification.id)) navigate(notification.link) } }} className="mt-2 inline-block text-xs underline underline-offset-4">View details</Link>}
+                    <time className={`mt-2 block text-[10px] ${isAdmin && !notification.isRead ? 'text-[#9baa9d]' : 'text-[#777]'}`}>{new Date(`${notification.createdAt.replace(' ', 'T')}Z`).toLocaleString()}</time>
                   </div>
                   {!notification.isRead && <button type="button" onClick={() => markNotificationRead(notification.id)} className="shrink-0 text-xs underline underline-offset-4">Mark read</button>}
                 </article>

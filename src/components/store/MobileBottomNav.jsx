@@ -7,13 +7,13 @@ const links = [
   { to: '/products', label: 'Products', Icon: LayoutGrid },
   { to: '/discounts', label: 'Deals', Icon: Percent },
   { to: '/cart', label: 'Cart', Icon: ShoppingCart },
-  { to: '/profile', label: 'Profile', Icon: UserRound },
+  { to: '/login', label: 'Profile', Icon: UserRound },
 ]
 
 const MobileBottomNav = () => {
   const { pathname } = useLocation()
   const { itemCount } = useCart()
-  const hidden = ['/admin', '/seller', '/login', '/register', '/forgot-password', '/reset-password', '/billing', '/checkout'].some((path) => pathname.startsWith(path))
+  const hidden = ['/admin', '/seller', '/login', '/register', '/billing', '/checkout'].some((path) => pathname.startsWith(path))
   if (hidden) return null
 
   return (

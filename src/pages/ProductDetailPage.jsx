@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Eye, Heart, ShoppingBag, Star, Users } from 'lucide-react'
 import { useCart } from '../context/CartContext.jsx'
 import { apiRequest } from '../lib/api.js'
+import ProductCard from '../components/store/ProductCard.jsx'
 
 const colorSwatches = {
   black: '#171717', white: '#ffffff', cream: '#ede5d4', red: '#c83c35', blue: '#386fa1',
@@ -17,6 +18,7 @@ const ProductDetailPage = () => {
   const { addItem } = useCart()
   const [product, setProduct] = useState(null)
   const [store, setStore] = useState(null)
+  const [relatedProducts, setRelatedProducts] = useState([])
   const [activeImage, setActiveImage] = useState(0)
   const [selectedColor, setSelectedColor] = useState('')
   const [selectedSize, setSelectedSize] = useState('')
@@ -32,10 +34,14 @@ const ProductDetailPage = () => {
       .then(({ isFavorite: favorite }) => { if (isCurrent) setIsFavorite(favorite) })
       .catch((error) => { if (isCurrent && error.status !== 401 && error.status !== 403) setFollowMessage(error.message) })
     apiRequest(`/api/products/${productId}`)
-      .then(({ product: productData, store: storeData }) => {
+      .then(({ product: productData, store: storeData, relatedProducts: related }) => {
         if (!isCurrent) return
         setProduct(productData)
         setStore(storeData)
+        setRelatedProducts(related)
+        setSelectedColor('')
+        setSelectedSize('')
+        setActiveImage(0)
         setLoadError('')
         if (storeData) {
           apiRequest(`/api/stores/${storeData.id}/follow`)
@@ -58,14 +64,6 @@ const ProductDetailPage = () => {
     }
   }
   const images = product?.imageUrls?.length ? product.imageUrls : product ? [product.imageUrl] : []
-
-  useEffect(() => {
-    if (images.length < 2) return undefined
-    const intervalId = window.setInterval(() => {
-      setActiveImage((current) => (current + 1) % images.length)
-    }, 3500)
-    return () => window.clearInterval(intervalId)
-  }, [images.length, productId])
 
   const changeFollow = async () => {
     if (!store) return
@@ -153,11 +151,12 @@ const ProductDetailPage = () => {
             </div>
 
             <p className="py-5 text-sm leading-6 text-[#555]">{product.description || 'Details from the partner seller are coming soon.'}</p>
+            {product.sellerReportedStock != null && <p className="mb-4 rounded-lg bg-[#fff9eb] px-3 py-2 text-xs text-[#71521e]">{product.sellerReportedStock === 0 ? 'Seller-reported stock: 0.' : product.sellerReportedStock <= 5 ? `Seller-reported: few left (${product.sellerReportedStock}).` : `Seller-reported stock: ${product.sellerReportedStock}.`} This count is manually maintained and may not be current; it does not limit orders.</p>}
 
             {product.colors.length > 0 && <fieldset className="border-t border-[#eee] py-4">
               <legend className="mb-3 text-xs font-medium">Color{selectedColor ? `: ${selectedColor}` : ''}</legend>
               <div className="flex flex-wrap gap-2">
-                {product.colors.map((color) => <button key={color} type="button" onClick={() => setSelectedColor(color)} aria-label={color} aria-pressed={selectedColor === color} title={color} className={`grid size-9 place-items-center rounded-full border ${selectedColor === color ? 'border-black ring-2 ring-black ring-offset-2' : 'border-[#ccc]'}`} style={{ backgroundColor: colorSwatches[color.toLowerCase()] || '#d8d8d5' }}>{color.toLowerCase() === 'white' && <span className="sr-only">White</span>}</button>)}
+                {product.colors.map((color) => <button key={color} type="button" onClick={() => setSelectedColor(color)} aria-pressed={selectedColor === color} className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs ${selectedColor === color ? 'border-black ring-1 ring-black' : 'border-[#ccc]'}`}><span aria-hidden="true" className="size-4 rounded-full border border-[#aaa]" style={{ backgroundColor: colorSwatches[color.toLowerCase()] || '#d8d8d5' }} />{color}</button>)}
               </div>
             </fieldset>}
 
@@ -191,6 +190,7 @@ const ProductDetailPage = () => {
             </> : <p className="text-sm text-[#777]">Store profile is unavailable.</p>}
           </aside>
         </div>
+        {relatedProducts.length > 0 && <section aria-labelledby="related-products-heading" className="mt-14 border-t border-[#eee] pt-8"><div className="flex items-end justify-between gap-4"><div><p className="text-xs uppercase tracking-[0.16em] text-[#8a5a4d]">Discover more</p><h2 id="related-products-heading" className="mt-2 text-2xl font-semibold">You may also like</h2><p className="mt-2 text-sm text-[#737970]">More products in {product.category.split(' / ')[0]}.</p></div><Link to="/products" className="text-sm underline">Browse all</Link></div><div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{relatedProducts.map((item) => <ProductCard key={item.id} product={item} />)}</div></section>}
       </main>
     </div>
   )

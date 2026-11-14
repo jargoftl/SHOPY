@@ -1,5 +1,7 @@
 export const formatMoney = (cents) => cents === null ? 'Amount not provided' : (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 
+export const formatCredits = (units) => `${(units / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} credits`
+
 export const formatAmountInput = (value) => {
   const raw = value.replace(/,/g, '')
   if (!/^\d*(?:\.\d{0,2})?$/.test(raw)) return null

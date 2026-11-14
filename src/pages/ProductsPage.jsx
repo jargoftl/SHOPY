@@ -1,4 +1,3 @@
-import SiteName from '../components/SiteName.jsx'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -6,6 +5,7 @@ import { ChevronRight, Menu, Search, X } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 import { catalogTaxonomy } from '../data/catalogTaxonomy.js'
 import ProductCard from '../components/store/ProductCard.jsx'
+import SiteName from '../components/SiteName.jsx'
 
 const ProductsPage = () => {
   const [products, setProducts] = useState([])

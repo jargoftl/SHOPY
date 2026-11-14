@@ -22,6 +22,52 @@ body {
   margin: 0;
 }
 
+.app-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: #080808;
+  color: #fff;
+}
+
+.app-loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  height: 100%;
+}
+
+.app-loading-name {
+  max-width: 90vw;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-size: clamp(2rem, 7vw, 3.125rem);
+  font-style: italic;
+  font-weight: 600;
+  animation: app-loading-cut 2s infinite;
+}
+
+.app-loading-label { font-size: 0.875rem; }
+
+@keyframes app-loading-cut {
+  0%, 75%, 100% { clip-path: inset(0); }
+  25% { clip-path: inset(100% 0 0); }
+  50% { clip-path: inset(0 0 100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-loading-name { animation: none; }
+}
+
 button,
 input {
   font: inherit;
@@ -29,4 +75,58 @@ input {
 
 button {
   cursor: pointer;
+}
+
+.theme-control {
+  position: fixed;
+  z-index: 45;
+  right: 12px;
+  top: 45%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-control button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid #728778;
+  border-radius: 50%;
+  background: #263d35;
+  color: white;
+  box-shadow: 0 2px 10px #0003;
+}
+
+.theme-control span {
+  max-width: 150px;
+  padding: 6px;
+  background: #263d35;
+  color: white;
+  font-size: 12px;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  color: #e4ece4;
+  background: #101914;
+}
+
+:root[data-theme='dark'] :is([class~='bg-white'], [class*='bg-white/'], [class*='bg-[#f'], [class*='bg-[#e'], [class*='bg-[#fff'], [class~='bg-gray-50']):not([data-preserve-theme], [data-preserve-theme] *) {
+  background-color: #1b2a21;
+}
+
+:root[data-theme='dark'] :is([class*='text-[#202'], [class*='text-[#1'], [class*='text-[#2'], [class*='text-[#3'], [class*='text-[#4'], [class*='text-[#5'], [class*='text-[#6'], [class*='text-[#7'], [class*='text-[#8'], [class~='text-black']):not([data-preserve-theme], [data-preserve-theme] *, [class*='bg-[#c8f135'], [class*='bg-[#e76'], [class*='bg-[#ff'], [class*='bg-[#67'], [class*='bg-[#74'], [class*='bg-[#52']) {
+  color: #cfdbd0;
+}
+
+:root[data-theme='dark'] :is(input, select, textarea):not([data-preserve-theme] *) {
+  background-color: #23352a;
+  color: #edf3e9;
+  border-color: #526457;
+}
+
+:root[data-theme='dark'] :is([class*='border-[#d'], [class*='border-[#e'], [class~='border-white']):not([data-preserve-theme], [data-preserve-theme] *) {
+  border-color: #43574a;
 }
