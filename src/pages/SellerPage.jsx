@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../lib/api.js'
 import { catalogTaxonomy } from '../data/catalogTaxonomy.js'
+import WarehouseBrowser from '../components/WarehouseBrowser.jsx'
 import SiteName from '../components/SiteName.jsx'
 import ProductImageFields, { productImagePayload } from '../components/ProductImageFields.jsx'
 
@@ -23,6 +24,8 @@ const SellerPage = () => {
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [editingProduct, setEditingProduct] = useState(null)
+  const [warehouseSelection, setWarehouseSelection] = useState(null)
+  const [showWarehouse, setShowWarehouse] = useState(true)
   const [newCategory, setNewCategory] = useState('')
   const [productForm, setProductForm] = useState({ name: '', category: '', price: '', compareAtPrice: '', imageUrl: '', imageUrls: [], description: '', isPublished: true })
   const [message, setMessage] = useState(location.state?.welcome || 'Loading your seller workspace…')
@@ -32,7 +35,7 @@ const SellerPage = () => {
   const [isReadingImages, setIsReadingImages] = useState(false)
   const [imageFormVersion, setImageFormVersion] = useState(0)
   const knownCategoryValues = new Set(taxonomyCategoryGroups.flatMap((group) => group.options.map((option) => option.value)))
-  const additionalCategories = categories.filter((category) => !knownCategoryValues.has(category.name))
+  const additionalCategories = [...new Set([...categories.map((category) => category.name), productForm.category].filter(Boolean))].filter((name) => !knownCategoryValues.has(name)).map((name) => ({ id: name, name }))
 
   useEffect(() => {
     let isCurrent = true
@@ -79,14 +82,9 @@ const SellerPage = () => {
     setMessage('')
 
     try {
-      const { product } = await apiRequest(editingProduct ? `/api/seller/products/${editingProduct.id}` : '/api/seller/products', {
-        method: editingProduct ? 'PATCH' : 'POST',
-        body: JSON.stringify({
-          ...productForm,
-          ...productImagePayload(productForm, imageUploads),
-          price: Number(productForm.price),
-          compareAtPrice: productForm.compareAtPrice ? Number(productForm.compareAtPrice) : null,
-        }),
+      const payload = { ...productForm, ...productImagePayload(productForm, imageUploads), price: Number(productForm.price), compareAtPrice: productForm.compareAtPrice ? Number(productForm.compareAtPrice) : null }
+      const { product } = await apiRequest(editingProduct ? `/api/seller/products/${editingProduct.id}` : warehouseSelection ? `/api/seller/warehouse/${warehouseSelection}/import` : '/api/seller/products', {
+        method: editingProduct ? 'PATCH' : 'POST', body: JSON.stringify(warehouseSelection && !editingProduct ? { overrides: payload } : payload),
       })
       setProducts((currentProducts) => editingProduct
         ? currentProducts.map((item) => item.id === product.id ? product : item)
@@ -97,6 +95,7 @@ const SellerPage = () => {
       }
       setMessage(editingProduct ? `Product “${product.name}” was updated.` : `Product “${product.name}” was added.`)
       setEditingProduct(null)
+      setWarehouseSelection(null)
       setImageFormVersion((version) => version + 1)
       setImageUploads({ primary: null, gallery: [] })
       setIsReadingImages(false)
@@ -110,6 +109,7 @@ const SellerPage = () => {
   }
 
   const editProduct = (product) => {
+    setWarehouseSelection(null)
     setEditingProduct(product)
     setImageFormVersion((version) => version + 1)
     setImageUploads({ primary: null, gallery: [] })
@@ -155,6 +155,7 @@ const SellerPage = () => {
   }
 
   const cancelEdit = () => {
+    setWarehouseSelection(null)
     setEditingProduct(null)
     setImageFormVersion((version) => version + 1)
     setImageUploads({ primary: null, gallery: [] })
@@ -208,13 +209,25 @@ const SellerPage = () => {
         </div>
       </header>
 
+      <section className="mx-auto max-w-[1440px] px-5 pt-8 md:px-10">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-widest text-[#799079]">Ready-to-add catalog</p><h2 className="mt-2 text-2xl font-semibold">Choose from your warehouse</h2><p className="mt-2 text-sm text-[#737970]">Browse a category and use a product. Its details and category path fill in automatically; review them, then select Add product.</p></div><button onClick={() => setShowWarehouse((value) => !value)} className="rounded-full border border-[#cbd7cc] bg-white px-5 py-3 text-sm">{showWarehouse ? 'Hide warehouse' : 'Browse warehouse'}</button></div>
+        {showWarehouse && <WarehouseBrowser onSelect={async (selected) => {
+          const { product } = await apiRequest(`/api/warehouse/${selected.id}`)
+          setEditingProduct(null); setWarehouseSelection(product.id); setImageFormVersion((value) => value + 1); setImageUploads({ primary: null, gallery: [] })
+          const { sourceDetails: _sourceDetails, source: _source, ...fields } = product
+          setProductForm({ ...fields, imageUrls: (fields.imageUrls || []).filter((url) => url !== fields.imageUrl), price: String(fields.price), compareAtPrice: fields.compareAtPrice ? String(fields.compareAtPrice) : '' })
+          setMessage('Warehouse product selected. Category and details are filled in below.'); setShowWarehouse(false)
+          setTimeout(() => document.getElementById('seller-product-form')?.scrollIntoView({ behavior: 'smooth' }), 50)
+        }} />}
+      </section>
       <main className="mx-auto grid max-w-[1440px] gap-8 px-5 py-9 md:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] md:px-10 md:py-12">
         <section className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a5a4d]">Catalog tools</p>
           <h1 className="mt-2 text-3xl font-semibold">{editingProduct ? 'Edit product' : 'Add a product'}</h1>
           <p className="mt-2 text-sm text-[#737970]">Published items become visible on the storefront.</p>
 
-          <form key={editingProduct?.id || 'new-product'} className="mt-6 space-y-4 bg-white p-5 sm:p-6" onSubmit={saveProduct}>
+          {warehouseSelection && <p className="mt-4 rounded-lg bg-[#e8f2e3] p-3 text-sm text-[#285735]">Warehouse selection ready. <button type="button" onClick={cancelEdit} className="ml-2 underline">Clear selection</button></p>}
+          <form id="seller-product-form" key={editingProduct?.id || 'new-product'} className="mt-6 space-y-4 bg-white p-5 sm:p-6" onSubmit={saveProduct}>
             <label className="block text-sm font-medium">Product name
               <input name="name" value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} maxLength={500} required className="mt-2 h-11 w-full border border-[#d9dbd5] px-3 text-sm outline-none focus:border-black" placeholder="Example: Mira Everyday Tote" />
             </label>

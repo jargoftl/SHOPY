@@ -4,7 +4,7 @@ import { apiRequest } from '../lib/api.js'
 
 const money = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value))
 
-export default function WarehouseBrowser({ dark = false, reloadKey = 0, onAdd, onEdit, onRemove, onCategoryChange }) {
+export default function WarehouseBrowser({ dark = false, reloadKey = 0, onAdd, onEdit, onRemove, onCategoryChange, onSelect }) {
   const [category, setCategory] = useState('')
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
@@ -70,6 +70,7 @@ export default function WarehouseBrowser({ dark = false, reloadKey = 0, onAdd, o
         <button onClick={() => inspect(product)} disabled={busy !== null} className="bg-[#f6f7f3] p-4" aria-label={`View details for ${product.name}`}><img src={product.imageUrl} alt={product.name} loading="lazy" className="h-44 w-full object-contain" /></button>
         <div className="flex flex-1 flex-col p-4"><p className={`text-[10px] ${muted}`}>{product.category}</p><h3 className="mt-2 line-clamp-3 text-sm font-semibold">{product.name}</h3><p className="mt-3 font-semibold">{money(product.price)} {product.compareAtPrice && <s className={`ml-2 text-xs font-normal ${muted}`}>{money(product.compareAtPrice)}</s>}</p><p className={`mt-2 text-xs ${muted}`}>{product.colors?.length || 0} colors · {product.sizes?.length || 0} sizes · {product.imageUrls?.length || 1} images</p>
           <div className="mt-auto flex flex-wrap items-center gap-3 pt-4"><button onClick={() => inspect(product)} disabled={busy !== null} className="text-xs underline disabled:opacity-50">Full details</button>{onEdit && <button onClick={() => action(onEdit, product)} disabled={busy !== null} className="text-xs underline disabled:opacity-50">Edit</button>}{onRemove && <button onClick={() => action(onRemove, product, true)} disabled={busy !== null} className="text-xs underline disabled:opacity-50">Remove</button>}</div>
+          {onSelect && <button onClick={() => action(onSelect, product)} disabled={busy !== null || loading} className="mt-4 min-h-11 rounded-full bg-[#263d35] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Use this product</button>}
           {onAdd && <button onClick={() => action(onAdd, product)} disabled={busy !== null || loading} className="mt-4 min-h-11 rounded-full bg-[#263d35] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy === product.id ? 'Adding…' : 'Add to my store'}</button>}
         </div>
       </article>)}

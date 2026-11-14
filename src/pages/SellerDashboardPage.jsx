@@ -1,7 +1,7 @@
 import SiteName from '../components/SiteName.jsx'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { BarChart3, Bell, Boxes, ChevronRight, CircleDollarSign, LayoutDashboard, LogOut, Menu, MessageSquare, Package, Store, Users, X } from 'lucide-react'
+import { BarChart3, Bell, Boxes, ChevronRight, CircleDollarSign, LayoutDashboard, LogOut, Megaphone, Menu, MessageSquare, Package, Store, Users, X } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 import SellerNotificationBell from '../components/SellerNotificationBell.jsx'
 import RewardsBalance from '../components/RewardsBalance.jsx'
@@ -139,6 +139,7 @@ const SellerDashboardPage = () => {
         <details className="text-xs text-[#68716b]"><summary className="flex min-h-11 cursor-pointer items-center gap-3 px-3 font-medium"><Package size={16} /> Product management <ChevronRight className="ml-auto" size={14} /></summary>
           <div className="space-y-1 pl-8">{[['Store products', '/seller/products'], ['Product warehouse', '/seller/warehouse'], ['Refund requests', '/seller/refunds'], ['Product reviews', '/seller/reviews']].map(([label, href]) => <Link key={href} to={isPreviewMode ? '/seller/login' : href} onClick={() => setMobileMenuOpen(false)} className="block rounded px-3 py-2 hover:bg-[#f4f6f4]">{label}</Link>)}</div>
         </details>
+        <details className="text-xs text-[#68716b]"><summary className="flex min-h-11 cursor-pointer items-center gap-3 px-3 font-medium"><Megaphone size={16}/> Marketing Tools <ChevronRight className="ml-auto" size={14}/></summary><div className="space-y-1 pl-8">{[['Store Upgrade','upgrade'],['Purchase History','history'],['Seller Level','levels']].map(([label,path])=><Link key={path} to={isPreviewMode?'/seller/login':user.role==='admin'?'/admin#marketing-requests':`/seller/marketing/${path}`} onClick={()=>setMobileMenuOpen(false)} className="block rounded px-3 py-2 hover:bg-[#f4f6f4]">{label}</Link>)}</div></details>
       </nav>
       {user.role === 'admin' && <div className="mx-4 border-t border-[#e7e9e7] py-3"><Link to="/admin" className="flex min-h-10 items-center gap-3 px-2 text-xs font-medium text-[#68716b] hover:text-[#1d2b22]"><Users size={16} />Admin dashboard</Link></div>}
       <div className="mt-auto border-t border-[#e7e9e7] p-4"><button type="button" onClick={() => isPreviewMode ? navigate('/seller/login') : logOut()} className="flex min-h-10 w-full items-center gap-3 px-2 text-xs font-medium text-[#68716b] hover:text-[#b34037]"><LogOut size={16} />{isPreviewMode ? 'Exit preview' : 'Log out'}</button></div>

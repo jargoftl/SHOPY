@@ -6,6 +6,7 @@ import { useCart } from '../context/CartContext.jsx'
 import SellerAccessModal from '../components/modals/SellerAccessModal.jsx'
 import StoreOwnerCallout from '../components/store/StoreOwnerCallout.jsx'
 import ProductCard from '../components/store/ProductCard.jsx'
+import PromotedProducts from '../components/store/PromotedProducts.jsx'
 import StoreFooter from '../components/store/StoreFooter.jsx'
 import SiteName from '../components/SiteName.jsx'
 import {
@@ -580,6 +581,7 @@ const LandingPage = () => {
         </section>
       </main>
 
+      <PromotedProducts />
       <StoreFooter language={language} setLanguage={setLanguage} languages={languages} text={text} />
       {showScrollTop && <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Scroll to top" title="Scroll to top" className="fixed bottom-24 right-4 z-30 grid size-11 place-items-center rounded-full bg-[#1f3a2b] text-white shadow-lg transition-colors hover:bg-[#c8f135] hover:text-[#142217] md:bottom-6 md:right-7"><ArrowUp size={19} /></button>}
       <SellerAccessModal isOpen={sellerModalOpen} onClose={() => setSellerModalOpen(false)} />

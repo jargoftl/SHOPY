@@ -9,6 +9,7 @@ import { rateLimit } from 'express-rate-limit'
 import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { resolve } from 'node:path'
 import { isSellerEmailVerificationRequired, isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
+import { registerMarketing } from './marketing.ts'
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
 import { seedWarehouseSamples } from './warehouseSamples.ts'
@@ -340,6 +341,7 @@ app.disable('x-powered-by')
 app.set('trust proxy', 1)
 app.use(helmet())
 app.use('/api/seller/products', express.json({ limit: '24mb' }))
+app.use('/api/seller/warehouse', express.json({ limit: '24mb' }))
 app.use('/api/auth/register-seller', express.json({ limit: '3mb' }))
 app.use('/api/admin/warehouse', express.json({ limit: '24mb' }))
 app.use(express.json({ limit: '1mb' }))
@@ -1259,18 +1261,22 @@ app.delete('/api/admin/warehouse/:id', requireAuth, requireRole('admin'), async 
   return res.json({ ok: true })
 })
 
-app.post('/api/seller/warehouse/:id/import', requireAuth, requireRole('seller'), async (req, res) => {
+app.post('/api/seller/warehouse/:id/import', requireAuth, requireRole('seller', 'admin'), async (req, res) => {
   const row = (await getRow<{ product_json: string }>('SELECT product_json FROM warehouse_products WHERE id=?', Number(req.params.id)))
   if (!row) return res.status(404).json({ error: 'Warehouse product not found.' })
   if ((await getRow('SELECT 1 FROM seller_warehouse_imports WHERE seller_id=? AND warehouse_id=?', req.user!.id, Number(req.params.id)))) return res.status(409).json({ error: 'You already added this warehouse product. Edit it in Store products.' })
-  const validation = (await validateProduct(JSON.parse(row.product_json)))
+  const overrides = req.body?.overrides && typeof req.body.overrides === 'object' ? req.body.overrides : {}
+  const prepared = prepareProductImages({ ...JSON.parse(row.product_json), ...overrides })
+  if ('error' in prepared) return res.status(400).json({ error: prepared.error })
+  const validation = (await validateProduct(prepared.body, new Set(prepared.uploads.map((image) => image.id))))
   if ('error' in validation) return res.status(400).json({ error: validation.error })
-  const { name, category, price, compareAtPrice, description, imageUrl, imageUrls, colors, sizes, rating } = validation.product
+  const { name, category, price, compareAtPrice, description, imageUrl, imageUrls, colors, sizes, rating, isPublished, isStorePublished } = validation.product
   const productId = (await database.transaction(async () => {
+    for (const image of prepared.uploads) await database.prepare('INSERT INTO product_images(id,content_type,image) VALUES (?,?,?)').run(image.id, image.contentType, image.image)
     const result = (await database.prepare(`
       INSERT INTO products (name, category, price, compare_at_price, description, image_url, image_urls_json, colors_json, sizes_json, rating, seller_id, is_published, is_store_published)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
-    `).run(name, category, price, compareAtPrice, description, imageUrl, JSON.stringify(imageUrls), JSON.stringify(colors), JSON.stringify(sizes), rating, req.user!.id))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(name, category, price, compareAtPrice, description, imageUrl, JSON.stringify(imageUrls), JSON.stringify(colors), JSON.stringify(sizes), rating, req.user!.id, Number(isPublished), Number(isStorePublished)))
     await database.prepare('INSERT INTO seller_warehouse_imports (seller_id,warehouse_id,product_id) VALUES (?,?,?)').run(req.user!.id, Number(req.params.id), result.lastInsertRowid)
     await insertCategory.run(category)
     return result.lastInsertRowid
@@ -2070,6 +2076,7 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
 })
 
 await registerManualOrders(app, database, requireAuth, requireRole)
+await registerMarketing(app, database, requireAuth, requireRole)
 app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found.' }))
 
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {

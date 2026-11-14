@@ -1,3 +1,5 @@
+import { tableNames } from '../dist-server/schema.js';
+import { testMarketing } from './marketing-flow.mjs';
 import { PGlite } from '@electric-sql/pglite';
 import pg from 'pg';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
@@ -165,6 +167,13 @@ try{
    check('warehouse failed upload leaves no image rows',Number((await db.query('SELECT COUNT(*) AS count FROM shop.product_images')).rows[0].count)===imageCount);
   }finally{ObjectStorage.prototype.put=originalPut}
  }
+ await testMarketing({req,check,cookie,seller,buyer,db,png,base});
+ // Picking a warehouse item supports review edits and keeps draft publication flags.
+ r=await req('/api/admin/warehouse',{method:'POST',body:JSON.stringify({name:'Reviewable warehouse item',category:'Home',price:12,imageUrl:'https://example.test/warehouse.jpg',description:'Original'})},cookie);
+ const selectedWarehouseId=r.data.product.id;
+ r=await req('/api/seller/warehouse/'+selectedWarehouseId+'/import',{method:'POST',body:JSON.stringify({overrides:{name:'Reviewed warehouse item',price:14.5,isPublished:false,isStorePublished:true,imageUploads:{primary:{type:'image/png',data:png.toString('base64')}}}})},seller);
+ check('warehouse picker import retains reviewed edits and draft status',r.status===201&&r.data.product.name==='Reviewed warehouse item'&&r.data.product.price===14.5&&r.data.product.category==='Home'&&r.data.product.isPublished===false,r.status);
+ check('warehouse picker supports uploaded replacement image',r.data.product?.imageUrl?.startsWith('/api/product-images/'),r.status);
  // Warehouse navigation and full source data preservation.
  const sourceCatalogItem={name:'Imported '+ 'long product title '.repeat(9),category:'Catalog Test / Nested category',price:19.95,compareAtPrice:25,description:'Complete description '.repeat(150),imageUrl:'https://example.test/main.jpg',imageUrls:Array.from({length:10},(_,i)=>`https://example.test/gallery-${i}.jpg`),colors:Array.from({length:13},(_,i)=>`Color ${i}`),sizes:Array.from({length:13},(_,i)=>`Size ${i}`),rating:0,source:{host:'example.test',listingId:'original-listing'},sourceDetails:{skus:[{skuId:'test-sku',sellingPrice:20,attrs:[{attrName:'size',attrValueName:'Size 1'}]}],des:'<p>Original description</p>'}};
  const importedCatalogId=(await db.query('INSERT INTO shop.warehouse_products(product_json) VALUES ($1) RETURNING id',[JSON.stringify(sourceCatalogItem)])).rows[0].id;
@@ -231,7 +240,7 @@ try{
   check('bad Storage verification aborts migration',rolledBack);
   check('partial copy rolls back',Number((await db.query('SELECT COUNT(*) AS count FROM shop.users')).rows[0].count)===0);
   const migration=await migrate(sourcePath,target);check('migration row counts',migration.counts.users===1&&migration.counts.product_images===1);
-  check('all tables included',Object.keys(migration.counts).length===42);
+  check('all tables included',Object.keys(migration.counts).length===tableNames.length&&tableNames.every(name=>Object.hasOwn(migration.counts,name)));
   check('source file unchanged',originalDigest===createHash('sha256').update(readFileSync(sourcePath)).digest('hex'));
   check('preserved password hash',(await db.query('SELECT password_hash FROM shop.users WHERE id=42')).rows[0].password_hash===passwordHash);
   check('preserved balance',Number((await db.query('SELECT balance_units FROM shop.reward_balances WHERE user_id=42')).rows[0].balance_units)===12345);

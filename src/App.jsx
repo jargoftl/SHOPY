@@ -11,6 +11,7 @@ import SellerPage from './pages/SellerPage.jsx'
 import SellerLogin from './pages/logings/SellerLogin.jsx'
 import SellerRegister from './pages/logings/SellerRegister.jsx'
 import ProductsPage from './pages/ProductsPage.jsx'
+import SellerMarketingPage from './pages/SellerMarketingPage.jsx'
 import CartPage from './pages/CartPage.jsx'
 import BillingPage from './pages/BillingPage.jsx'
 import CheckoutPage from './pages/CheckoutPage.jsx'
@@ -255,6 +256,9 @@ const AnimatedRoutes = () => {
             <Route path="/admin/seller-metrics" element={<AdminSellerMetricsPage />} />
             <Route path="/seller" element={<SellerDashboardPage />} />
             <Route path="/seller/orders" element={<SellerOrdersPage />} />
+            <Route path="/seller/marketing/upgrade" element={<SellerMarketingPage view="upgrade" />} />
+            <Route path="/seller/marketing/history" element={<SellerMarketingPage view="history" />} />
+            <Route path="/seller/marketing/levels" element={<SellerMarketingPage view="levels" />} />
             <Route path="/seller/products" element={<SellerPage />} />
             <Route path="/seller/warehouse" element={<SellerManagementPage view="warehouse" />} />
             <Route path="/seller/refunds" element={<SellerManagementPage view="refunds" />} />

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiRequest } from '../lib/api.js'
 import AdminPurchases from '../components/AdminPurchases.jsx'
+import AdminMarketing from '../components/AdminMarketing.jsx'
 import AdminWarehouse from '../components/AdminWarehouse.jsx'
 import { useSiteSettings } from '../context/siteSettings.js'
 
@@ -159,6 +160,7 @@ const AdminPage = () => {
           </details>
         </section>
 
+        <AdminMarketing />
         <AdminWarehouse />
         <AdminPurchases selectedNumber={selectedOrder} />
 
