@@ -17,7 +17,7 @@ const ProductCard = ({ product }) => {
       transition={{ duration: 0.22 }}
       className="group flex h-full min-w-0 flex-col"
     >
-      <Link to={`/products/${product.id}`} className="block">
+      <Link to={`/products/${product.id}`} className="mb-4 block">
         <div className="relative aspect-[4/5] overflow-hidden bg-[#f1f1ef]">
           <img src={product.imageUrl} alt={product.name} loading="lazy" className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.035]" />
           <span className="absolute left-2 top-2 bg-white px-2 py-1 text-[9px] font-semibold uppercase tracking-wide sm:left-3 sm:top-3">{product.category}</span>
