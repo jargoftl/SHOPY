@@ -91,7 +91,7 @@ const ProductDetailPage = () => {
       return false
     }
     addItem({ ...product, selectedColor, selectedSize })
-    setFollowMessage('Added to your cart.')
+    setFollowMessage('')
     return true
   }
 
@@ -168,7 +168,7 @@ const ProductDetailPage = () => {
             </fieldset>}
 
             <div className="mt-3 grid grid-cols-2 gap-3">
-              <button type="button" onClick={addSelectedToCart} className="flex min-h-12 items-center justify-center gap-2 border border-[#1f4a32] px-3 text-xs font-semibold text-[#1f4a32] transition-colors hover:bg-[#edf3e9] sm:text-sm"><ShoppingBag size={16} /> Add to cart</button>
+              <button type="button" onClick={addSelectedToCart} className="cart-add-button"><ShoppingBag size={16} /> Add to cart</button>
               <button type="button" onClick={purchaseNow} className="flex min-h-12 items-center justify-center gap-2 bg-[#1f4a32] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#c8f135] hover:text-[#142217] sm:text-sm">Purchase now</button>
             </div>
             {followMessage && <p role="status" className="mt-3 text-xs text-[#555]">{followMessage} {followMessage.includes('Sign in') && <Link to="/login" className="font-semibold underline">Log in</Link>}</p>}

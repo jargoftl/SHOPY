@@ -30,6 +30,7 @@ import SellerOrdersPage from './pages/SellerOrdersPage.jsx'
 import SellerManagementPage from './pages/SellerManagementPage.jsx'
 import ThemeToggle from './components/ThemeToggle.jsx'
 import GlobalLoading from './components/GlobalLoading.jsx'
+import CartToast from './components/CartToast.jsx'
 import OrderNotifications from './components/OrderNotifications.jsx'
 
 const categories = ['Everything', 'Home', 'Wear', 'Objects', 'Outdoors']
@@ -268,6 +269,7 @@ const AnimatedRoutes = () => {
       <ThemeToggle />
       <OrderNotifications />
       <GlobalLoading />
+      <CartToast />
     </>
   )
 }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useCallback, useEffect, useState } from 'react'
 import { apiRequest } from '../lib/api.js'
 import { reconcilePaidOrder } from '../lib/cartOrders.js'
 
@@ -16,6 +16,8 @@ export const CartProvider = ({ children }) => {
   const [isHydrated, setIsHydrated] = useState(false)
   const [pendingOrders, setPendingOrders] = useState([])
   const [syncError, setSyncError] = useState('')
+  const [cartNotice, setCartNotice] = useState(null)
+  const dismissCartNotice = useCallback(() => setCartNotice(null), [])
 
   useEffect(() => {
     try {
@@ -66,6 +68,7 @@ export const CartProvider = ({ children }) => {
   }, [isHydrated, pendingOrders])
 
   const addItem = (product) => {
+    setCartNotice({ id: crypto.randomUUID(), name: product.name })
     const cartKey = getCartKey(product)
     setItems((currentItems) => {
       const existing = currentItems.find((item) => getCartKey(item) === cartKey)
@@ -91,7 +94,7 @@ export const CartProvider = ({ children }) => {
   const subtotal = items.reduce((total, item) => total + item.price * item.quantity, 0)
 
   return (
-    <CartContext.Provider value={{ items, addItem, setQuantity, removeItem, clearCart, trackOrder, itemCount, subtotal }}>
+    <CartContext.Provider value={{ cartNotice, dismissCartNotice, items, addItem, setQuantity, removeItem, clearCart, trackOrder, itemCount, subtotal }}>
       {syncError && <p role="alert" className="bg-red-50 p-2 text-center text-sm text-red-800">{syncError}</p>}
       {children}
     </CartContext.Provider>

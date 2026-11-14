@@ -34,7 +34,7 @@ const ProductCard = ({ product }) => {
           </div>
         </div>
       </Link>
-      <button type="button" onClick={() => addItem(product)} className="mt-auto w-full rounded-md bg-[#1f4a32] py-2.5 text-[10px] font-semibold uppercase tracking-wide text-white transition-colors hover:bg-[#c8f135] hover:text-[#142217] sm:text-xs">
+      <button type="button" onClick={() => addItem(product)} className="cart-add-button mt-auto w-full">
         Add to cart
       </button>
     </motion.article>
