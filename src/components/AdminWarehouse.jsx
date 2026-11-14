@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 import WarehouseBrowser from './WarehouseBrowser.jsx'
 import CategoryPicker from './CategoryPicker.jsx'
@@ -31,8 +32,12 @@ export default function AdminWarehouse() {
     if (!window.confirm(`Remove ${product.name} from the warehouse? Existing seller listings will remain.`)) return
     try { await apiRequest(`/api/admin/warehouse/${product.id}`, { method: 'DELETE' }); await load(); setMessage('Warehouse product removed.') } catch (error) { setMessage(error.message); throw error }
   }
-  return <section id="warehouse" className="mb-8 rounded-xl border border-[#263c2d] bg-[#0d1b12] p-5 sm:p-7">
-    <h2 className="text-lg font-semibold">Shared product warehouse</h2><p className="mt-1 text-sm text-[#9baa9d]">Add products for sellers to copy into their own stores. Changes here do not alter existing listings.</p>
+  return <details id="warehouse" className="group mb-8 rounded-xl border border-[#263c2d] bg-[#0d1b12] p-5 sm:p-7">
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#c8f135] [&::-webkit-details-marker]:hidden">
+      <div><h2 className="text-lg font-semibold">Shared product warehouse</h2><p className="mt-1 text-sm text-[#9baa9d]">Add and manage products for your sellers. Expand to browse the catalog.</p></div>
+      <span className="grid size-9 shrink-0 place-items-center rounded-full border border-[#3b5140] text-[#c8f135]"><ChevronDown aria-hidden="true" size={18} className="transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none" /></span>
+    </summary>
+    <div className="mt-5 border-t border-[#263c2d] pt-4">
     <form onSubmit={save} className="mt-4 grid gap-3 md:grid-cols-2">
       <label className="text-sm">Product name<input required maxLength={500} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 block w-full rounded border border-[#3b5140] bg-[#07120b] p-2" /></label>
       <CategoryPicker dark value={form.category} onChange={(category) => setForm({ ...form, category })} />
@@ -48,5 +53,6 @@ export default function AdminWarehouse() {
       setForm({ ...p, sourceDetails: undefined, source: undefined, imageUrls: (p.imageUrls || []).filter((url) => url !== p.imageUrl), price: String(p.price) })
       document.getElementById('warehouse')?.scrollIntoView({ behavior: 'smooth' })
     }} />
-  </section>
+    </div>
+  </details>
 }
