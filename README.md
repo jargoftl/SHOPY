@@ -1,21 +1,20 @@
 # GGU Store
 
-Personal storefront project built with React, Vite, Tailwind CSS, Express, and SQLite.
+Personal storefront project built with React, Vite, Tailwind CSS, Express, Supabase PostgreSQL, and Supabase Storage.
 
-## Start locally
+## Start locally and deploy
 
-1. Copy `.env.example` to `.env`.
-2. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env`. Use your own email and a unique password at least 12 characters long.
-3. Configure `APP_URL` as the frontend origin and SMTP settings in `.env` to enable password reset emails. Registration and login still work without SMTP, but password recovery requires it.
-4. Run `npm run dev` and open the Vite URL shown in the terminal.
+Read [SETUP-SUPABASE.md](SETUP-SUPABASE.md) before starting the updated app. It explains the free Supabase project, private Storage bucket, backend-only credentials, SQLite data transfer, validation, Render settings and rollback.
 
-The API runs on port 3001. SQLite creates `data/shop.db` automatically. The configured admin account is created the first time the API starts. New public signups are customers; promote a user to seller from `/admin`.
+For an existing shop, stop writes and run the verified SQLite transfer BEFORE starting this version. The source database is left unchanged. Do not delete your old database or expose its contents in Git.
 
-The admin dashboard's **Website name** setting changes storefront branding, the browser title and new account emails. The name is saved in SQLite, survives restarts, and other open pages refresh it periodically or when focused. Only an authenticated admin can change it. The initial name is GGU; this setting does not rename existing stores or historical content.
+After completing the setup, run `npm ci`, `npm test`, and `npm run dev`. The API runs on port 3001 locally; Vite forwards `/api` requests. Production Express serves the built frontend and API from the same origin.
+
+Website branding, accounts, sessions, orders, balances and settings are stored in Supabase PostgreSQL. Uploaded image and receipt bytes are stored in a private Supabase Storage bucket, accessed through the existing API routes. No Supabase Auth migration is required.
 
 ## Buyer profiles and manual requests
 
-Customers can open `/profile` to see their member ID, saved billing addresses, followed and visited stores, notifications, and balance. Buyers and sellers each have one USD-denominated store-credit balance, starting at **$0**. Existing rewards and buyer-wallet amounts are combined once on upgrade. Databases that have not yet applied the earlier one-time buyer-wallet reset will apply it before this merge; the previous wallet amounts are recorded in the reset audit. Back up the SQLite database before deploying migrations. Only admins can adjust balances. Saved addresses can be selected on the billing page. Store visits are recorded only for signed-in customers.
+Customers can open `/profile` to see their member ID, saved billing addresses, followed and visited stores, notifications, and balance. Buyers and sellers each have one USD-denominated store-credit balance, starting at **$0**. Existing stored values are copied during migration without resetting balances or rerunning old destructive SQLite migrations. Back up the original SQLite database before migration. Only admins can adjust balances. Saved addresses can be selected on the billing page. Store visits are recorded only for signed-in customers.
 
 The profile overview and wallet page have an eye button to hide or show the displayed balance. This only masks the amount on screen; it does not change or protect the stored balance.
 
@@ -47,7 +46,7 @@ Checkout leaves purchased items in the local browser cart until payment is confi
 
 Buyer, seller and administrator sessions persist across browser restarts and independent sign-ins. Sessions expire after one year of inactivity and are renewed during authenticated activity near expiry. Logging out ends the current session; password resets and account suspension revoke all sessions. Password changes revoke other buyer sessions. Browsers can also remove cookies, and one browser profile uses one account at a time.
 
-Purchase and historical test orders display a unique, randomly generated eight-digit order number across buyer, seller, admin and refund views. Existing orders receive a number on API startup, while their internal IDs and existing links remain unchanged. Back up the SQLite database to retain these numbers.
+Purchase and historical test orders display a unique, randomly generated eight-digit order number across buyer, seller, admin and refund views. Existing orders receive a number on API startup, while their internal IDs and existing links remain unchanged. The migration preserves these numbers; keep PostgreSQL backups after cutover.
 
 The seller bell shows red for unread notifications and green when there are none. Individual seller notifications show red when unread and green when read. Open a notification's details or mark it read in the message center to update its state.
 
@@ -59,7 +58,7 @@ On the first API startup after this update, 21 clearly labeled sample products a
 
 Sellers can select common sizes and colors or add their own, choose a category and subcategory using selection boxes, and set a manual stock count while creating or editing a product. The count appears on the product detail page as seller-reported; counts from 1 through 5 are labeled “few left.” It is informational only: orders do not reduce it, and even a zero count does not prevent purchases. It must be updated by the seller and is not a reliable live inventory balance. The discount choice uses the original price and current price: published marketplace listings with a higher original price appear on the Discounts page. Product details also suggest publicly listed products in the same category.
 
-The seller product editor can select a main photo and additional gallery photos directly from the device. PNG, JPEG and WebP files up to 2 MB each are supported, with up to eight images per product. Images are saved in SQLite when the product is saved; existing image URLs remain supported. Uploaded images remain stored after replacement or deletion so historical order images can continue to display, and are included in database backups. Product images are public to anyone with their image link. Persistent SQLite storage is needed for hosted deployments.
+The seller product editor can select a main photo and additional gallery photos directly from the device. PNG, JPEG and WebP files up to 2 MB each are supported, with up to eight images per product. Image bytes are saved in private Supabase Storage when the product is saved; database records preserve the existing image URLs. Uploaded images remain stored after replacement or deletion so historical order images can continue to display, and require Storage backups in addition to database backups. Product images are public to anyone with their image link. Render does not need a persistent local disk; PostgreSQL and Storage remain external to the web service.
 
 For confirmed paid orders, a buyer can request one refund per seller and order from My Orders. The relevant seller can approve or reject it; other sellers cannot see or review the request. Approval does not transfer money. The administrator must arrange the amount, destination and transfer separately, independently confirm it, and record a transfer reference. This records the administrator's assertion only; the app does not verify or execute a crypto refund. Test orders cannot be refunded through this workflow. The Product Reviews page is a placeholder: buyer review submission is not enabled.
 
@@ -69,11 +68,11 @@ Admins can open an account from `/admin` to review available profile, activity, 
 
 The admin account directory can be searched and filtered by role. Each account folder links to its details, activity and messages; buyer folders also contain their own balance and request controls, favorites, followed stores and test orders. Seller folders show store details, products and a link to their manually configured metrics. Seller sales and actual fulfillment are not recorded by the test checkout. Existing administration tools remain under “Additional administration tools.”
 
-Run the isolated buyer and password-reset regression tests after building the API with `npm run build:api && node --test tests/buyer-api.test.mjs tests/buyer-migration.test.mjs tests/money.test.mjs tests/password-reset.test.mjs`.
+Run `npm test` for browser-helper unit tests, production builds, and the current PostgreSQL migration/API integration suite. See [tests/README.md](tests/README.md) for coverage and preserved historical SQLite tests.
 
 ## API locations
 
-The TypeScript Express API is in `server/index.ts`; SMTP notifications are in `server/email.ts`; TypeScript settings are in `tsconfig.server.json`; the browser API helper is `src/lib/api.js`. Vite forwards `/api` requests to the backend in development. `npm run build:api` type-checks and compiles the backend into `dist-server/`, and `npm run start:api` starts the compiled API.
+The TypeScript Express API is in `server/index.ts`; Email notifications are in `server/email.ts`; TypeScript settings are in `tsconfig.server.json`; the browser API helper is `src/lib/api.js`. Vite forwards `/api` requests to the backend in development. `npm run build:api` type-checks and compiles the backend into `dist-server/`, and `npm run start:api` starts the compiled API.
 
 - `POST /api/auth/register` creates a customer account; `POST /api/auth/seller-verification-code` emails a short-lived seller code; `POST /api/auth/register-seller` creates the seller account and profile after code verification.
 - `POST /api/auth/login`, `POST /api/auth/logout`, and `GET /api/auth/me` manage login sessions.
@@ -87,7 +86,7 @@ Seller profile review is at `GET /api/admin/sellers`. The demo stores seller con
 
 ## Email setup
 
-Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, and `EMAIL_FROM` in `.env`. Set `APP_URL` to the exact public frontend origin (HTTPS is required in production); locally it defaults to `http://localhost:5173`. Reset links must point to the site the user actually opens. `ADMIN_NOTIFICATION_EMAIL` receives registration and successful-login alerts, including the member ID and contact details. The customer also receives a welcome email and a notice after each successful login. If SMTP is missing or delivery fails, account creation/login still works, but password reset reports that email is unavailable.
+For hosts that block common SMTP ports, an optional HTTPS transport uses `BREVO_API_KEY` and a verified `EMAIL_FROM`; existing email templates and API behavior are retained. No email account or paid option is enabled automatically. Otherwise configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, and `EMAIL_FROM` in `.env`. Set `APP_URL` to the exact public frontend origin (HTTPS is required in production); locally it defaults to `http://localhost:5173`. Reset links must point to the site the user actually opens. `ADMIN_NOTIFICATION_EMAIL` receives registration and successful-login alerts, including the member ID and contact details. The customer also receives a welcome email and a notice after each successful login. If SMTP is missing or delivery fails, account creation/login still works, but password reset reports that email is unavailable.
 
 ## Password handling
 
