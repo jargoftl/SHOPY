@@ -49,6 +49,10 @@ const SellerRegister = () => {
           method: 'POST',
           body: JSON.stringify({ email: form.email.trim(), fullName: form.fullName.trim() }),
         })
+        if (verification.verificationRequired === false) {
+          setStep(1)
+          return
+        }
         setCodeSent(true)
         if (verification.developmentCode) {
           setDevelopmentCode(verification.developmentCode)
@@ -72,11 +76,11 @@ const SellerRegister = () => {
 
     setIsSendingCode(true)
     try {
-      await apiRequest('/api/auth/verify-seller-email-code', {
+      const verification = await apiRequest('/api/auth/verify-seller-email-code', {
         method: 'POST',
         body: JSON.stringify({ email: form.email.trim(), code: form.verificationCode.trim() }),
       })
-      setMessage('Email verified.')
+      setMessage(verification.verified ? 'Email verified.' : '')
       setStep(1)
     } catch (error) {
       setMessage(error.message)
@@ -120,7 +124,7 @@ const SellerRegister = () => {
       navigate('/seller', {
         replace: true,
         state: {
-          welcome: `Welcome, ${user.fullName}. Seller account #${user.id} is ready.${emailNotifications?.userEmailSent ? ' A confirmation email was sent.' : ' SMTP is needed to send confirmation emails.'}`,
+          welcome: `Welcome, ${user.fullName}. Seller account #${user.id} is ready.${emailNotifications?.userEmailSent ? ' A confirmation email was sent.' : ''}`,
         },
       })
     } catch (error) {
@@ -185,7 +189,7 @@ const SellerRegister = () => {
             <p className="mt-1 font-mono text-lg tracking-[0.12em] text-[#20231f]">{developmentCode}</p>
             <p className="mt-1 text-[10px] text-[#71521e]">Shown only in local development. It expires in 10 minutes.</p>
           </div>}
-          <p className="text-[11px] leading-5 text-[#777]">The code is requested when you continue, expires after 10 minutes, and is stored only as a hash.</p>
+          {codeSent && <p className="text-[11px] leading-5 text-[#777]">Enter the code sent to your email. It expires after 10 minutes.</p>}
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
           <button type="submit" disabled={isSendingCode} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-60">{isSendingCode ? 'Please wait…' : codeSent ? 'Verify email & continue' : 'Continue to workspace'}</button>
         </form>

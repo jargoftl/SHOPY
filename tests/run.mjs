@@ -20,7 +20,7 @@ const query=async(sql,params=[])=>{
 pg.Pool.prototype.query=query;
 pg.Pool.prototype.connect=async()=>({query,release(){}});
 pg.Pool.prototype.end=async()=>{};
-Object.assign(process.env,{DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:''});
+Object.assign(process.env,{DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
 const { ObjectStorage } = await import('../dist-server/storage.js');
 const realPut=ObjectStorage.prototype.put,realGet=ObjectStorage.prototype.get,realVerify=ObjectStorage.prototype.verifyBucket;
 ObjectStorage.prototype.verifyBucket=async()=>{};
@@ -88,6 +88,38 @@ try{
  for(const [userCookie,label] of [[cookie,'admin'],[buyer,'buyer'],[seller,'seller']])for(const path of new Set(routes.filter(x=>x.startsWith('/api/')))){
   r=await req(path.replace(/:sellerId/g,String(sellerId)).replace(/:[a-zA-Z]+/g,String(buyerId)),{},userCookie);check(label+' GET '+path,r.status<500,r);
  }
+ // Seller signup is usable before email setup without claiming email ownership.
+ const sellerForm={fullName:'New Seller',email:'new-seller@example.test',phone:'123',password:'new-seller-password-123',storeName:'New Shop',country:'Test',address:'Test',city:'Test',region:'Test',postalCode:'123'};
+ r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:sellerForm.email,fullName:sellerForm.fullName})});
+ check('unconfigured email permits continuing signup',r.status===200&&r.data.verificationRequired===false&&!r.data.developmentCode,r);
+ check('skipped email does not create a false verification record',(await db.query('SELECT * FROM shop.seller_email_verifications WHERE email=$1',[sellerForm.email])).rows.length===0);
+ r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(sellerForm)});
+ check('production seller signup without email setup',r.status===201&&r.data.user?.role==='seller'&&Boolean(r.cookie),r);
+ r=await req('/api/auth/login',{method:'POST',body:JSON.stringify({email:sellerForm.email,password:sellerForm.password,loginType:'seller'})});check('new seller can log in',r.status===200&&r.data.user?.role==='seller',r);
+ r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify({...sellerForm,email:'incomplete@example.test',storeName:''})});check('seller profile validation still applies',r.status===400,r);
+ r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify({...sellerForm,email:'invalid-email'})});check('seller email format validation still applies',r.status===400,r);
+ r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(sellerForm)});check('duplicate seller rejected',r.status===409,r);
+ process.env.SELLER_EMAIL_VERIFICATION='required';
+ r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify({...sellerForm,email:'required@example.test'})});check('required mode rejects unverified signup',r.status===400,r);
+ r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:'required@example.test'})});check('required mode never returns production code or bypass',r.status===503&&!r.data.developmentCode&&r.data.verificationRequired!==false,r);
+ process.env.SELLER_EMAIL_VERIFICATION='auto';process.env.BREVO_API_KEY='test-only-placeholder';process.env.EMAIL_FROM='sender@example.test';
+ const actualFetch=globalThis.fetch;let deliveredCode;
+ try{
+  globalThis.fetch=async(url,options)=>{
+   if(String(url)==='https://api.brevo.com/v3/smtp/email'){
+    const mail=JSON.parse(options.body);const code=mail.textContent.match(/verification code is (\d{6})/);if(code)deliveredCode=code[1];return new Response('{}',{status:201});
+   }
+   return actualFetch(url,options);
+  };
+  const verifiedForm={...sellerForm,email:'verified-seller@example.test'};
+  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(verifiedForm)});check('auto restores verification when email configured',r.status===400,r);
+  r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:verifiedForm.email,fullName:verifiedForm.fullName})});check('configured email sends code without exposing it',r.status===200&&r.data.sent===true&&!r.data.developmentCode&&/^\d{6}$/.test(deliveredCode||''),r);
+  r=await req('/api/auth/verify-seller-email-code',{method:'POST',body:JSON.stringify({email:verifiedForm.email,code:deliveredCode})});check('delivered code verifies',r.status===200&&r.data.verified===true,r);
+  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(verifiedForm)});check('verified seller can register with email configured',r.status===201,r);
+  // An outage in a configured provider must never downgrade verification to optional.
+  globalThis.fetch=async(url,options)=>String(url)==='https://api.brevo.com/v3/smtp/email'?new Response('{}',{status:503}):actualFetch(url,options);
+  r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:'outage@example.test'})});check('provider outage does not bypass verification',r.status===503&&r.data.verificationRequired!==false&&!r.data.developmentCode,r);
+ }finally{globalThis.fetch=actualFetch;process.env.BREVO_API_KEY='';process.env.EMAIL_FROM='';process.env.SELLER_EMAIL_VERIFICATION='auto'}
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.
  const storageFetch=globalThis.fetch;
  Object.assign(process.env,{SUPABASE_URL:'https://storage.example.test',SUPABASE_SERVICE_ROLE_KEY:'test-only-placeholder',SUPABASE_STORAGE_BUCKET:'shop-uploads'});

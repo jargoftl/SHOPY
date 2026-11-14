@@ -142,6 +142,12 @@ An OPTIONAL HTTPS email transport is included to support that hosting limitation
 
 No Brevo account was created or connected. Actual email delivery is not verified by the offline tests.
 
+### Seller signup before email setup
+
+By default, SELLER_EMAIL_VERIFICATION=auto: sellers can register normally when no email provider is configured. This does not establish ownership of the email address. The server retains email/password validation, seller profile requirements, password hashing, role restrictions and session handling. Customer signup is unchanged.
+
+Once a working SMTP or HTTPS email provider is configured, auto requires a valid seller verification code for new seller registrations. A configured provider failing to deliver never bypasses verification. Set SELLER_EMAIL_VERIFICATION=required to enforce verification even before email setup, or disabled to explicitly postpone it. No verification codes are returned in production. Password recovery still requires working email delivery.
+
 ## 7. Free-plan limits, backups and rollback
 
 Free Render can sleep and take time to wake up. Supabase's free plan has storage, database, transfer and availability limits, and projects may pause after inactivity. External persistence keeps data independent of Render's temporary filesystem; it is not unlimited storage or a guarantee of permanent free hosting. Monitor the provider dashboards and keep independent database AND Storage backups. Do not assume the free plan provides automatic backups.

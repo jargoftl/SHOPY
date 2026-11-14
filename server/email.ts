@@ -44,6 +44,12 @@ const transporter: Transporter | null = smtpConfigured
   : null
 export const isEmailConfigured = (): boolean => transporter !== null || Boolean(process.env.BREVO_API_KEY && process.env.EMAIL_FROM)
 
+// Auto permits ordinary signup while delivery is unconfigured; a configured
+// provider must still deliver/verify the code. Delivery failure never bypasses it.
+export const isSellerEmailVerificationRequired = (): boolean =>
+  process.env.SELLER_EMAIL_VERIFICATION === 'required'
+  || (process.env.SELLER_EMAIL_VERIFICATION !== 'disabled' && isEmailConfigured())
+
 const sendEmail = async ({ to, subject, text }: EmailMessage): Promise<boolean> => {
   if (!isEmailConfigured() || !to) return false
 

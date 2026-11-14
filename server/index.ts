@@ -8,7 +8,7 @@ import helmet from 'helmet'
 import { rateLimit } from 'express-rate-limit'
 import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { resolve } from 'node:path'
-import { isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
+import { isSellerEmailVerificationRequired, isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
 import { seedWarehouseSamples } from './warehouseSamples.ts'
@@ -547,6 +547,8 @@ app.post('/api/auth/seller-verification-code', authLimiter, async (req, res, nex
       return res.status(400).json({ error: 'Enter a valid email address first.' })
     }
 
+    if (!isSellerEmailVerificationRequired()) return res.json({ sent: false, verificationRequired: false })
+
     const existing = (await getRow<Pick<VerificationRow, 'created_at'>>('SELECT created_at FROM seller_email_verifications WHERE email = ?', email))
     if (existing && Date.now() - new Date(`${existing.created_at.replace(' ', 'T')}Z`).getTime() < 60_000) {
       return res.status(429).json({ error: 'Wait one minute before requesting another code.' })
@@ -566,7 +568,7 @@ app.post('/api/auth/seller-verification-code', authLimiter, async (req, res, nex
         return res.json({ sent: false, developmentCode: code, expiresInSeconds: 600 })
       }
       await database.prepare('DELETE FROM seller_email_verifications WHERE email = ?').run(email)
-      return res.status(503).json({ error: 'Email verification is not available yet. Configure SMTP in .env and try again.' })
+      return res.status(503).json({ error: 'Email verification is temporarily unavailable. Please try again later.' })
     }
     return res.json({ sent: true, expiresInSeconds: 600 })
   } catch (error) {
@@ -575,6 +577,7 @@ app.post('/api/auth/seller-verification-code', authLimiter, async (req, res, nex
 })
 
 app.post('/api/auth/verify-seller-email-code', authLimiter, async (req, res) => {
+  if (!isSellerEmailVerificationRequired()) return res.json({ verified: false, verificationRequired: false })
   const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
   const code = typeof req.body.code === 'string' ? req.body.code.trim() : ''
   const verification = (await getRow<VerificationRow>('SELECT * FROM seller_email_verifications WHERE email = ?', email))
@@ -609,7 +612,7 @@ const registerAccount = (role: UserRole): RequestHandler => async (req, res, nex
 
     if (role === 'seller') {
       const verification = (await getRow<VerificationRow>('SELECT * FROM seller_email_verifications WHERE email = ?', email))
-      if (!verification?.verified_at || verification.expires_at <= new Date().toISOString()) {
+      if (isSellerEmailVerificationRequired() && (!verification?.verified_at || verification.expires_at <= new Date().toISOString())) {
         return res.status(400).json({ error: 'The email verification code is invalid or expired.' })
       }
 
