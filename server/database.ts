@@ -1,6 +1,6 @@
 import pg, { type PoolClient, type QueryResult } from 'pg'
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { readFileSync } from 'node:fs'
+import { databaseTlsOptions } from './databaseTls.ts'
 import { schemaSql, identityTableNames } from './schema.ts'
 import { ObjectStorage } from './storage.ts'
 
@@ -35,7 +35,7 @@ export class Database {
     // SSL URL options can override pg's ssl object. Keep verification explicit.
     for (const key of ['sslmode', 'sslcert', 'sslkey', 'sslrootcert']) parsed.searchParams.delete(key)
     this.pool = new pg.Pool({ connectionString: parsed.toString(), max: 3, connectionTimeoutMillis: 15000,
-      ssl: { rejectUnauthorized: true, ...(process.env.DATABASE_CA_CERT_PATH ? { ca: readFileSync(process.env.DATABASE_CA_CERT_PATH, 'utf8') } : {}) },
+      ssl: databaseTlsOptions(parsed.hostname),
     })
     this.pool.on('error', () => console.error('Database connection interrupted.'))
   }
