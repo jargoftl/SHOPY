@@ -36,3 +36,9 @@ dist-server
 *.njsproj
 *.sln
 *.sw?
+
+# Migration snapshots and local upload/security files
+migration-backups/
+uploads/
+*.key
+*.p12

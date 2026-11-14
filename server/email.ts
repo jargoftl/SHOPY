@@ -42,13 +42,27 @@ const transporter: Transporter | null = smtpConfigured
     },
   })
   : null
-export const isEmailConfigured = (): boolean => transporter !== null
+export const isEmailConfigured = (): boolean => transporter !== null || Boolean(process.env.BREVO_API_KEY && process.env.EMAIL_FROM)
 
 const sendEmail = async ({ to, subject, text }: EmailMessage): Promise<boolean> => {
-  if (!transporter || !to) return false
+  if (!isEmailConfigured() || !to) return false
 
   try {
-    await transporter.sendMail({
+    // HTTPS transport works when a host restricts common SMTP ports. Existing SMTP is retained.
+    if (process.env.BREVO_API_KEY) {
+      const from = process.env.EMAIL_FROM!.trim()
+      const named = from.match(/^(.*?)\s*<([^<>]+)>$/)
+      const sender = named ? { name: named[1].trim(), email: named[2].trim() } : { email: from }
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': process.env.BREVO_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender, to: [{ email: to }], subject, textContent: text }),
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!response.ok) throw new Error(`HTTPS email provider returned ${response.status}`)
+      return true
+    }
+    await transporter!.sendMail({
       from: process.env.EMAIL_FROM,
       to,
       subject,
@@ -76,7 +90,7 @@ export const sendPasswordResetEmail = (to: string, resetUrl: string | null, site
 })
 
 export const sendAuthNotifications = async (user: EmailUser, event: NotificationEvent, siteName: string): Promise<{ userEmailSent: boolean; adminEmailSent: boolean }> => {
-  if (!transporter) {
+  if (!isEmailConfigured()) {
     console.info('SMTP is not configured; account email notifications were skipped.')
     return { userEmailSent: false, adminEmailSent: false }
   }

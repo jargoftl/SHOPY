@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { Database } from './database.ts'
 
 const photos = {
   food: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?auto=format&fit=crop&w=900&q=85',
@@ -33,18 +33,18 @@ const samples: Array<[string, string, number, string]> = [
   ['Shoulder Bag', 'Ladies Bag / Ladies Shoulder Bag', 40, photos.bag],
 ]
 
-export function seedWarehouseSamples(db: Database.Database) {
-  if (db.prepare("SELECT 1 FROM schema_migrations WHERE name='warehouse_samples_v1'").get()) return
-  db.transaction(() => {
+export async function seedWarehouseSamples(db: Database) {
+  if ((await db.prepare("SELECT 1 FROM schema_migrations WHERE name='warehouse_samples_v1'").get())) return
+  await db.transaction(async () => {
     const insert = db.prepare('INSERT INTO warehouse_products (product_json) VALUES (?)')
     for (const [name, category, price, imageUrl] of samples) {
-      insert.run(JSON.stringify({
+      await insert.run(JSON.stringify({
         name: `Sample: ${name}`, category, price, imageUrl,
         description: 'Sample product for testing. Image is illustrative and may not depict the item.',
         compareAtPrice: null, imageUrls: [imageUrl], colors: [], sizes: [], rating: 0,
         isPublished: true, isStorePublished: true,
       }))
     }
-    db.prepare("INSERT INTO schema_migrations (name) VALUES ('warehouse_samples_v1')").run()
+    await db.prepare("INSERT INTO schema_migrations (name) VALUES ('warehouse_samples_v1')").run()
   })()
 }
