@@ -44,7 +44,7 @@ const BuyerProfilePage = () => {
   const [kind, setKind] = useState('')
   const [coin, setCoin] = useState('BTC')
   const [coinOpen, setCoinOpen] = useState(false)
-  const [transactionPassword, setTransactionPassword] = useState('')
+  const [transactionPin, setTransactionPin] = useState('')
   const [activeDeposit, setActiveDeposit] = useState(null)
   const [showAddress, setShowAddress] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -55,7 +55,7 @@ const BuyerProfilePage = () => {
   const seenWallets = useRef(new Set())
   const submittingDeposit = useRef(false)
   const profileLoaded = profile !== null
-  useEffect(()=>{if(section!=='wallet')setTransactionPassword('')},[section])
+  useEffect(()=>{if(section!=='wallet')setTransactionPin('')},[section])
   const initialRoute=useRef({section,state:location.state})
   const alive=useRef(true)
   useEffect(() => {
@@ -116,14 +116,14 @@ const BuyerProfilePage = () => {
 
   const selectDepositCoin = async (item) => {
     if (submittingDeposit.current) return
-    if (!transactionPassword) { setCoinOpen(false); setError('Enter your transaction password before choosing a coin.'); return }
+    if (!/^\d{4}$/.test(transactionPin)) { setCoinOpen(false); setError('Enter your four-digit transaction PIN before choosing a coin.'); return }
     submittingDeposit.current = true
     setCoin(item); setCoinOpen(false); setBusy(true); setError(''); setNotice('')
     let created = false
     try {
-      const { id } = await apiRequest('/api/buyer/requests', { method: 'POST', body: JSON.stringify({ kind: 'deposit', coin: item, transactionPassword }) })
+      const { id } = await apiRequest('/api/buyer/requests', { method: 'POST', body: JSON.stringify({ kind: 'deposit', coin: item, transactionPin }) })
       created = true
-      setTransactionPassword('')
+      setTransactionPin('')
       activeRequestRef.current = id
       setActiveDeposit({ id, coin: item, amountCents: null })
       setNotice('Request sent to the administrator. The wallet details will appear below.')
@@ -142,8 +142,8 @@ const BuyerProfilePage = () => {
     }
     setBusy(true); setError(''); setNotice('')
     try {
-      await apiRequest('/api/buyer/requests', { method: 'POST', body: JSON.stringify({ kind, coin, amountCents, destination: values.get('destination') || '', transactionPassword }) })
-      setTransactionPassword('')
+      await apiRequest('/api/buyer/requests', { method: 'POST', body: JSON.stringify({ kind, coin, amountCents, destination: values.get('destination') || '', transactionPin }) })
+      setTransactionPin('')
       setKind('')
       setNotice('Request sent to the administrator for manual review.')
       await load()
@@ -240,12 +240,12 @@ const BuyerProfilePage = () => {
             {!section&&<><div className="grid gap-4 sm:grid-cols-2"><Link to="/profile/stores" aria-label={`${profile.follows.length} followed stores`} className="flex items-center justify-between gap-4 rounded-2xl border border-[#dce7d4] bg-[#edf4e6] p-5 text-[#45643a]"><div><p className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#819773]">Your favorite places</p><strong className="mt-2 block text-3xl font-semibold">{profile.follows.length}</strong><p className="mt-1 text-xs">Followed stores</p></div><Store size={31} strokeWidth={1.3}/></Link><Link to="/profile/favorites" aria-label={`${profile.favorites.length} favorite products`} className="flex items-center justify-between gap-4 rounded-2xl border border-[#e4e7da] bg-[#faf9ee] p-5 text-[#7b7650]"><div><p className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#a39f7d]">Saved for another day</p><strong className="mt-2 block text-3xl font-semibold">{profile.favorites.length}</strong><p className="mt-1 text-xs">Favorite products</p></div><Heart size={31} strokeWidth={1.3}/></Link></div><FollowedStores stores={profile.follows} compact/><div className="grid gap-4 sm:grid-cols-2">{[['/profile/orders','My Orders',Package],['/messages','System messages',MessageCircle]].map(([to,label,Icon])=><Link key={to} to={to} className="flex items-center gap-3 rounded-2xl border border-[#e1e7df] bg-white p-5 text-sm font-semibold text-[#5d7951]"><Icon size={19}/>{label}<ArrowUpRight className="ml-auto" size={15}/></Link>)}</div></>}
             {section === 'wallet' && <><section id="wallet" className="grid gap-4 sm:grid-cols-3">
               <div className="rounded bg-[#263d35] p-6 text-white"><BalanceDisplay balanceCents={profile.wallet.balanceCents} size="text-3xl" /></div>
-              <button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setTransactionPassword(''); setActiveDeposit(null); setCoin(''); setKind('deposit') }} className="flex items-center justify-center gap-3 border border-[#e1e7df] bg-white p-6 text-sm font-semibold hover:border-[#315941] disabled:opacity-60"><ArrowDownLeft size={22} /> Deposit request</button>
-              <button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setTransactionPassword(''); setActiveDeposit(null); setCoin('BTC'); setKind('withdrawal') }} className="flex items-center justify-center gap-3 border border-[#e1e7df] bg-white p-6 text-sm font-semibold hover:border-[#315941] disabled:opacity-60"><ArrowUpRight size={22} /> Withdrawal request</button>
+              <button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setTransactionPin(''); setActiveDeposit(null); setCoin(''); setKind('deposit') }} className="flex items-center justify-center gap-3 border border-[#e1e7df] bg-white p-6 text-sm font-semibold hover:border-[#315941] disabled:opacity-60"><ArrowDownLeft size={22} /> Deposit request</button>
+              <button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setTransactionPin(''); setActiveDeposit(null); setCoin('BTC'); setKind('withdrawal') }} className="flex items-center justify-center gap-3 border border-[#e1e7df] bg-white p-6 text-sm font-semibold hover:border-[#315941] disabled:opacity-60"><ArrowUpRight size={22} /> Withdrawal request</button>
             </section>
             <p className="text-xs leading-5 text-[#737970]">Select a coin to send a deposit request. The administrator will send the wallet and network here. Enter the amount, then upload a screenshot for manual review. No crypto is processed or verified here; confirmation does not automatically change your balance.</p>
             {kind && <section className="space-y-4 border border-[#e1e7df] bg-white p-5">
-              <div className="flex justify-between"><h2 className="font-semibold">{kind === 'deposit' ? 'Deposit' : 'Withdrawal'} request</h2><button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setKind(''); setTransactionPassword('') }} className="text-sm underline disabled:opacity-60">Close</button></div>
+              <div className="flex justify-between"><h2 className="font-semibold">{kind === 'deposit' ? 'Deposit' : 'Withdrawal'} request</h2><button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setKind(''); setTransactionPin('') }} className="text-sm underline disabled:opacity-60">Close</button></div>
               {activeRequest ? <>
                 <div><p className="text-sm font-medium">Selected coin</p><div className="mt-2 rounded border border-[#dfe3dd] px-3 py-3 text-sm"><span style={{ backgroundColor: coinDetails[activeRequest.coin][2] }} className="mr-2 inline-grid size-6 place-items-center rounded-full font-bold text-white" aria-hidden="true">{coinDetails[activeRequest.coin][1]}</span>{coinDetails[activeRequest.coin][0]} ({activeRequest.coin})</div></div>
                 <div aria-live="polite" className="rounded border border-[#dfe3dd] bg-[#f7f9f5] p-4 text-sm">
@@ -262,8 +262,8 @@ const BuyerProfilePage = () => {
                 {activeRequest.status === 'pending' && activeRequest.walletAddress && activeRequest.amountCents === null && <form onSubmit={(event) => saveDepositAmount(event, activeRequest.id)} className="grid gap-2"><label className="text-sm font-medium">Deposit amount (USD equivalent)<AmountInput name="amount" className={input} placeholder="10,000.00" /></label><button disabled={busy} className="w-fit bg-[#263d35] px-4 py-2 text-sm text-white disabled:opacity-60">Save amount</button></form>}
                 {activeRequest.status === 'pending' && activeRequest.walletAddress && activeRequest.amountCents !== null && <form onSubmit={(event) => uploadReceipt(event, activeRequest.id)} className="grid gap-2"><label className="text-xs font-medium">Upload payment screenshot (PNG or JPEG, max 2 MB)<input name="receipt" type="file" accept="image/png,image/jpeg" required className="mt-1 block w-full text-sm" /></label><button disabled={busy} className="w-fit border border-[#315941] px-3 py-2 text-xs disabled:opacity-60">Send screenshot</button></form>}
               </> : <form onSubmit={submitRequest} className="space-y-4">
-              {!profile.hasTransactionPassword && <p className="text-sm">First <Link to="/profile/setup" className="underline">set a transaction password in Setup</Link>.</p>}
-              <label className="block text-sm font-medium">Transaction password<input type="password" autoComplete="off" value={transactionPassword} onChange={(event) => setTransactionPassword(event.target.value)} required className={input} /></label>
+              {!profile.hasTransactionPin && <p className="text-sm">First <Link to="/profile/setup" className="underline">set a four-digit transaction PIN in Setup</Link>.</p>}
+              <label className="block text-sm font-medium">Four-digit transaction PIN<input type="password" autoComplete="off" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} value={transactionPin} onChange={(event) => setTransactionPin(event.target.value)} required className={input} /></label>
               <fieldset disabled={busy}><legend className="text-sm font-medium">Choose a coin</legend><details open={coinOpen} onToggle={(event) => setCoinOpen(event.currentTarget.open)} className="relative mt-2"><summary className="cursor-pointer rounded border border-[#dfe3dd] px-3 py-3 text-sm">{coin ? <><span style={{ backgroundColor: coinDetails[coin][2] }} className="mr-2 inline-grid size-6 place-items-center rounded-full font-bold text-white" aria-hidden="true">{coinDetails[coin][1]}</span>{coinDetails[coin][0]} ({coin})</> : 'Select a coin'}</summary><div className="mt-1 grid max-h-56 gap-1 overflow-y-auto border border-[#dfe3dd] bg-white p-2">{profile.coins.map((item) => <label key={item} className="flex cursor-pointer items-center gap-3 p-2 text-sm hover:bg-[#f1f5ef]"><input type="radio" name="coin" checked={coin === item} onChange={() => { if (kind === 'deposit') selectDepositCoin(item); else { setCoin(item); setCoinOpen(false) } }} /><span style={{ backgroundColor: coinDetails[item][2] }} className="grid size-7 place-items-center rounded-full font-bold text-white" aria-hidden="true">{coinDetails[item][1]}</span>{coinDetails[item][0]} ({item})</label>)}</div></details></fieldset>
               {kind === 'deposit' ? <div className="rounded border border-[#dfe3dd] bg-[#f7f9f5] p-4 text-sm"><p className="font-semibold">Wallet address</p><p className="mt-2 text-[#737970]">{busy ? 'Sending your request…' : 'Selecting a coin sends a request to the administrator.'}</p></div> : <><label className="block text-sm font-medium">Amount (USD equivalent)<AmountInput name="amount" className={input} placeholder="10,000.00" /></label><label className="block text-sm font-medium">Destination and network<input name="destination" maxLength={500} required placeholder="Wallet address and network" className={input} /></label><button disabled={busy} className="bg-[#263d35] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">Submit request</button></>}
               </form>}

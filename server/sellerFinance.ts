@@ -1,5 +1,5 @@
 import express, { type Express, type RequestHandler } from 'express'
-import bcrypt from 'bcryptjs'
+import { checkTransactionPin } from './transactionPin.ts'
 import { rateLimit } from 'express-rate-limit'
 import type { Database } from './database.ts'
 import { ObjectStorage } from './storage.ts'
@@ -69,16 +69,15 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  app.get('/api/admin/sellers/:id/analytics',auth,role('admin'),protectedRoute(async(req,res)=>{res.json(await analytics(Number(req.params.id)))}))
  app.get('/api/seller/finance',auth,role('seller','admin'),protectedRoute(async(req,res)=>{
  const wallet=await db.prepare('SELECT balance_cents AS balanceCents,reserved_cents AS reservedCents FROM seller_wallets WHERE seller_id=?').get(req.user!.id)||{balanceCents:0,reservedCents:0}
- res.set('Cache-Control','no-store').json({wallet,requests:await requests(req.user!.id),records:await db.prepare('SELECT * FROM seller_fund_records WHERE seller_id=? ORDER BY id DESC LIMIT 1000').all(req.user!.id)})
+ res.set('Cache-Control','no-store').json({wallet,hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:await requests(req.user!.id),records:await db.prepare('SELECT * FROM seller_fund_records WHERE seller_id=? ORDER BY id DESC LIMIT 1000').all(req.user!.id)})
  }))
  app.post('/api/seller/finance/requests',auth,role('seller'),rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many wallet attempts. Please try again later.'}}),protectedRoute(async(req,res)=>{
  const {kind,coin,amountCents,requestKey}=req.body||{}
  if(!['deposit','withdrawal'].includes(kind)||!coins.includes(coin)||!Number.isSafeInteger(amountCents)||amountCents<1||amountCents>100000000||!/^[-a-f0-9]{36}$/i.test(requestKey||'')) return void res.status(400).json({error:'Enter a valid amount (up to $1,000,000), coin and request key.'})
  const network=text(req.body.network,80),address=text(req.body.address,200)
- if(kind==='withdrawal') {
- const user=await db.prepare('SELECT password_hash FROM users WHERE id=?').get(req.user!.id) as {password_hash:string}
- if(!network||!address||typeof req.body.password!=='string'||!await bcrypt.compare(req.body.password,user.password_hash)) return void res.status(400).json({error:'Enter the receiving network, wallet address and your correct account password.'})
- }
+ if(kind==='withdrawal'&&(!network||!address)) return void res.status(400).json({error:'Enter your receiving network and wallet address.'})
+ const pinError=await checkTransactionPin(db,req.user!.id,req.body.transactionPin)
+ if(pinError) return void res.status(403).json({error:pinError})
  await db.transaction(async()=>{
  const existing=await db.prepare('SELECT * FROM seller_wallet_requests WHERE seller_id=? AND request_key=?').get(req.user!.id,requestKey) as WalletRequest|undefined
  if(existing) {if(existing.kind!==kind||existing.coin!==coin||existing.amount_cents!==amountCents||existing.address!==address||existing.network!==network) fail('Request key already used for different details.');return}

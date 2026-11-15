@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto'
 export async function testSellerFinance({req,check,db,cookie,seller,buyer,sellerId,buyerId}) {
- const post=(path,body,who=seller,method='POST')=>req(path,{method,body:JSON.stringify(body)},who)
+ const post=(path,body,who=seller,method='POST')=>req(path,{method,body:JSON.stringify(path==='/api/seller/finance/requests'?{transactionPin:'0456',...body}:body)},who)
  let r=await req('/api/auth/me',{},seller);const publicId=r.data.user.publicId
  check('seller has stable random eight digit public reference',/^[1-9]\d{7}$/.test(publicId))
  r=await req('/api/auth/me',{},buyer);check('buyer has distinct eight digit reference',/^[1-9]\d{7}$/.test(r.data.user.publicId)&&r.data.user.publicId!==publicId)
@@ -9,6 +9,7 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  for(const path of ['/api/seller/finance','/api/seller/analytics']){r=await req(path,{},buyer);check('buyer denied '+path,r.status===403)}
  r=await req('/api/admin/seller-finance',{},seller);check('seller cannot review funds',r.status===403)
  r=await req('/api/seller/analytics',{},seller);check('actual dashboard has real daily sales and visits',r.status===200&&Array.isArray(r.data.daily)&&Array.isArray(r.data.visits))
+ let setup=await post('/api/account/transaction-pin',{pin:'0456',confirmPin:'0456',loginPassword:'long-test-password-123'},seller,'PUT');check('seller can set four-digit transaction PIN',setup.status===200,setup)
  const deposit={kind:'deposit',coin:'USDT',amountCents:20000,requestKey:randomUUID()}
  r=await post('/api/seller/finance/requests',deposit);check('seller requests deposit',r.status===201,r)
  await post('/api/seller/finance/requests',deposit)
@@ -26,8 +27,8 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  r=await post(adminPath,{action:'confirm',verified:true,transferReference:'fixture-deposit'},cookie,'PATCH');check('verified deposit credits wallet',r.status===200,r)
  r=await post(adminPath,{action:'confirm',verified:true,transferReference:'fixture-deposit'},cookie,'PATCH');check('repeat confirmation is refused',r.status===409)
  finance=(await req('/api/seller/finance',{},seller)).data;check('deposit ledger credits once',finance.wallet.balanceCents===20000&&finance.records.length===1)
- const withdrawal={kind:'withdrawal',coin:'USDT',amountCents:15000,requestKey:randomUUID(),network:'TRC20',address:'fixture-seller-address',password:'long-test-password-123'}
- r=await post('/api/seller/finance/requests',{...withdrawal,password:'incorrect'});check('withdrawal requires account password',r.status===400)
+ const withdrawal={kind:'withdrawal',coin:'USDT',amountCents:15000,requestKey:randomUUID(),network:'TRC20',address:'fixture-seller-address',transactionPin:'0456'}
+ r=await post('/api/seller/finance/requests',{...withdrawal,transactionPin:'9999'});check('withdrawal requires transaction PIN',r.status===403)
  r=await post('/api/seller/finance/requests',withdrawal);check('withdrawal reserves real funds',r.status===201,r)
  await post('/api/seller/finance/requests',withdrawal)
  finance=(await req('/api/seller/finance',{},seller)).data;check('withdrawal retry reserves only once',finance.wallet.balanceCents===20000&&finance.wallet.reservedCents===15000)

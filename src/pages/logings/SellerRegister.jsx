@@ -4,7 +4,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check, ShieldCheck, Store, Sparkles, ClipboardCheck } from 'lucide-react'
 import '../../styles/seller-signup.css'
 import SellerAuthStory from '../../components/SellerAuthStory.jsx'
-import CaptchaPuzzle from '../../components/CaptchaPuzzle.jsx'
 import OptionalSellerSsn, { sellerSsnSuffix } from '../../components/OptionalSellerSsn.jsx'
 import VerificationPhotoFields from '../../components/VerificationPhotoFields.jsx'
 import { apiRequest } from '../../lib/api.js'
@@ -27,7 +26,6 @@ const SellerRegister = () => {
   const [existingAccount, setExistingAccount] = useState(null)
   const [codeSent, setCodeSent] = useState(false)
   const [developmentCode, setDevelopmentCode] = useState('')
-  const [captchaToken,setCaptchaToken]=useState('')
   const [optionalSsn, setOptionalSsn] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [hasStarted, setHasStarted] = useState(isPreviewMode)
@@ -123,13 +121,12 @@ const SellerRegister = () => {
       return
     }
 
-    if (!captchaToken) {setMessage('Complete the image puzzle to continue.');return}
     if (!codeSent) {
       setIsSendingCode(true)
       try {
         const verification = await apiRequest('/api/auth/seller-verification-code', {
           method: 'POST',
-          body: JSON.stringify({ email: form.email.trim(), fullName: form.fullName.trim(), captchaToken }),
+          body: JSON.stringify({ email: form.email.trim(), fullName: form.fullName.trim() }),
         })
         if (verification.verificationRequired === false) {
           setStep(1)
@@ -144,7 +141,7 @@ const SellerRegister = () => {
           setMessage('A verification code was sent to your email. Enter it here to continue.')
         }
       } catch (error) {
-        if(error.captchaRequired)setCaptchaToken('')
+
       setMessage(error.message)
       } finally {
         setIsSendingCode(false)
@@ -161,12 +158,12 @@ const SellerRegister = () => {
     try {
       const verification = await apiRequest('/api/auth/verify-seller-email-code', {
         method: 'POST',
-        body: JSON.stringify({ email: form.email.trim(), code: form.verificationCode.trim(), captchaToken }),
+        body: JSON.stringify({ email: form.email.trim(), code: form.verificationCode.trim() }),
       })
       setMessage(verification.verified ? 'Email verified.' : '')
       setStep(1)
     } catch (error) {
-      if(error.captchaRequired)setCaptchaToken('')
+
       setMessage(error.message)
     } finally {
       setIsSendingCode(false)
@@ -196,7 +193,6 @@ const SellerRegister = () => {
       const { user } = await apiRequest(existingAccount ? '/api/seller/application' : '/api/auth/register-seller', {
         method: 'POST',
         body: JSON.stringify({
-          captchaToken,
           fullName: form.fullName,
           email: form.email,
           phone: form.phone,
@@ -218,7 +214,7 @@ const SellerRegister = () => {
       setOptionalSsn('')
       navigate('/seller/application', { replace: true, state: { welcome: `Your application was submitted, ${user.fullName}. Seller access is pending administrator approval.` } })
     } catch (error) {
-      if(error.captchaRequired)setCaptchaToken('')
+
       setMessage(error.message)
     } finally {
       setIsSubmitting(false)
@@ -283,7 +279,7 @@ const SellerRegister = () => {
             </label>
           </div>
           </>}
-          <CaptchaPuzzle purpose="signup" token={captchaToken} onVerified={setCaptchaToken} disabled={isSendingCode}/>
+
           {codeSent && <label className="block text-sm font-medium">Email verification code
             <input name="verificationCode" value={form.verificationCode} onChange={updateForm} type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="6-digit email code" />
           </label>}
@@ -293,9 +289,9 @@ const SellerRegister = () => {
             <p className="mt-1 text-[10px] text-[#71521e]">Shown only in local development. It expires in 10 minutes.</p>
           </div>}
           {codeSent && <p className="text-[11px] leading-5 text-[#777]">Enter the code sent to your email. It expires after 10 minutes.</p>}
-          {codeSent && <button type="button" disabled={isSendingCode || !captchaToken} className="text-xs underline underline-offset-4" onClick={async()=>{setIsSendingCode(true);setMessage('');try{const result=await apiRequest('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:form.email.trim(),fullName:form.fullName.trim(),captchaToken})});setForm(current=>({...current,verificationCode:result.developmentCode||''}));setDevelopmentCode(result.developmentCode||'');setMessage(result.sent?'A new verification code was sent.':'Please continue with the current registration settings.')}catch(error){if(error.captchaRequired)setCaptchaToken('');setMessage(error.message)}finally{setIsSendingCode(false)}}}>Resend email code</button>}
+          {codeSent && <button type="button" disabled={isSendingCode} className="text-xs underline underline-offset-4" onClick={async()=>{setIsSendingCode(true);setMessage('');try{const result=await apiRequest('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:form.email.trim(),fullName:form.fullName.trim()})});setForm(current=>({...current,verificationCode:result.developmentCode||''}));setDevelopmentCode(result.developmentCode||'');setMessage(result.sent?'A new verification code was sent.':'Please continue with the current registration settings.')}catch(error){setMessage(error.message)}finally{setIsSendingCode(false)}}}>Resend email code</button>}
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
-          <button type="submit" disabled={isSendingCode || !captchaToken} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-60">{isSendingCode ? 'Please wait…' : codeSent ? 'Verify email & continue' : 'Continue to workspace'}</button>
+          <button type="submit" disabled={isSendingCode} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-60">{isSendingCode ? 'Please wait…' : codeSent ? 'Verify email & continue' : 'Continue to workspace'}</button>
         </form>
       )}
 
@@ -358,9 +354,9 @@ const SellerRegister = () => {
             <input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} className="mt-1 accent-black" />
             I confirm all information and photos in this application belong to me and are accurate. I understand seller access begins only after administrator approval.
           </label>
-          {!captchaToken && <CaptchaPuzzle purpose="signup" token={captchaToken} onVerified={setCaptchaToken} disabled={isSubmitting}/>}
+
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
-          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isSubmitting || isReadingLogo || isReadingVerification || !captchaToken} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">{isSubmitting ? 'Submitting…' : 'Submit for admin review'}</button></div>
+          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isSubmitting || isReadingLogo || isReadingVerification} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">{isSubmitting ? 'Submitting…' : 'Submit for admin review'}</button></div>
         </form>
       )}
 

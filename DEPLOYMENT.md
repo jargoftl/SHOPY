@@ -67,8 +67,17 @@ The seller overview uses actual purchase records, real follows and recorded visi
 
 Seller wallets are separate from buyer/store-credit balances. The administrator reviews seller deposits at **Admin → Seller finance review**, supplies a coin wallet/network and locks the conversion rate. The seller uploads a private receipt. An administrator must independently verify the incoming transfer and record its transaction reference before crediting the USD-denominated seller balance.
 
-Withdrawal requests require the seller's account password and immediately reserve available funds. The admin locks the coin conversion, performs the outgoing transfer externally, and confirms it with the transaction reference. Rejection releases the hold. This application does not send cryptocurrency automatically. Never mark a transfer confirmed merely because a screenshot exists.
+Deposit and withdrawal requests require the account's four-digit transaction PIN. Withdrawal requests immediately reserve available funds. The admin locks the coin conversion, performs the outgoing transfer externally, and confirms it with the transaction reference. Rejection releases the hold. This application does not send cryptocurrency automatically. Never mark a transfer confirmed merely because a screenshot exists.
 
 The **full product-sale amount** may be released once an externally paid order is delivered, has no active refund, and an administrator explicitly verifies the amount. Store-credit purchases do not create withdrawable cash. Each order/seller release is unique. A completed refund reverses any released proceeds; a negative balance blocks new withdrawals until funds cover it. All balance changes and holds record before/after values. The fund-record screen exports the latest 1,000 records as CSV; the activity feed shows the latest 100 events. The admin review queue shows the latest 200 wallet requests and 500 order/store combinations.
 
 No new environment variables are required. Existing private Supabase storage and payment wallet settings are reused. Existing configured seller metrics remain in the legacy admin editor but no longer drive the real sales dashboard.
+
+
+### Four-digit transaction PIN and puzzle-free authentication
+
+Buyers set or reset their PIN under **Profile → Setup**. Sellers use **My wallet → Set or reset transaction PIN**. Setting or resetting requires the current login password and matching four-digit PIN entries. Existing longer transaction passwords are not PINs; their owners must set a new PIN. Both buyer and seller deposit and withdrawal request APIs now require `transactionPin` as a four-character digit string, preserving leading zeroes. Login passwords and the retired buyer transaction-password endpoint cannot authorize a wallet request.
+
+PINs are individually bcrypt-hashed and are never returned to the client or shown to administrators. Five wrong attempts lock the account's PIN for 15 minutes, independently of IP address. A password-authenticated PIN reset clears the lock. No new environment variables are required.
+
+The image puzzle and its client component are removed. Login and signup retain password checks and rate limits. When email verification is configured, emailed codes remain bound to an HTTP-only browser cookie and cannot be used from another browser. The legacy puzzle status endpoint returns `enabled: false` so cached older clients can continue without an image challenge. `AUTH_CAPTCHA` is no longer used.

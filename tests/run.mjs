@@ -1,3 +1,4 @@
+import {testTransactionPin} from './transaction-pin-flow.mjs';
 import {testSellerFinance} from './seller-finance-flow.mjs';
 import { tableNames } from '../dist-server/schema.js';
 import { testBuyerFollowedStores } from './buyer-followed-stores-flow.mjs';
@@ -27,8 +28,8 @@ const query=async(sql,params=[])=>{
 pg.Pool.prototype.query=query;
 pg.Pool.prototype.connect=async()=>({query,release(){}});
 pg.Pool.prototype.end=async()=>{};
-// The legacy regression scenarios run without puzzles; testAuthCaptcha enables and tests real enforcement below.
-Object.assign(process.env,{AUTH_CAPTCHA:'disabled',SELLER_VERIFICATION_WORKER:'disabled',SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
+// Regression fixtures use isolated accounts, storage and mocked email delivery.
+Object.assign(process.env,{SELLER_VERIFICATION_WORKER:'disabled',SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
 const { ObjectStorage } = await import('../dist-server/storage.js');
 const realPut=ObjectStorage.prototype.put,realGet=ObjectStorage.prototype.get,realVerify=ObjectStorage.prototype.verifyBucket;
 ObjectStorage.prototype.verifyBucket=async()=>{};
@@ -129,8 +130,9 @@ try{
   const verifiedForm={...sellerForm,email:'verified-seller@example.test'};
   r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(verifiedForm)});check('auto restores verification when email configured',r.status===400,r);
   r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:verifiedForm.email,fullName:verifiedForm.fullName})});check('configured email sends code without exposing it',r.status===200&&r.data.sent===true&&!r.data.developmentCode&&/^\d{6}$/.test(deliveredCode||''),r);
-  r=await req('/api/auth/verify-seller-email-code',{method:'POST',body:JSON.stringify({email:verifiedForm.email,code:deliveredCode})});check('delivered code verifies',r.status===200&&r.data.verified===true,r);
-  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(verifiedForm)});check('verified seller can register with email configured',r.status===201,r);
+  const verifiedBrowser=r.cookie;
+  r=await req('/api/auth/verify-seller-email-code',{method:'POST',body:JSON.stringify({email:verifiedForm.email,code:deliveredCode})},verifiedBrowser);check('delivered code verifies',r.status===200&&r.data.verified===true,r);
+  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(verifiedForm)},verifiedBrowser);check('verified seller can register with email configured',r.status===201,r);
   // An outage in a configured provider must never downgrade verification to optional.
   globalThis.fetch=async(url,options)=>String(url)==='https://api.brevo.com/v3/smtp/email'?new Response('{}',{status:503}):actualFetch(url,options);
   r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:'outage@example.test'})});check('provider outage does not bypass verification',r.status===503&&r.data.verificationRequired!==false&&!r.data.developmentCode,r);
@@ -214,6 +216,7 @@ try{
  await testWarehousePublication({req,check,cookie,seller,buyer,db,sellerId});
  await testBuyerFollowedStores({req,check,db,buyer,buyerId,sellerId});
  await testSellerFinance({req,check,db,cookie,seller,buyer,sellerId,buyerId});
+ await testTransactionPin({req,check,db,buyer,seller,buyerId,sellerId});
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.
  const storageFetch=globalThis.fetch;
  Object.assign(process.env,{SUPABASE_URL:'https://storage.example.test',SUPABASE_SERVICE_ROLE_KEY:'test-only-placeholder',SUPABASE_STORAGE_BUCKET:'shop-uploads'});

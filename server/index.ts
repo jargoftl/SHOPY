@@ -10,9 +10,10 @@ import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { resolve } from 'node:path'
 import { isSellerEmailVerificationRequired, isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
 import { prepareVerificationPhotos, optionalSsnLast4, verificationPhone, uploadVerificationPhotos, insertApplicationPhotos, queuePhotoCleanup, registerSellerVerification, type StoredVerificationPhoto } from './sellerVerification.ts'
-import { registerAuthCaptcha, captchaBinding, captchaEnabled } from './authCaptcha.ts'
+import { registerAuthBrowser, authBrowserBinding } from './authBrowser.ts'
 import { warehousePricing } from './warehousePricing.ts'
 import { registerMarketing } from './marketing.ts'
+import { registerTransactionPin, checkTransactionPin } from './transactionPin.ts'
 import { registerSellerFinance } from './sellerFinance.ts'
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
@@ -559,11 +560,11 @@ app.get('/api/product-images/:id', async (req, res) => {
   return res.set('Cache-Control', 'public, max-age=31536000, immutable').set('X-Content-Type-Options', 'nosniff').type(image.content_type).send(image.image)
 })
 
-const authCaptcha=registerAuthCaptcha(app,database)
+registerAuthBrowser(app)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', version: process.env.RENDER_GIT_COMMIT?.slice(0,7) || null }))
 
-app.post(['/api/auth/seller-verification-code','/api/auth/registration-verification-code'], authLimiter, authCaptcha.guard('signup'), async (req, res, next) => {
+app.post(['/api/auth/seller-verification-code','/api/auth/registration-verification-code'], authLimiter, async (req, res, next) => {
   try {
     const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
     const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : 'there'
@@ -584,7 +585,7 @@ app.post(['/api/auth/seller-verification-code','/api/auth/registration-verificat
       INSERT INTO seller_email_verifications (email, code_hash, expires_at, attempts, requester_hash)
       VALUES (?, ?, ?, 0, ?)
       ON CONFLICT(email) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at, attempts = 0, verified_at = NULL, requester_hash = excluded.requester_hash, created_at = CURRENT_TIMESTAMP
-    `).run(email, hashToken(code), expiresAt, captchaBinding(req))
+    `).run(email, hashToken(code), expiresAt, authBrowserBinding(req))
 
     const sent = await sendSellerVerificationCode({ to: email, name: fullName, code, siteName: (await getSiteName()) })
     if (!sent) {
@@ -600,18 +601,18 @@ app.post(['/api/auth/seller-verification-code','/api/auth/registration-verificat
   }
 })
 
-app.post(['/api/auth/verify-seller-email-code','/api/auth/verify-registration-email-code'], authLimiter, authCaptcha.guard('signup'), async (req, res) => {
+app.post(['/api/auth/verify-seller-email-code','/api/auth/verify-registration-email-code'], authLimiter, async (req, res) => {
   if (!isSellerEmailVerificationRequired()) return res.json({ verified: false, verificationRequired: false })
   const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
   const code = typeof req.body.code === 'string' ? req.body.code.trim() : ''
   const verification = (await getRow<VerificationRow>('SELECT * FROM seller_email_verifications WHERE email = ?', email))
   const codeMatches = verification && verification.expires_at > new Date().toISOString()
-    && (!captchaEnabled() || (verification.requester_hash === captchaBinding(req) && Boolean(captchaBinding(req))))
+    && (verification.requester_hash === authBrowserBinding(req) && Boolean(authBrowserBinding(req)))
     && verification.attempts < 5 && /^\d{6}$/.test(code)
     && hashToken(code) === verification.code_hash
 
   if (!codeMatches) {
-    if (verification && verification.attempts < 5 && (!captchaEnabled() || verification.requester_hash === captchaBinding(req))) {
+    if (verification && verification.attempts < 5 && (verification.requester_hash === authBrowserBinding(req))) {
       await database.prepare('UPDATE seller_email_verifications SET attempts = attempts + 1 WHERE email = ?').run(email)
     }
     return res.status(400).json({ error: 'The email verification code is invalid or expired.' })
@@ -649,7 +650,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
 
     if (role === 'seller' || role === 'customer') {
       const verification = (await getRow<VerificationRow>('SELECT * FROM seller_email_verifications WHERE email = ?', email))
-      if (isSellerEmailVerificationRequired() && (!verification?.verified_at || verification.expires_at <= new Date().toISOString() || (captchaEnabled() && verification.requester_hash !== captchaBinding(req)))) {
+      if (isSellerEmailVerificationRequired() && (!verification?.verified_at || verification.expires_at <= new Date().toISOString() || (verification.requester_hash !== authBrowserBinding(req) || !authBrowserBinding(req)))) {
         return res.status(400).json({ error: 'The email verification code is invalid or expired.' })
       }
     }
@@ -695,7 +696,6 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     if (verificationPhotos && 'photos' in verificationPhotos) uploadedVerification = await uploadVerificationPhotos(database, verificationPhotos.photos)
     const passwordHash = existingAccount ? null : await bcrypt.hash(password, 12)
     const user = await database.transaction(async () => {
-      await authCaptcha.consumeSignup(req)
       let user: UserRow
       if (existingAccount) {
         const current = await getRow<UserRow>('SELECT * FROM users WHERE id=?',req.user!.id)
@@ -762,11 +762,11 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
   }
 }
 
-app.post('/api/auth/register', authLimiter, authCaptcha.guard('signup'), registerAccount('customer'))
-app.post('/api/auth/register-seller', authLimiter, authCaptcha.guard('signup'), registerAccount('seller'))
-app.post('/api/seller/application', requireAuth, authLimiter, authCaptcha.guard('signup'), registerAccount('seller', true))
+app.post('/api/auth/register', authLimiter, registerAccount('customer'))
+app.post('/api/auth/register-seller', authLimiter, registerAccount('seller'))
+app.post('/api/seller/application', requireAuth, authLimiter, registerAccount('seller', true))
 
-app.post('/api/auth/login', authLimiter, authCaptcha.guard('login',true), async (req, res, next) => {
+app.post('/api/auth/login', authLimiter, async (req, res, next) => {
   try {
     const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
     const password = typeof req.body.password === 'string' ? req.body.password : ''
@@ -1600,11 +1600,11 @@ app.get('/api/buyer/profile', requireAuth, requireRole('customer'), async (req, 
         p.follower_count+(SELECT COUNT(*) FROM store_follows follower WHERE follower.seller_id=p.user_id) AS followerCount
       FROM store_follows f JOIN seller_profiles p ON p.user_id=f.seller_id JOIN users u ON u.id=p.user_id
       WHERE f.user_id=? AND u.suspended=0 AND u.role='seller' ORDER BY f.created_at DESC,p.user_id DESC`,userId),
-    getRow('SELECT user_id FROM buyer_security WHERE user_id=?',userId),
+    getRow('SELECT user_id FROM transaction_security WHERE user_id=?',userId),
     getRows<ProductRow>('SELECT p.* FROM products p JOIN buyer_favorites f ON f.product_id=p.id WHERE f.user_id=? AND EXISTS (SELECT 1 FROM users u WHERE u.id=p.seller_id AND u.suspended=0) ORDER BY f.created_at DESC',userId),
     buyerAddresses(userId),buyerVisits(userId),
   ])
-  return res.json({user:publicUser(req.user!),wallet:wallet||{balanceCents:0},addresses,visits,requests,follows,coins:buyerCoins,favorites:favoriteRows.map(publicProduct),hasTransactionPassword:Boolean(security)})
+  return res.json({user:publicUser(req.user!),wallet:wallet||{balanceCents:0},addresses,visits,requests,follows,coins:buyerCoins,favorites:favoriteRows.map(publicProduct),hasTransactionPin:Boolean(security)})
 })
 
 app.get('/api/buyer/favorites/:id', requireAuth, requireRole('customer'), async (req, res) => {
@@ -1648,15 +1648,7 @@ app.put('/api/buyer/password', authLimiter, requireAuth, requireRole('customer')
   return res.json({ ok: true })
 })
 
-app.put('/api/buyer/transaction-password', authLimiter, requireAuth, requireRole('customer'), async (req, res) => {
-  const login = typeof req.body.loginPassword === 'string' ? req.body.loginPassword : ''
-  const transactionPassword = typeof req.body.transactionPassword === 'string' ? req.body.transactionPassword : ''
-  if (Buffer.byteLength(transactionPassword) < 8 || Buffer.byteLength(transactionPassword) > 72) return res.status(400).json({ error: 'Transaction password must be between 8 and 72 bytes.' })
-  if (!await bcrypt.compare(login, req.user!.password_hash)) return res.status(400).json({ error: 'Login password is incorrect.' })
-  const hash = await bcrypt.hash(transactionPassword, 12)
-  await database.prepare('INSERT INTO buyer_security (user_id, transaction_password_hash) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET transaction_password_hash = excluded.transaction_password_hash').run(req.user!.id, hash)
-  return res.json({ ok: true })
-})
+app.put('/api/buyer/transaction-password', requireAuth, requireRole('customer'), (_req,res)=>res.status(410).json({error:'Use the four-digit transaction PIN settings in Setup.'}))
 
 app.post('/api/buyer/cancellation-request', authLimiter, requireAuth, requireRole('customer'), async (req, res) => {
   const password = typeof req.body.password === 'string' ? req.body.password : ''
@@ -1775,10 +1767,8 @@ app.post('/api/buyer/requests', authLimiter, requireAuth, requireRole('customer'
   if (!['deposit', 'withdrawal'].includes(kind) || !buyerCoins.includes(coin) || (amountCents === null ? kind !== 'deposit' : !Number.isSafeInteger(amountCents) || amountCents < 1 || amountCents > 100000000) || destination.length > 500 || (kind === 'withdrawal' && !destination)) {
     return res.status(400).json({ error: 'Choose a supported coin, a valid amount and a withdrawal destination when required.' })
   }
-  const security = (await getRow<{ transaction_password_hash: string }>('SELECT transaction_password_hash FROM buyer_security WHERE user_id = ?', req.user!.id))
-  if (!security) return res.status(403).json({ error: 'Set a transaction password in Setup before making a request.' })
-  const password = typeof req.body.transactionPassword === 'string' ? req.body.transactionPassword : ''
-  if (!await bcrypt.compare(password, security.transaction_password_hash)) return res.status(403).json({ error: 'Transaction password is incorrect.' })
+  const pinError=await checkTransactionPin(database,req.user!.id,req.body.transactionPin)
+  if(pinError)return res.status(403).json({error:pinError})
   const id = (await database.transaction(async () => {
     const result = (await database.prepare('INSERT INTO buyer_wallet_requests (user_id, kind, coin, amount_cents, destination) VALUES (?, ?, ?, ?, ?)').run(req.user!.id, kind, coin, amountCents, destination))
     await database.prepare(`
@@ -2160,6 +2150,7 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
   return res.json({ events })
 })
 
+registerTransactionPin(app, database, requireAuth, requireRole)
 registerSellerFinance(app, database, requireAuth, requireRole)
 await registerManualOrders(app, database, requireAuth, requireRole)
 await registerMarketing(app, database, requireAuth, requireRole)
