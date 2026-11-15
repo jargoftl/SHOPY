@@ -27,6 +27,7 @@ const SellerRegister = () => {
   const [existingAccount, setExistingAccount] = useState(null)
   const [codeSent, setCodeSent] = useState(false)
   const [developmentCode, setDevelopmentCode] = useState('')
+  const [transactionPin,setTransactionPin]=useState(''),[confirmTransactionPin,setConfirmTransactionPin]=useState(''),[loginPassword,setLoginPassword]=useState('')
   const [optionalSsn, setOptionalSsn] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [hasStarted, setHasStarted] = useState(isPreviewMode)
@@ -116,6 +117,7 @@ const SellerRegister = () => {
   const continueFromAccount = async (event) => {
     event.preventDefault()
     setMessage('')
+    if(!/^\d{4}$/.test(transactionPin)||transactionPin!==confirmTransactionPin){setMessage('Create and confirm the same four-digit transaction PIN.');return}
     if (!/^\+?[1-9]\d{6,14}$/.test(form.phone.replace(/[\s()-]/g, ''))) { setMessage('Enter a valid phone number with country code (7–15 digits).'); return }
     if (!existingAccount && form.password !== form.confirmPassword) {
       setMessage('Those passwords do not match.')
@@ -194,6 +196,7 @@ const SellerRegister = () => {
       const { user } = await apiRequest(existingAccount ? '/api/seller/application' : '/api/auth/register-seller', {
         method: 'POST',
         body: JSON.stringify({
+          transactionPin,confirmTransactionPin,loginPassword,
           fullName: form.fullName,
           email: form.email,
           phone: form.phone,
@@ -281,6 +284,7 @@ const SellerRegister = () => {
           </div>
           </>}
 
+          <fieldset className="rounded-xl border border-gray-200 p-4"><legend className="px-1 text-sm font-semibold">Wallet security</legend><p className="mb-3 text-xs text-gray-500">Create a four-digit PIN for deposits and withdrawals. Keep it separate from your login password.</p><div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Four-digit PIN<PasswordInput value={transactionPin} onChange={e=>setTransactionPin(e.target.value.replace(/\D/g,'').slice(0,4))} inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} required autoComplete="off" className="mt-2 h-11 w-full rounded border px-3"/></label><label className="text-sm">Confirm PIN<PasswordInput value={confirmTransactionPin} onChange={e=>setConfirmTransactionPin(e.target.value.replace(/\D/g,'').slice(0,4))} inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} required autoComplete="off" className="mt-2 h-11 w-full rounded border px-3"/></label></div>{existingAccount&&<label className="mt-3 block text-sm">Current login password<PasswordInput value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} autoComplete="current-password" required className="mt-2 h-11 w-full rounded border px-3"/></label>}</fieldset>
           {codeSent && <label className="block text-sm font-medium">Email verification code
             <input name="verificationCode" value={form.verificationCode} onChange={updateForm} type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="6-digit email code" />
           </label>}

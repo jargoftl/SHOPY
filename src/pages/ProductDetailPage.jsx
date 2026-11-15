@@ -1,7 +1,8 @@
+import ReviewsPanel from '../components/ReviewsPanel.jsx'
 import SiteName from '../components/SiteName.jsx'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Eye, Heart, ShoppingBag, Star, Users } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Eye, Heart, ShoppingCart, Star, Users } from 'lucide-react'
 import { useCart } from '../context/CartContext.jsx'
 import { apiRequest } from '../lib/api.js'
 import ProductCard from '../components/store/ProductCard.jsx'
@@ -139,7 +140,7 @@ const ProductDetailPage = () => {
               <div className="flex items-center gap-1" aria-label={`${product.rating.toFixed(1)} out of 5 stars`}>
                 {Array.from({ length: 5 }, (_, index) => <Star key={index} size={15} className={index < Math.round(product.rating) ? 'fill-[#777777] text-[#777777]' : 'text-[#aaa]'} />)}
               </div>
-              <span className="text-xs text-[#666]">{product.rating > 0 ? `${product.rating.toFixed(1)} rating` : 'New product'}</span>
+              <span className="text-xs text-[#666]">{product.rating > 0 ? `${product.rating.toFixed(1)} rating` : 'New product'}</span><a href="#reviews" className="inline-flex min-h-11 items-center px-2 text-xs underline">Rate & review</a>
               <button type="button" onClick={toggleFavorite} aria-pressed={isFavorite} aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'} className="ml-auto inline-flex items-center gap-1 text-xs text-[#555]"><Heart size={16} className={isFavorite ? 'fill-current' : ''} /> {isFavorite ? 'Favorited' : 'Favorite'}</button>
             </div>
 
@@ -168,7 +169,7 @@ const ProductDetailPage = () => {
             </fieldset>}
 
             <div className="mt-3 grid grid-cols-2 gap-3">
-              <button type="button" onClick={addSelectedToCart} className="cart-add-button"><ShoppingBag size={16} /> Add to cart</button>
+              <button type="button" onClick={addSelectedToCart} className="cart-add-button"><ShoppingCart size={16} /> Add to cart</button>
               <button type="button" onClick={purchaseNow} className="flex min-h-12 items-center justify-center gap-2 bg-[#111111] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#cccccc] hover:text-[#111111] sm:text-sm">Purchase now</button>
             </div>
             {followMessage && <p role="status" className="mt-3 text-xs text-[#555]">{followMessage} {followMessage.includes('Sign in') && <Link to="/login" className="font-semibold underline">Log in</Link>}</p>}
@@ -191,7 +192,8 @@ const ProductDetailPage = () => {
           </aside>
         </div>
         {relatedProducts.length > 0 && <section aria-labelledby="related-products-heading" className="mt-14 border-t border-[#eee] pt-8"><div className="flex items-end justify-between gap-4"><div><p className="text-xs uppercase tracking-[0.16em] text-[#111111]">Discover more</p><h2 id="related-products-heading" className="mt-2 text-2xl font-semibold">You may also like</h2><p className="mt-2 text-sm text-[#555555]">More products in {product.category.split(' / ')[0]}.</p></div><Link to="/products" className="text-sm underline">Browse all</Link></div><div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{relatedProducts.map((item) => <ProductCard key={item.id} product={item} />)}</div></section>}
-      </main>
+        <ReviewsPanel kind="product" id={product.id}/>
+    </main>
     </div>
   )
 }

@@ -11,6 +11,7 @@ export default function WarehouseBrowser({ dark = false, reloadKey = 0, onAdd, o
   const [selected,setSelected]=useState(new Map()),[bulkProducts,setBulkProducts]=useState(null),[selectingAll,setSelectingAll]=useState(false)
   const publishedProduct=useRef(null)
   const [publishingProduct,setPublishingProduct]=useState(null)
+  const [shuffleSeed,setShuffleSeed]=useState(()=>crypto.randomUUID())
   const [category, setCategory] = useState('')
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
@@ -26,12 +27,12 @@ export default function WarehouseBrowser({ dark = false, reloadKey = 0, onAdd, o
   useEffect(() => {
     let active = true
     setLoading(true); setError('')
-    apiRequest(`/api/warehouse?${new URLSearchParams({ page: String(page), q: query, category })}`)
+    apiRequest(`/api/warehouse?${new URLSearchParams({ page: String(page), q: query, category,...(onAdd?{available:'1',seed:shuffleSeed}:{}) })}`)
       .then((result) => { if (active) setData(result) })
       .catch((failure) => { if (active) setError(failure.message) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [page, query, category, reloadKey, refresh])
+  }, [page, query, category, reloadKey, refresh,shuffleSeed,Boolean(onAdd)])
   useEffect(() => {
     if (!detail) return
     const close = (event) => { if (event.key === 'Escape') setDetail(null) }
@@ -45,7 +46,8 @@ export default function WarehouseBrowser({ dark = false, reloadKey = 0, onAdd, o
   }, [data])
   const eligible=data.products.filter(p=>!p.storeProductId),allSelected=eligible.length>0&&eligible.every(p=>selected.has(p.id))
   const toggle=product=>setSelected(current=>{const next=new Map(current);if(next.has(product.id))next.delete(product.id);else next.set(product.id,product);return next})
-  const selectAll=async()=>{setSelectingAll(true);setError('');try{const items=new Map();for(let current=1;current<=Math.max(1,Math.ceil(data.total/data.pageSize));current++){const result=await apiRequest(`/api/warehouse?${new URLSearchParams({page:String(current),q:query,category})}`);for(const p of result.products)if(!p.storeProductId)items.set(p.id,p)}setSelected(items)}catch(e){setError(e.message)}finally{setSelectingAll(false)}}
+  const selectAll=async()=>{setSelectingAll(true);setError('');try{const items=new Map();for(let current=1;current<=Math.max(1,Math.ceil(data.total/data.pageSize));current++){const result=await apiRequest(`/api/warehouse?${new URLSearchParams({page:String(current),q:query,category,...(onAdd?{available:'1',seed:shuffleSeed}:{})})}`);for(const p of result.products)if(!p.storeProductId)items.set(p.id,p)}setSelected(items)}catch(e){setError(e.message)}finally{setSelectingAll(false)}}
+  const reshuffle=()=>{setSelected(new Map());setPage(1);setShuffleSeed(crypto.randomUUID());setRefresh(n=>n+1)}
   const browse = (value) => { setCategory(value); setPage(1); onCategoryChange?.(value) }
   const action = async (callback, product, reload = false) => {
     setBusy(product.id); setError('')
@@ -88,8 +90,8 @@ export default function WarehouseBrowser({ dark = false, reloadKey = 0, onAdd, o
     </div>
     {!loading && !data.products.length && <div className={`py-12 text-center ${muted}`}><Package className="mx-auto mb-3" /><p>No products match this category or search.</p></div>}
     <nav aria-label="Warehouse pages" className="mt-6 flex items-center justify-center gap-4 text-sm"><button disabled={loading || page <= 1} onClick={() => setPage((value) => value - 1)} className="flex min-h-10 items-center gap-1 rounded-lg border px-3 disabled:opacity-40"><ChevronLeft size={16} /> Previous</button><span>Page {page} of {Math.max(1, Math.ceil(data.total / data.pageSize))}</span><button disabled={loading || page * data.pageSize >= data.total} onClick={() => setPage((value) => value + 1)} className="flex min-h-10 items-center gap-1 rounded-lg border px-3 disabled:opacity-40">Next <ChevronRight size={16} /></button></nav>
-    {bulkProducts&&<WarehouseBulkModal products={bulkProducts} onAdd={onAdd} onImported={(source,created)=>{publishedProduct.current=created;setSelected(current=>{const next=new Map(current);next.delete(source.id);return next});setData(current=>({...current,products:current.products.map(p=>p.id===source.id?{...p,storeProductId:created.id}:p)}))}} onClose={()=>{setBulkProducts(null);if(publishedProduct.current){const created=publishedProduct.current;publishedProduct.current=null;onPublished?.(created)}}}/>}
-    {publishingProduct && <WarehousePublishModal product={publishingProduct} onClose={()=>{setPublishingProduct(null);if(publishedProduct.current){const created=publishedProduct.current;publishedProduct.current=null;onPublished?.(created)}}} onConfirm={async(product,pricing)=>{
+    {bulkProducts&&<WarehouseBulkModal products={bulkProducts} onAdd={onAdd} onImported={(source,created)=>{publishedProduct.current=created;setSelected(current=>{const next=new Map(current);next.delete(source.id);return next});setData(current=>({...current,products:current.products.map(p=>p.id===source.id?{...p,storeProductId:created.id}:p)}))}} onClose={()=>{setBulkProducts(null);if(publishedProduct.current){reshuffle()}if(publishedProduct.current){const created=publishedProduct.current;publishedProduct.current=null;onPublished?.(created)}}}/>}
+    {publishingProduct && <WarehousePublishModal product={publishingProduct} onClose={()=>{setPublishingProduct(null);if(publishedProduct.current){reshuffle()}if(publishedProduct.current){const created=publishedProduct.current;publishedProduct.current=null;onPublished?.(created)}}} onConfirm={async(product,pricing)=>{
       const created=await onAdd(product,pricing)
       publishedProduct.current=created
       setSelected(current=>{const next=new Map(current);next.delete(product.id);return next})

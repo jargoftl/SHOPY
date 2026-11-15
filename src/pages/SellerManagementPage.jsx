@@ -1,3 +1,4 @@
+import ReviewsPanel from '../components/ReviewsPanel.jsx'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import SellerProductTabs from '../components/SellerProductTabs.jsx'
@@ -11,12 +12,13 @@ export default function SellerManagementPage({ view }) {
   const navigate = useNavigate()
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
+  const [sellerId,setSellerId]=useState(null)
   const [authorized, setAuthorized] = useState(false)
   useEffect(() => {
     let active = true
     apiRequest('/api/auth/me').then(async ({ user }) => {
       if (!['seller','admin'].includes(user.role)) throw new Error('A seller account is required for this workspace.')
-      if (active) setAuthorized(true)
+      if (active) {setAuthorized(true);setSellerId(user.id)}
     }).catch((error) => { if (active) { if (error.status === 401) navigate('/seller/login', { replace: true }); else setMessage(error.message) } }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [navigate, view])
@@ -32,7 +34,7 @@ export default function SellerManagementPage({ view }) {
     {loading ? <p className="mt-5">Loading workspace…</p> : authorized ? <div className="mt-6">
       {view === 'warehouse' && <><h2 className="text-xl font-semibold">Product warehouse</h2><p className="mt-2 text-sm text-[#555555]">Browse a category, check the product details, and add it to your store. Its category and subcategory are copied automatically.</p><div className="mt-4 flex gap-5 text-xs text-[#555555]"><Link to="/seller/products" className="underline">Open Store products</Link><Link to="/" className="underline">View marketplace homepage</Link></div><WarehouseBrowser onAdd={add} /></>}
       {view === 'refunds' && <RefundList />}
-      {view === 'reviews' && <section className="rounded-xl border border-[#e5e5e5] bg-white p-6"><h2 className="text-xl font-semibold">Product reviews</h2><p className="mt-3 text-sm text-[#555555]">Buyer review submissions are not enabled yet. There are no reviews to display.</p></section>}
+      {view === 'reviews' && sellerId && <ReviewsPanel kind="store" id={sellerId}/>}
     </div> : null}
   </div></main>
 }

@@ -233,7 +233,7 @@ const SellerPage = () => {
       <div className="mx-auto max-w-[1440px] px-5 pt-6 md:px-10"><SellerProductTabs/></div>
       <section className="mx-auto max-w-[1440px] px-5 pt-8 md:px-10">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-widest text-[#555555]">Ready-to-add catalog</p><h2 className="mt-2 text-2xl font-semibold">Choose from your warehouse</h2><p className="mt-2 text-sm text-[#555555]">Choose a product, review its retail and wholesale prices, then confirm to publish. Its category and details are copied automatically.</p></div><button onClick={() => setShowWarehouse((value) => !value)} className="rounded-full border border-[#cccccc] bg-white px-5 py-3 text-sm">{showWarehouse ? 'Hide warehouse' : 'Browse warehouse'}</button></div>
-        {showWarehouse && <WarehouseBrowser onPublished={product=>{setShowWarehouse(false);requestAnimationFrame(()=>document.getElementById(`seller-product-${product.id}`)?.scrollIntoView({behavior:'smooth',block:'center'}))}} onAdd={async(selected,pricing)=>{
+        {showWarehouse && <WarehouseBrowser onPublished={()=>setMessage('Products added. Your warehouse has shuffled fresh items to choose from.')} onAdd={async(selected,pricing)=>{
           const product=await publishWarehouseProduct(selected,pricing)
           catalogVersion.current+=1
           setProducts(current=>[product,...current.filter(item=>item.id!==product.id)])

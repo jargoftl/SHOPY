@@ -1,3 +1,4 @@
+import ReviewsPanel from '../components/ReviewsPanel.jsx'
 import { notifyFollowedStoresUpdated } from '../lib/buyerEvents.js'
 import SiteName from '../components/SiteName.jsx'
 import { useEffect, useState } from 'react'
@@ -95,7 +96,7 @@ const PartnerStorePage = () => {
         <h1 className="mt-3 text-3xl font-semibold">Store unavailable</h1>
         <p className="mt-3 text-sm text-[#555555]">{error || 'This store may have been removed.'}</p>
         <Link to="/" className="mt-7 inline-flex border border-[#cccccc] px-4 py-3 text-sm font-medium">Back to <SiteName /></Link>
-      </main>
+    </main>
     )
   }
 
@@ -127,6 +128,7 @@ const PartnerStorePage = () => {
             <span>{Number(store.visitorCount || 0).toLocaleString()} visits</span>
             <button type="button" disabled={followBusy} onClick={toggleFollow} aria-pressed={isFollowing} className={`inline-flex min-h-9 items-center gap-2 border px-3 text-xs font-semibold ${isFollowing ? 'border-[#e5e5e5] bg-[#e5e5e5] text-[#111111]' : 'border-white/60 text-white hover:bg-white hover:text-[#111111]'}`}><Heart size={14} className={isFollowing ? 'fill-current' : ''} />{followBusy?'Updating…':isFollowing ? 'Following · Unfollow' : 'Follow store'}</button>
           </div>
+          <a href="#reviews" className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-white/50 px-4 text-sm text-white">Rate & review this store</a>
           {followMessage && <p role="status" className="mt-2 text-xs text-white">{followMessage} {followMessage.includes('Sign in') && <Link to="/login" className="underline">Log in</Link>}</p>}
         </div>
       </section>
@@ -183,6 +185,7 @@ const PartnerStorePage = () => {
           </div>
         </div>
       </section>
+      <ReviewsPanel kind="store" id={store.id}/>
     </main>
   )
 }

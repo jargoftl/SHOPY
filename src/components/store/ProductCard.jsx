@@ -1,3 +1,4 @@
+import {ShoppingCart,Star} from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { useCart } from '../../context/CartContext.jsx'
@@ -34,8 +35,9 @@ const ProductCard = ({ product }) => {
           </div>
         </div>
       </Link>
+      <Link to={`/products/${product.id}#reviews`} className="mb-3 inline-flex min-h-10 items-center gap-1 text-xs underline"><Star size={14}/>Rate & review</Link>
       <button type="button" onClick={() => addItem(product)} className="cart-add-button mt-auto w-full">
-        Add to cart
+        <ShoppingCart size={17} aria-hidden="true"/> Add to cart
       </button>
     </motion.article>
   )

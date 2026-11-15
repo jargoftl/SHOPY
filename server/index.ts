@@ -1,3 +1,4 @@
+import {registerReviews} from './reviews.ts'
 import 'dotenv/config'
 import express, { type NextFunction, type Request, type Response, type RequestHandler } from 'express'
 import { Database } from './database.ts'
@@ -15,7 +16,7 @@ import { warehousePricing } from './warehousePricing.ts'
 import { registerMarketing } from './marketing.ts'
 import {registerSellerAdminFunding} from './sellerAdminFunding.ts'
 import {registerSellerDisplayStats} from './sellerDisplayStats.ts'
-import { registerTransactionPin, checkTransactionPin } from './transactionPin.ts'
+import { registerTransactionPin, checkTransactionPin, validPin } from './transactionPin.ts'
 import { registerSellerFinance } from './sellerFinance.ts'
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
@@ -647,6 +648,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     const email = existingAccount ? req.user!.email : typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
     let phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : ''
     const password = typeof req.body.password === 'string' ? req.body.password : ''
+    let pinHash:string|null=null
     let ssnLast4: string | null = null
     let sellerProfile = null
     let logoUpload: ProductImageUpload | undefined
@@ -664,6 +666,9 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
       }
     }
     if (role === 'seller') {
+      if(!validPin(req.body.transactionPin)||req.body.transactionPin!==req.body.confirmTransactionPin)return res.status(400).json({error:'Create and confirm a four-digit transaction PIN.'})
+      if(existingAccount&&(typeof req.body.loginPassword!=='string'||!await bcrypt.compare(req.body.loginPassword,req.user!.password_hash)))return res.status(403).json({error:'Confirm your current login password to set the transaction PIN.'})
+      pinHash=await bcrypt.hash(req.body.transactionPin,12)
       const profile = {
         storeName: typeof req.body.storeName === 'string' ? req.body.storeName.trim() : '',
         storeDescription: typeof req.body.storeDescription === 'string' ? req.body.storeDescription.trim() : '',
@@ -718,6 +723,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
       `).run(fullName, email, phone || null, passwordHash, role === 'seller' ? 'customer' : role, role === 'seller' ? 'pending' : 'none'))
       user = (await getRow<UserRow>('SELECT * FROM users WHERE id = ?', result.lastInsertRowid))!
       }
+      if(pinHash)await database.prepare('INSERT INTO transaction_security(user_id,pin_hash) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET pin_hash=excluded.pin_hash,failed_attempts=0,locked_until=NULL').run(user.id,pinHash)
       if (role === 'seller') await database.prepare('INSERT OR IGNORE INTO buyer_wallets (user_id, balance_cents) VALUES (?, 0)').run(user.id)
       if (role === 'customer') {
         await database.prepare('INSERT INTO buyer_wallets (user_id, balance_cents) VALUES (?, 0)').run(user.id)
@@ -1265,12 +1271,14 @@ app.get('/api/warehouse', requireAuth, requireRole('seller', 'admin'), async (re
   const pageSize = 24
   const search = String(req.query.q || '').trim().slice(0, 200)
   const category = String(req.query.category || '').trim().slice(0, 200)
+  const shuffled=req.query.available==='1'
+  const seed=String(req.query.seed||'').slice(0,80)
   const where = `WHERE (? = '' OR position(lower(?) in lower(product_name || ' ' || category_path)) > 0)
-    AND (? = '' OR category_path = ? OR position(? || ' / ' in category_path) = 1)`
-  const params = [search, search, category, category, category]
+    AND (? = '' OR category_path = ? OR position(? || ' / ' in category_path) = 1) ${shuffled?'AND NOT EXISTS (SELECT 1 FROM seller_warehouse_imports copies WHERE copies.warehouse_id=warehouse_products.id AND copies.seller_id=?)':''}`
+  const params = shuffled?[search, search, category, category, category,req.user!.id]:[search, search, category, category, category]
   const [totalRow, rows, categories, completeRow, importedRow] = await Promise.all([
     getRow<{count:number}>(`SELECT COUNT(*) AS count FROM warehouse_products ${where}`, ...params),
-    getRows<{id:number,public_id:string,product_json:string,created_at:string}>(`SELECT id,public_id,(product_json::jsonb - 'sourceDetails')::text AS product_json,created_at FROM warehouse_products ${where} ORDER BY id DESC LIMIT ? OFFSET ?`, ...params,pageSize,(page-1)*pageSize),
+    getRows<{id:number,public_id:string,product_json:string,created_at:string}>(`SELECT id,public_id,(product_json::jsonb - 'sourceDetails')::text AS product_json,created_at FROM warehouse_products ${where} ORDER BY ${shuffled?"md5(id::text || ?)":'id DESC'} LIMIT ? OFFSET ?`, ...params,...(shuffled?[seed]:[]),pageSize,(page-1)*pageSize),
     getRows<{category:string,count:number}>(`SELECT category_path AS category,COUNT(*) AS count FROM warehouse_products GROUP BY category_path ORDER BY category`),
     getRow('SELECT 1 FROM schema_migrations WHERE name=?','shopyggful_catalog_2026_11_14_v1'),
     getRow<{count:number}>("SELECT COUNT(*) AS count FROM warehouse_products WHERE source_host='shopyggful.shop'"),
@@ -2188,6 +2196,7 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
   return res.json({ events })
 })
 
+registerReviews(app,database,requireAuth)
 registerSellerAdminFunding(app,database,requireAuth,requireRole)
 registerSellerDisplayStats(app,database,requireAuth,requireRole)
 registerTransactionPin(app, database, requireAuth, requireRole)

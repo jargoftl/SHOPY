@@ -125,3 +125,13 @@ The buyer tracking panel displays a timed three-day estimate (preparation during
 ### Bulk warehouse publishing
 
 Seller warehouse cards have selection checkboxes. Select all on this page affects the visible page; Select all matching products reads all pages for the current search/category. Already-listed products are excluded. Selection persists while browsing pages. The bulk confirmation shows combined estimated prices and publishes through the existing authorized quote/import flow, checking each current price. Imports run sequentially to limit load. Successful items update the seller catalog immediately; failed items remain retryable without repeating successful imports. Keep the page open while publishing.
+
+### Mobile navigation, recommendations and public reviews
+
+Small screens have readable 16px form inputs, larger touch targets, single-column forms, responsive dialogs, and a collapsible seller navigation menu. Cart buttons include a cart icon. Phone checks cover 320px and 390px viewports.
+
+Seller warehouse requests use `available=1` plus a random seed. Already-imported products are excluded by owner. The seed gives stable pages during multi-selection; after publishing, a new seed refreshes suggestions within the current category/search without leaving the warehouse. If all matching products are already imported, the list is empty.
+
+Public product and store reviews allow one review per buyer account. Repeat submissions update that review; ratings are 1–5 and text is limited to 2,000 characters. Paid purchases receive a verified-purchase label. Administrator feedback is labeled and excluded from customer averages. Admin deletion hides the review but retains moderator/time metadata; removed reviews cannot be republished by their author. Approved sellers’ admin detail pages include store review moderation.
+
+New seller applications require a matching four-digit transaction PIN, stored only as a bcrypt hash in the existing wallet-security table. Applying from an existing buyer account also requires the current login password before setting the PIN. Existing account PIN enforcement, reset and lockout rules remain in effect. Government-ID verification remains required. SSN card photos and full SSNs were not added; the optional suffix reference is not a verified SSN check. A dedicated verification provider is needed for that service.

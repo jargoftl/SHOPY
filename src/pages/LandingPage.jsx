@@ -18,7 +18,7 @@ import {
   Languages,
   Menu,
   Search,
-  ShoppingBag,
+  ShoppingCart,
   X,
 } from 'lucide-react'
 
@@ -399,7 +399,7 @@ const LandingPage = () => {
               </select>
             </label>
             <Link to="/cart" aria-label={`${text.bag}, ${itemCount} items`} className="relative grid size-10 place-items-center">
-              <ShoppingBag size={20} strokeWidth={1.6} />
+              <ShoppingCart size={20} strokeWidth={1.6} />
               <span className="absolute right-0 top-1 text-[10px]">{itemCount}</span>
             </Link>
           </div>
