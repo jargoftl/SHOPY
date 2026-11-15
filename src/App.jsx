@@ -11,6 +11,7 @@ import SellerPage from './pages/SellerPage.jsx'
 import SellerLogin from './pages/logings/SellerLogin.jsx'
 import SellerRegister from './pages/logings/SellerRegister.jsx'
 import ProductsPage from './pages/ProductsPage.jsx'
+import SellerApplicationPage from './pages/SellerApplicationPage.jsx'
 import SellerMarketingPage from './pages/SellerMarketingPage.jsx'
 import CartPage from './pages/CartPage.jsx'
 import BillingPage from './pages/BillingPage.jsx'
@@ -250,6 +251,7 @@ const AnimatedRoutes = () => {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/profile" element={<BuyerProfilePage />} />
             <Route path="/profile/:section" element={<BuyerProfilePage />} />
+            <Route path="/seller/application" element={<SellerApplicationPage />} />
             <Route path="/seller/login" element={<SellerLogin />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/users/:userId" element={<AdminUserDetailsPage />} />

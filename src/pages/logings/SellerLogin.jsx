@@ -14,6 +14,7 @@ const SellerLogin = () => {
     apiRequest('/api/auth/me', { background: true })
       .then(({ user }) => {
         if (active && ['seller', 'admin'].includes(user.role)) navigate(user.role === 'admin' ? '/admin' : '/seller', { replace: true })
+        else if (active && ['pending','rejected','needs_changes'].includes(user.sellerStatus)) navigate('/seller/application', {replace:true})
       })
       .catch((error) => { if (active && error.status !== 401) setMessage(error.message) })
       .finally(() => { if (active) setIsCheckingSession(false) })
@@ -31,6 +32,7 @@ const SellerLogin = () => {
         method: 'POST',
         body: JSON.stringify({ email: formData.get('email'), password: formData.get('password'), loginType: 'seller' }),
       })
+      if (['pending','rejected','needs_changes'].includes(user.sellerStatus)) { navigate('/seller/application',{replace:true}); return }
       if (!['seller', 'admin'].includes(user.role)) {
         setMessage('This account is not a seller account. Create a seller account or use customer login.')
         return

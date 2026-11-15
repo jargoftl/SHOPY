@@ -42,6 +42,7 @@ const SellerPage = () => {
 
     apiRequest('/api/auth/me')
       .then(async ({ user: account }) => {
+        if (['pending','rejected','needs_changes'].includes(account.sellerStatus) && account.role==='customer') { navigate('/seller/application',{replace:true}); return }
         if (!['seller', 'admin'].includes(account.role)) {
           if (isCurrent) {
             setMessage('Seller access is not enabled for this account. Ask the store admin to promote your account.')

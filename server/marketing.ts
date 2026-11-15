@@ -155,7 +155,7 @@ export async function registerMarketing(app: Express, db: Database, auth: Reques
       SELECT p.id,p.name,p.category,p.price,p.compare_at_price AS "compareAtPrice",p.description,p.image_url AS "imageUrl",p.seller_id AS "sellerId",
         ROW_NUMBER() OVER(PARTITION BY m.seller_id ORDER BY p.id DESC) AS position,(a.plan_json::jsonb->>'productLimit')::integer AS slots
       FROM marketing_promotions m JOIN products p ON p.id=m.product_id JOIN active a ON a.seller_id=m.seller_id JOIN users u ON u.id=p.seller_id
-      WHERE p.is_published=1 AND p.is_store_published=1 AND u.suspended=0
+      WHERE p.is_published=1 AND p.is_store_published=1 AND u.suspended=0 AND u.role IN ('seller','admin')
     ) SELECT id,name,category,price,"compareAtPrice",description,"imageUrl","sellerId" FROM selected WHERE position<=slots ORDER BY id DESC LIMIT 30`, [now()])
     res.json({ products: products.rows })
   })

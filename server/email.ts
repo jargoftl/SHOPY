@@ -36,6 +36,7 @@ const transporter: Transporter | null = smtpConfigured
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT),
     secure: process.env.SMTP_SECURE === 'true',
+    connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASSWORD,
@@ -127,4 +128,11 @@ export const sendAuthNotifications = async (user: EmailUser, event: Notification
   ])
 
   return { userEmailSent, adminEmailSent }
+}
+
+export const sendSellerApprovalEmail = (to: string, name: string, siteName: string): Promise<boolean> => {
+  const configured = process.env.APP_URL || 'https://shopystoretech.netlify.app'
+  let loginUrl = ''
+  try { const url = new URL('/seller/login', configured); if (url.protocol === 'https:' || (url.protocol === 'http:' && url.hostname === 'localhost')) loginUrl = url.toString() } catch { /* Email still explains how to sign in. */ }
+  return sendEmail({ to, subject: `Your ${siteName} seller application is approved`, text: `Hi ${name},\n\nCongratulations! Your application to become a seller on ${siteName} has been approved by our administrator.\n\nYou can now sign in and manage your store${loginUrl ? `: ${loginUrl}` : '.'}\n\nWelcome aboard!\nThe ${siteName} team` })
 }

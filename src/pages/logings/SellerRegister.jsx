@@ -1,7 +1,8 @@
 import SiteName from '../../components/SiteName.jsx'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AuthLayout from '../../components/AuthLayout.jsx'
+import VerificationPhotoFields from '../../components/VerificationPhotoFields.jsx'
 import { apiRequest } from '../../lib/api.js'
 
 const steps = ['Account', 'Workspace', 'Profile']
@@ -17,9 +18,13 @@ const SellerRegister = () => {
   const isPreviewMode = import.meta.env.DEV && ['workspace', 'profile'].includes(previewStep)
   const [step, setStep] = useState(() => previewStep === 'profile' ? 2 : previewStep === 'workspace' ? 1 : 0)
   const [form, setForm] = useState(initialForm)
+  const [existingAccount, setExistingAccount] = useState(null)
   const [codeSent, setCodeSent] = useState(false)
   const [developmentCode, setDevelopmentCode] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [verificationPhotos, setVerificationPhotos] = useState({selfie:null,id_front:null,id_back:null})
+  const [verificationConsent, setVerificationConsent] = useState(false)
+  const [isReadingVerification, setIsReadingVerification] = useState(false)
   const [message, setMessage] = useState('')
   const [isSendingCode, setIsSendingCode] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -27,6 +32,18 @@ const SellerRegister = () => {
   const [isReadingLogo, setIsReadingLogo] = useState(false)
   const logoInput = useRef(null)
   const logoReadVersion = useRef(0)
+
+  useEffect(() => {
+    if (isPreviewMode) return
+    let active = true
+    apiRequest('/api/auth/me', {background:true}).then(({user}) => {
+      if (!active) return
+      if (['seller','admin'].includes(user.role)) { navigate(user.role==='admin'?'/admin':'/seller',{replace:true}); return }
+      if (user.sellerStatus && user.sellerStatus!=='none') { navigate('/seller/application',{replace:true}); return }
+      setExistingAccount(user);setForm(current=>({...current,fullName:user.fullName,email:user.email,phone:user.phone||''}))
+    }).catch(()=>{})
+    return()=>{active=false}
+  }, [isPreviewMode,navigate])
 
   const clearLogoUpload = () => {
     logoReadVersion.current += 1
@@ -83,7 +100,8 @@ const SellerRegister = () => {
   const continueFromAccount = async (event) => {
     event.preventDefault()
     setMessage('')
-    if (form.password !== form.confirmPassword) {
+    if (!/^\+?[1-9]\d{6,14}$/.test(form.phone.replace(/[\s()-]/g, ''))) { setMessage('Enter a valid phone number with country code (7–15 digits).'); return }
+    if (!existingAccount && form.password !== form.confirmPassword) {
       setMessage('Those passwords do not match.')
       return
     }
@@ -141,6 +159,8 @@ const SellerRegister = () => {
       setMessage('Preview only. Return to the registration flow to create a seller account.')
       return
     }
+    if (isReadingVerification) return
+    if (!verificationConsent || Object.values(verificationPhotos).some(value=>!value)) { setMessage('Upload all three verification photos and agree to private review.'); return }
     if (!acceptedTerms) {
       setMessage('Please agree to the seller terms to continue.')
       return
@@ -149,12 +169,15 @@ const SellerRegister = () => {
     setIsSubmitting(true)
     setMessage('')
     try {
-      const { user, emailNotifications } = await apiRequest('/api/auth/register-seller', {
+      const policy = await apiRequest('/api/seller/application-policy').catch(()=>null)
+      if (!policy?.requiresAdminApproval || !policy?.requiresIdentityPhotos) throw new Error('Seller verification is being updated. Please refresh this page and try again shortly.')
+      const { user } = await apiRequest(existingAccount ? '/api/seller/application' : '/api/auth/register-seller', {
         method: 'POST',
         body: JSON.stringify({
           fullName: form.fullName,
           email: form.email,
           phone: form.phone,
+          verificationPhotos, verificationConsent,
           password: form.password,
           storeName: form.storeName,
           storeDescription: form.storeDescription,
@@ -168,15 +191,9 @@ const SellerRegister = () => {
         }),
       })
 
-      navigate('/seller', {
-        replace: true,
-        state: {
-          welcome: `Welcome, ${user.fullName}. Seller account #${user.id} is ready.${emailNotifications?.userEmailSent ? ' A confirmation email was sent.' : ''}`,
-        },
-      })
+      navigate('/seller/application', { replace: true, state: { welcome: `Your application was submitted, ${user.fullName}. Seller access is pending administrator approval.` } })
     } catch (error) {
       setMessage(error.message)
-      setStep(0)
     } finally {
       setIsSubmitting(false)
     }
@@ -214,20 +231,22 @@ const SellerRegister = () => {
               <input name="fullName" value={form.fullName} onChange={updateForm} autoComplete="name" maxLength={100} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Your name" />
             </label>
             <label className="block text-sm font-medium">Phone
-              <input name="phone" value={form.phone} onChange={updateForm} type="tel" autoComplete="tel" maxLength={30} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Phone number" />
+              <input name="phone" value={form.phone} onChange={updateForm} type="tel" autoComplete="tel" maxLength={30} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="+234 801 234 5678" />
             </label>
           </div>
           <label className="block text-sm font-medium">Email address
-            <input name="email" value={form.email} onChange={updateForm} type="email" autoComplete="email" maxLength={254} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="you@example.com" />
+            <input name="email" readOnly={Boolean(existingAccount)} value={form.email} onChange={updateForm} type="email" autoComplete="email" maxLength={254} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="you@example.com" />
           </label>
-          <div className="grid grid-cols-2 gap-3">
+          {existingAccount && <p className="rounded-lg bg-[#edf3e7] p-3 text-xs leading-6 text-[#5e7850]">You’re applying with your signed-in account. Your current password and purchases stay the same.</p>}
+          {!existingAccount && <>          <div className="grid grid-cols-2 gap-3">
             <label className="block text-sm font-medium">Password
-              <input name="password" value={form.password} onChange={updateForm} type="text" autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Create password" />
+              <input name="password" value={form.password} onChange={updateForm} type="password" autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Create password" />
             </label>
             <label className="block text-sm font-medium">Confirm password
-              <input name="confirmPassword" value={form.confirmPassword} onChange={updateForm} type="text" autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Type again" />
+              <input name="confirmPassword" value={form.confirmPassword} onChange={updateForm} type="password" autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Type again" />
             </label>
           </div>
+          </>}
           {codeSent && <label className="block text-sm font-medium">Email verification code
             <input name="verificationCode" value={form.verificationCode} onChange={updateForm} type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="6-digit email code" />
           </label>}
@@ -272,13 +291,12 @@ const SellerRegister = () => {
 
       {step === 2 && (
         <form className="space-y-4" onSubmit={finishRegistration}>
-          <p className="text-sm leading-6 text-[#666]">Add your contact location. Use sample images only; this project does not upload or save identity documents.</p>
+          <p className="text-sm leading-6 text-[#666]">Add your contact location and verification photos. Your administrator must approve your application before seller access is enabled.</p>
           <label className="block text-sm font-medium">Country
             <select name="country" value={form.country} onChange={updateForm} required className="mt-2 h-11 w-full border border-[#d9dce2] bg-white px-3 outline-none focus:border-black">
               <option value="">Select country</option><option>United States</option><option>Canada</option><option>United Kingdom</option><option>Nigeria</option><option>Germany</option><option>Japan</option><option>Other</option>
             </select>
           </label>
-          {form.country === 'United States' && <p className="border-l-2 border-[#b78034] pl-3 text-xs leading-5 text-[#666]">SSNs are not collected in this school demo. Do not enter a real SSN.</p>}
           <label className="block text-sm font-medium">Home or business address
             <input name="address" value={form.address} onChange={updateForm} maxLength={200} required autoComplete="street-address" className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Street address" />
           </label>
@@ -294,22 +312,14 @@ const SellerRegister = () => {
             <input name="postalCode" value={form.postalCode} onChange={updateForm} maxLength={20} required autoComplete="postal-code" className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" />
           </label>
 
-          <details className="border border-[#e4e4e4] p-3">
-            <summary className="cursor-pointer text-sm font-semibold">Demo verification examples</summary>
-            <p className="mt-2 text-[11px] leading-5 text-[#777]">These are static examples only. This school project does not accept or transmit selfie, ID, driver-license, or SSN data.</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="grid aspect-[4/3] place-items-center border border-dashed border-[#bbb] bg-[#fafafa] p-3 text-center text-xs text-[#666]">Profile photo<br />example only</div>
-              <div className="grid aspect-[4/3] place-items-center border border-dashed border-[#bbb] bg-[#fafafa] p-3 text-center text-xs text-[#666]">ID front<br />example only</div>
-              <div className="grid aspect-[4/3] place-items-center border border-dashed border-[#bbb] bg-[#fafafa] p-3 text-center text-xs text-[#666]">ID back<br />example only</div>
-            </div>
-          </details>
+          <VerificationPhotoFields photos={verificationPhotos} setPhotos={setVerificationPhotos} consent={verificationConsent} setConsent={setVerificationConsent} onError={setMessage} onBusyChange={setIsReadingVerification} />
 
           <label className="flex items-start gap-2 text-xs leading-5 text-[#555]">
             <input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} className="mt-1 accent-black" />
-            I agree to the seller terms and understand this demo does not collect SSNs or transmit identity-document files.
+            I agree to the seller terms and confirm these details belong to me. I understand seller access begins only after administrator approval.
           </label>
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
-          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isSubmitting || isReadingLogo} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">{isSubmitting ? 'Submitting…' : 'Submit seller profile'}</button></div>
+          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isSubmitting || isReadingLogo || isReadingVerification} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">{isSubmitting ? 'Submitting…' : 'Submit seller profile'}</button></div>
         </form>
       )}
 

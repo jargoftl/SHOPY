@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'seller', 'admin')),
     created_at TEXT NOT NULL DEFAULT to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')
   , suspended BIGINT NOT NULL DEFAULT 0 CHECK (suspended IN (0, 1)));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS seller_status TEXT NOT NULL DEFAULT 'none' CHECK(seller_status IN ('none','pending','approved','rejected','needs_changes'));
+UPDATE users SET seller_status='approved' WHERE role='seller' AND seller_status='none';
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -331,6 +333,29 @@ ALTER TABLE marketing_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE marketing_receipts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE marketing_entitlements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE marketing_promotions ENABLE ROW LEVEL SECURITY;
+CREATE TABLE IF NOT EXISTS seller_applications (
+ user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','needs_changes')), revision INTEGER NOT NULL DEFAULT 1,
+ consented_at TEXT NOT NULL, submitted_at TEXT NOT NULL, reviewed_at TEXT, reviewed_by BIGINT REFERENCES users(id), review_note TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS seller_verification_documents (
+ id TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ kind TEXT NOT NULL CHECK(kind IN ('selfie','id_front','id_back')), content_type TEXT NOT NULL,
+ object_path TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, UNIQUE(user_id,kind)
+);
+CREATE TABLE IF NOT EXISTS seller_approval_emails (
+ id TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id), revision INTEGER NOT NULL,
+ status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sending','sent','failed')),
+ attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL, sent_at TEXT, last_error TEXT NOT NULL DEFAULT '',
+ UNIQUE(user_id,revision)
+);
+CREATE TABLE IF NOT EXISTS verification_cleanup (
+ object_path TEXT PRIMARY KEY, created_at TEXT NOT NULL
+);
+ALTER TABLE seller_applications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE seller_verification_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE seller_approval_emails ENABLE ROW LEVEL SECURITY;
+ALTER TABLE verification_cleanup ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE password_resets ENABLE ROW LEVEL SECURITY;
@@ -375,5 +400,5 @@ ALTER TABLE seller_product_stock ENABLE ROW LEVEL SECURITY;
 ALTER TABLE seller_warehouse_imports ENABLE ROW LEVEL SECURITY;
 `
 
-export const tableNames = ["users", "sessions", "password_resets", "auth_events", "account_admin_history", "seller_email_verifications", "products", "product_images", "categories", "seller_profiles", "notifications", "messages", "store_follows", "buyer_wallets", "reward_balances", "reward_history", "buyer_addresses", "buyer_store_visits", "buyer_balance_history", "schema_migrations", "site_settings", "buyer_balance_reset_audit", "buyer_security", "buyer_favorites", "cancellation_requests", "demo_orders", "demo_order_items", "demo_order_status_history", "seller_dashboard_metrics", "buyer_wallet_requests", "buyer_request_receipts", "payment_wallets", "purchase_orders", "purchase_items", "purchase_sellers", "purchase_receipts", "purchase_refunds", "balance_purchase_history", "order_numbers", "warehouse_products", "seller_product_stock", "seller_warehouse_imports", "marketing_plans", "marketing_requests", "marketing_receipts", "marketing_entitlements", "marketing_promotions"] as const
+export const tableNames = ["users", "sessions", "password_resets", "auth_events", "account_admin_history", "seller_email_verifications", "products", "product_images", "categories", "seller_profiles", "notifications", "messages", "store_follows", "buyer_wallets", "reward_balances", "reward_history", "buyer_addresses", "buyer_store_visits", "buyer_balance_history", "schema_migrations", "site_settings", "buyer_balance_reset_audit", "buyer_security", "buyer_favorites", "cancellation_requests", "demo_orders", "demo_order_items", "demo_order_status_history", "seller_dashboard_metrics", "buyer_wallet_requests", "buyer_request_receipts", "payment_wallets", "purchase_orders", "purchase_items", "purchase_sellers", "purchase_receipts", "purchase_refunds", "balance_purchase_history", "order_numbers", "warehouse_products", "seller_product_stock", "seller_warehouse_imports", "marketing_plans", "marketing_requests", "marketing_receipts", "marketing_entitlements", "marketing_promotions", "seller_applications", "seller_verification_documents", "seller_approval_emails", "verification_cleanup"] as const
 export const identityTableNames = ["marketing_requests", "marketing_receipts", "marketing_entitlements", "users", "auth_events", "account_admin_history", "products", "categories", "notifications", "messages", "reward_history", "buyer_addresses", "buyer_balance_history", "buyer_request_receipts", "cancellation_requests", "demo_orders", "demo_order_items", "demo_order_status_history", "buyer_wallet_requests", "purchase_orders", "purchase_items", "purchase_receipts", "purchase_refunds", "warehouse_products"] as const

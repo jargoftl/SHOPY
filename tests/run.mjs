@@ -1,4 +1,5 @@
 import { tableNames } from '../dist-server/schema.js';
+import { testSellerVerification } from './seller-verification-flow.mjs';
 import { testMarketing } from './marketing-flow.mjs';
 import { PGlite } from '@electric-sql/pglite';
 import pg from 'pg';
@@ -6,7 +7,7 @@ import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 process.chdir(fileURLToPath(new URL('../', import.meta.url)));
 const originalCwd=process.cwd();
@@ -22,13 +23,17 @@ const query=async(sql,params=[])=>{
 pg.Pool.prototype.query=query;
 pg.Pool.prototype.connect=async()=>({query,release(){}});
 pg.Pool.prototype.end=async()=>{};
-Object.assign(process.env,{SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
+Object.assign(process.env,{SELLER_VERIFICATION_WORKER:'disabled',SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
 const { ObjectStorage } = await import('../dist-server/storage.js');
 const realPut=ObjectStorage.prototype.put,realGet=ObjectStorage.prototype.get,realVerify=ObjectStorage.prototype.verifyBucket;
 ObjectStorage.prototype.verifyBucket=async()=>{};
 const objects=new Map();
 ObjectStorage.prototype.put=async(bytes)=>{const key='images/'+createHash('sha256').update(bytes).digest('hex');objects.set(key,bytes);return key};
 ObjectStorage.prototype.get=async(key)=>{if(!objects.has(key))throw new Error('Object missing');return objects.get(key)};
+const verificationObjects=new Map();
+ObjectStorage.prototype.putVerification=async(bytes,type)=>{const path='verification/'+randomUUID()+'.'+(type==='image/png'?'png':type==='image/jpeg'?'jpg':'webp');verificationObjects.set(path,bytes);return path};
+ObjectStorage.prototype.getVerification=async(path)=>{if(!verificationObjects.has(path))throw new Error('Photo missing');return verificationObjects.get(path)};
+ObjectStorage.prototype.deleteVerification=async(path)=>{verificationObjects.delete(path)};
 const {httpServer}=await import('../dist-server/index.js');
 const base='http://127.0.0.1:4311';
 async function req(path,options={},cookie){const res=await fetch(base+path,{...options,headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...options.headers}});const txt=await res.text();let data;try{data=JSON.parse(txt)}catch{data=txt}return {status:res.status,data,cookie:res.headers.get('set-cookie')?.split(';')[0]};}
@@ -91,13 +96,16 @@ try{
   r=await req(path.replace(/:sellerId/g,String(sellerId)).replace(/:[a-zA-Z]+/g,String(buyerId)),{},userCookie);check(label+' GET '+path,r.status<500,r);
  }
  // Seller signup is usable before email setup without claiming email ownership.
- const sellerForm={fullName:'New Seller',email:'new-seller@example.test',phone:'123',password:'new-seller-password-123',storeName:'New Shop',country:'Test',address:'Test',city:'Test',region:'Test',postalCode:'123'};
+ const verificationPhotos=Object.fromEntries(['selfie','id_front','id_back'].map(kind=>[kind,{type:'image/png',data:png.toString('base64')} ]));
+ const sellerForm={verificationPhotos,verificationConsent:true,fullName:'New Seller',email:'new-seller@example.test',phone:'+15551234567',password:'new-seller-password-123',storeName:'New Shop',country:'Test',address:'Test',city:'Test',region:'Test',postalCode:'123'};
  r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:sellerForm.email,fullName:sellerForm.fullName})});
  check('unconfigured email permits continuing signup',r.status===200&&r.data.verificationRequired===false&&!r.data.developmentCode,r);
  check('skipped email does not create a false verification record',(await db.query('SELECT * FROM shop.seller_email_verifications WHERE email=$1',[sellerForm.email])).rows.length===0);
  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(sellerForm)});
- check('production seller signup without email setup',r.status===201&&r.data.user?.role==='seller'&&Boolean(r.cookie),r);
- r=await req('/api/auth/login',{method:'POST',body:JSON.stringify({email:sellerForm.email,password:sellerForm.password,loginType:'seller'})});check('new seller can log in',r.status===200&&r.data.user?.role==='seller',r);
+ check('production seller signup creates a pending application without email setup',r.status===201&&r.data.user?.role==='customer'&&r.data.user?.sellerStatus==='pending'&&Boolean(r.cookie),r);
+ r=await req('/api/auth/login',{method:'POST',body:JSON.stringify({email:sellerForm.email,password:sellerForm.password,loginType:'seller'})});check('pending applicant can log in to view application',r.status===200&&r.data.user?.sellerStatus==='pending',r);
+ const newApplicantId=r.data.user.id;
+ r=await req('/api/admin/seller-applications/'+newApplicantId+'/review',{method:'PATCH',body:JSON.stringify({status:'approved',revision:1,reviewed:true})},cookie);check('admin enables the new seller after reviewing photos',r.status===200&&r.data.user.role==='seller',r.status);
  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify({...sellerForm,email:'incomplete@example.test',storeName:''})});check('seller profile validation still applies',r.status===400,r);
  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify({...sellerForm,email:'invalid-email'})});check('seller email format validation still applies',r.status===400,r);
  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(sellerForm)});check('duplicate seller rejected',r.status===409,r);
@@ -126,6 +134,7 @@ try{
  const logoForm={...sellerForm,email:'logo-seller@example.test',storeLogoUpload:{type:'image/png',data:png.toString('base64')}};
  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(logoForm)});check('seller signup with uploaded logo',r.status===201,r);
  const logoSellerId=r.data.user?.id,logoCookie=r.cookie;
+ if(logoSellerId)await req('/api/admin/seller-applications/'+logoSellerId+'/review',{method:'PATCH',body:JSON.stringify({status:'approved',revision:1,reviewed:true})},cookie);
  if(logoSellerId){
   r=await req('/api/seller/store',{},logoCookie);const logoUrl=r.data.store?.storeLogoUrl;
   check('uploaded logo has a stable public image URL',r.status===200&&/^\/api\/product-images\/[a-f0-9]{64}$/.test(logoUrl||''),r);
@@ -144,6 +153,7 @@ try{
   r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify({...logoForm,email:'failed-logo@example.test'})});check('Storage failure reported',r.status===500,r);
   check('failed logo upload rolls back account',(await db.query("SELECT id FROM shop.users WHERE email='failed-logo@example.test'")).rows.length===0);
  }finally{ObjectStorage.prototype.put=putBeforeFailure}
+ await testSellerVerification({req,check,cookie,seller,buyer,db,png,base,sellerForm,verificationObjects});
  // Create/edit warehouse images and galleries, then import without losing stable URLs.
  const jpeg=Buffer.from([255,216,255,224,0,16,74,70,73,70,0,1,255,217]);
  const warehouseForm={name:'Uploaded warehouse item',category:'Bags',price:25,description:'Uploaded photos',imageUploads:{primary:{type:'image/png',data:png.toString('base64')},gallery:[{type:'image/jpeg',data:jpeg.toString('base64')}]}};

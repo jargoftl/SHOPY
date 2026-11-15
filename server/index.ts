@@ -9,6 +9,7 @@ import { rateLimit } from 'express-rate-limit'
 import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { resolve } from 'node:path'
 import { isSellerEmailVerificationRequired, isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
+import { prepareVerificationPhotos, verificationPhone, uploadVerificationPhotos, insertApplicationPhotos, queuePhotoCleanup, registerSellerVerification, type StoredVerificationPhoto } from './sellerVerification.ts'
 import { registerMarketing } from './marketing.ts'
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
@@ -25,6 +26,7 @@ interface UserRow {
   password_hash: string
   role: UserRole
   suspended: number
+  seller_status: string
   created_at: string
   token_hash?: string
 }
@@ -280,6 +282,7 @@ const publicUser = (user: UserRow) => ({
   email: user.email,
   phone: user.phone,
   role: user.role,
+  sellerStatus: user.seller_status || 'none',
   createdAt: user.created_at,
 })
 
@@ -342,7 +345,8 @@ app.set('trust proxy', 1)
 app.use(helmet())
 app.use('/api/seller/products', express.json({ limit: '24mb' }))
 app.use('/api/seller/warehouse', express.json({ limit: '24mb' }))
-app.use('/api/auth/register-seller', express.json({ limit: '3mb' }))
+app.use('/api/auth/register-seller', express.json({ limit: '12mb' }))
+app.use('/api/seller/application', express.json({ limit: '12mb' }))
 app.use('/api/admin/warehouse', express.json({ limit: '24mb' }))
 app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser())
@@ -612,19 +616,22 @@ const isValidStoreLogoUrl = async (value: string): Promise<boolean> => {
   try { return ['http:', 'https:'].includes(new URL(value).protocol) } catch { return false }
 }
 
-const registerAccount = (role: UserRole): RequestHandler => async (req, res, next) => {
+const registerAccount = (role: UserRole, existingAccount = false): RequestHandler => async (req, res, next) => {
+  let uploadedVerification: StoredVerificationPhoto[] = []
+  let registrationCommitted = false
   try {
     const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : ''
-    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
-    const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : ''
+    const email = existingAccount ? req.user!.email : typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+    let phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : ''
     const password = typeof req.body.password === 'string' ? req.body.password : ''
     let sellerProfile = null
     let logoUpload: ProductImageUpload | undefined
+    let verificationPhotos: ReturnType<typeof prepareVerificationPhotos> | undefined
 
     if (!fullName || fullName.length > 100) return res.status(400).json({ error: 'Enter your name (up to 100 characters).' })
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ error: 'Enter a valid email address.' })
     if (phone.length > 30) return res.status(400).json({ error: 'Phone number must be under 30 characters.' })
-    if (Buffer.byteLength(password, 'utf8') < 8 || Buffer.byteLength(password, 'utf8') > 72) return res.status(400).json({ error: 'Password must be between 8 and 72 bytes.' })
+    if (!existingAccount && (Buffer.byteLength(password, 'utf8') < 8 || Buffer.byteLength(password, 'utf8') > 72)) return res.status(400).json({ error: 'Password must be between 8 and 72 bytes.' })
 
     if (role === 'seller') {
       const verification = (await getRow<VerificationRow>('SELECT * FROM seller_email_verifications WHERE email = ?', email))
@@ -657,16 +664,33 @@ const registerAccount = (role: UserRole): RequestHandler => async (req, res, nex
       if (profile.storeLogoUrl && !logoUpload && !await isValidStoreLogoUrl(profile.storeLogoUrl)) {
         return res.status(400).json({ error: 'Enter a valid store logo URL.' })
       }
+      const normalizedPhone = verificationPhone(phone)
+      if (!normalizedPhone) return res.status(400).json({ error: 'Enter a valid phone number with country code (7–15 digits).' })
+      phone = normalizedPhone
+      verificationPhotos = prepareVerificationPhotos(req.body)
+      if ('error' in verificationPhotos) return res.status(400).json({ error: verificationPhotos.error })
       sellerProfile = profile
     }
 
-    const passwordHash = await bcrypt.hash(password, 12)
+    if (existingAccount && (req.user!.role !== 'customer' || req.user!.seller_status !== 'none')) return res.status(409).json({error:'This account already has seller access or an application. Open your seller application status.'})
+    if (!existingAccount && await getRow('SELECT 1 FROM users WHERE email=?', email)) return res.status(409).json({ error: 'An account with that email already exists.' })
+    if (verificationPhotos && 'photos' in verificationPhotos) uploadedVerification = await uploadVerificationPhotos(database, verificationPhotos.photos)
+    const passwordHash = existingAccount ? null : await bcrypt.hash(password, 12)
     const user = await database.transaction(async () => {
+      let user: UserRow
+      if (existingAccount) {
+        const current = await getRow<UserRow>('SELECT * FROM users WHERE id=?',req.user!.id)
+        if (!current || current.role !== 'customer' || current.seller_status !== 'none') throw new Error('The seller application changed before submission.')
+        await database.prepare("UPDATE users SET full_name=?,phone=?,seller_status='pending' WHERE id=?").run(fullName,phone,current.id)
+        user = (await getRow<UserRow>('SELECT * FROM users WHERE id=?',current.id))!
+      } else {
       const result = (await database.prepare(`
-        INSERT INTO users (full_name, email, phone, password_hash, role)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(fullName, email, phone || null, passwordHash, role))
-      const user = (await getRow<UserRow>('SELECT * FROM users WHERE id = ?', result.lastInsertRowid))!
+        INSERT INTO users (full_name, email, phone, password_hash, role, seller_status)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(fullName, email, phone || null, passwordHash, role === 'seller' ? 'customer' : role, role === 'seller' ? 'pending' : 'none'))
+      user = (await getRow<UserRow>('SELECT * FROM users WHERE id = ?', result.lastInsertRowid))!
+      }
+      if (role === 'seller') await database.prepare('INSERT OR IGNORE INTO buyer_wallets (user_id, balance_cents) VALUES (?, 0)').run(user.id)
       if (role === 'customer') {
         await database.prepare('INSERT INTO buyer_wallets (user_id, balance_cents) VALUES (?, 0)').run(user.id)
         await database.prepare(`
@@ -679,14 +703,22 @@ const registerAccount = (role: UserRole): RequestHandler => async (req, res, nex
         await database.prepare(`
           INSERT INTO seller_profiles (user_id, store_name, store_description, logo_url, country, address, city, region, postal_code)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(user_id) DO UPDATE SET store_name=excluded.store_name,store_description=excluded.store_description,logo_url=excluded.logo_url,
+            country=excluded.country,address=excluded.address,city=excluded.city,region=excluded.region,postal_code=excluded.postal_code
         `).run(user.id, sellerProfile.storeName, sellerProfile.storeDescription, sellerProfile.storeLogoUrl, sellerProfile.country, sellerProfile.address, sellerProfile.city, sellerProfile.region, sellerProfile.postalCode)
+        await database.prepare("UPDATE seller_profiles SET verification_status='pending' WHERE user_id=?").run(user.id)
+        await database.prepare("INSERT INTO seller_applications(user_id,status,consented_at,submitted_at) VALUES (?,'pending',?,?)").run(user.id, new Date().toISOString(), new Date().toISOString())
+        await insertApplicationPhotos(database, user.id, uploadedVerification)
         await database.prepare('DELETE FROM seller_email_verifications WHERE email = ?').run(email)
-        await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'seller_signup', ?, ?, ? FROM users WHERE role = 'admin'").run(`New seller #${user.id}`, `${fullName} (${email}) created ${sellerProfile.storeName}.`, `/admin/users/${user.id}`)
+        await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'seller_signup', ?, ?, ? FROM users WHERE role = 'admin'").run(`New seller #${user.id}`, `${fullName} (${email}) submitted ${sellerProfile.storeName} for verification. Seller access is pending approval.`, `/admin/users/${user.id}`)
       }
       return user
     })()
-    await createSession(user.id, res)
-    await database.prepare('INSERT INTO auth_events (user_id, event_type) VALUES (?, ?)').run(user.id, 'registered')
+    registrationCommitted = true
+    if (!existingAccount) {
+      await createSession(user.id, res)
+      await database.prepare('INSERT INTO auth_events (user_id, event_type) VALUES (?, ?)').run(user.id, 'registered')
+    }
     if (role === 'seller' && sellerProfile) {
       const notifyAdmins = database.prepare(`
         INSERT INTO notifications (user_id, type, title, body, link)
@@ -701,9 +733,10 @@ const registerAccount = (role: UserRole): RequestHandler => async (req, res, nex
         )
       }
     }
-    const emailNotifications = await sendAuthNotifications(user, 'registered', (await getSiteName()))
+    const emailNotifications = existingAccount ? {userEmailSent:false,adminEmailSent:false} : await sendAuthNotifications(user, 'registered', (await getSiteName()))
     return res.status(201).json({ user: publicUser(user), emailNotifications })
   } catch (error: unknown) {
+    if (!registrationCommitted && uploadedVerification.length) await queuePhotoCleanup(database, uploadedVerification)
     if (getErrorCode(error) === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(409).json({ error: 'An account with that email already exists.' })
     return next(error)
   }
@@ -711,6 +744,7 @@ const registerAccount = (role: UserRole): RequestHandler => async (req, res, nex
 
 app.post('/api/auth/register', authLimiter, registerAccount('customer'))
 app.post('/api/auth/register-seller', authLimiter, registerAccount('seller'))
+app.post('/api/seller/application', requireAuth, authLimiter, registerAccount('seller', true))
 
 app.post('/api/auth/login', authLimiter, async (req, res, next) => {
   try {
@@ -722,7 +756,7 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
     }
     const currentUser = (await getRow<UserRow>('SELECT * FROM users WHERE id = ?', user.id))
     if (!currentUser || currentUser.suspended) return res.status(403).json({ error: 'Your account is suspended. Contact the administrator.' })
-    if (req.body.loginType === 'seller' && !['seller', 'admin'].includes(currentUser.role)) return res.status(403).json({ error: 'This account is not a seller account. Use customer login instead.' })
+    if (req.body.loginType === 'seller' && !['seller', 'admin'].includes(currentUser.role) && !['pending','rejected','needs_changes'].includes(currentUser.seller_status)) return res.status(403).json({ error: 'This account is not a seller account. Use customer login instead.' })
 
     await createSession(currentUser.id, res)
     await database.prepare('INSERT INTO auth_events (user_id, event_type) VALUES (?, ?)').run(currentUser.id, 'login')
@@ -1057,7 +1091,7 @@ app.get('/api/products', async (req, res) => {
   const category = typeof req.query.category === 'string' ? req.query.category.trim() : ''
   const products = (await getRows<ProductRow>(`
     SELECT * FROM products
-    WHERE is_published = 1 AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0) AND name LIKE ? AND (? = '' OR category = ?)
+    WHERE is_published = 1 AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0 AND u.role IN (\'seller\',\'admin\')) AND name LIKE ? AND (? = '' OR category = ?)
     ORDER BY created_at DESC, id DESC
   `, search, category, category)).map(publicProduct)
   return res.json({ products })
@@ -1066,7 +1100,7 @@ app.get('/api/products', async (req, res) => {
 app.get('/api/discounts', async (_req, res) => {
   const products = (await getRows<ProductRow>(`
     SELECT * FROM products
-    WHERE is_published = 1 AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0) AND compare_at_price IS NOT NULL AND compare_at_price > price
+    WHERE is_published = 1 AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0 AND u.role IN (\'seller\',\'admin\')) AND compare_at_price IS NOT NULL AND compare_at_price > price
     ORDER BY created_at DESC, id DESC
   `)).map(publicProduct)
   return res.json({ products })
@@ -1074,7 +1108,7 @@ app.get('/api/discounts', async (_req, res) => {
 
 app.get('/api/products/:id', async (req, res) => {
   const product = (await getRow<ProductRow>(`SELECT * FROM products
-    WHERE id = ? AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0) AND (is_published = 1 OR is_store_published = 1)
+    WHERE id = ? AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0 AND u.role IN (\'seller\',\'admin\')) AND (is_published = 1 OR is_store_published = 1)
   `, Number(req.params.id)))
   if (!product) return res.status(404).json({ error: 'Product not found.' })
   const seller = product.seller_id ? (await getRow<{
@@ -1094,7 +1128,7 @@ app.get('/api/products/:id', async (req, res) => {
   const parentCategory = product.category.split(' / ')[0]
   const relatedProducts = (await getRows<ProductRow>(`
     SELECT * FROM products
-    WHERE id != ? AND seller_id IS NOT NULL AND is_published = 1 AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0)
+    WHERE id != ? AND seller_id IS NOT NULL AND is_published = 1 AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0 AND u.role IN (\'seller\',\'admin\'))
       AND (category = ? OR substr(category, 1, length(?) + 3) = ? || ' / ')
     ORDER BY CASE WHEN category = ? THEN 0 ELSE 1 END, created_at DESC, id DESC
     LIMIT 8
@@ -1535,7 +1569,7 @@ app.get('/api/buyer/favorites/:id', requireAuth, requireRole('customer'), async 
 })
 app.put('/api/buyer/favorites/:id', requireAuth, requireRole('customer'), async (req, res) => {
   const id = Number(req.params.id)
-  if (!Number.isSafeInteger(id) || !(await getRow('SELECT id FROM products WHERE id = ? AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0) AND (is_published = 1 OR is_store_published = 1)', id))) return res.status(404).json({ error: 'Product not found.' })
+  if (!Number.isSafeInteger(id) || !(await getRow('SELECT id FROM products WHERE id = ? AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0 AND u.role IN (\'seller\',\'admin\')) AND (is_published = 1 OR is_store_published = 1)', id))) return res.status(404).json({ error: 'Product not found.' })
   await database.prepare('INSERT OR IGNORE INTO buyer_favorites (user_id, product_id) VALUES (?, ?)').run(req.user!.id, id)
   return res.json({ ok: true })
 })
@@ -1550,7 +1584,8 @@ app.patch('/api/buyer/account', requireAuth, requireRole('customer'), async (req
   const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : ''
   const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : ''
   if (!fullName || fullName.length > 100 || phone.length > 30) return res.status(400).json({ error: 'Enter a name up to 100 characters and a phone number up to 30 characters.' })
-  await database.prepare('UPDATE users SET full_name = ?, phone = ? WHERE id = ?').run(fullName, phone || null, req.user!.id)
+  const updated = await database.prepare("UPDATE users SET full_name = ?, phone = ? WHERE id = ? AND seller_status NOT IN ('pending','needs_changes','rejected')").run(fullName, phone || null, req.user!.id)
+  if (!updated.changes) return res.status(409).json({error:'Your seller verification is in progress. Submit contact corrections through your seller application when changes are requested.'})
   return res.json({ user: publicUser((await getRow<UserRow>('SELECT * FROM users WHERE id = ?', req.user!.id))!) })
 })
 
@@ -1611,7 +1646,7 @@ app.post('/api/buyer/orders', requireAuth, requireRole('customer'), async (req, 
         typeof item.selectedColor !== 'string' || item.selectedColor.length > 100 || typeof item.selectedSize !== 'string' || item.selectedSize.length > 100) {
       return res.status(400).json({ error: 'Invalid test order item.' })
     }
-    const product = (await getRow<ProductRow>('SELECT * FROM products WHERE id = ? AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0) AND (is_published = 1 OR is_store_published = 1)', item.id))
+    const product = (await getRow<ProductRow>('SELECT * FROM products WHERE id = ? AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0 AND u.role IN (\'seller\',\'admin\')) AND (is_published = 1 OR is_store_published = 1)', item.id))
     if (!product) return res.status(400).json({ error: 'A product is no longer available. Update your cart.' })
     snapshots.push({ product, quantity: item.quantity, color: item.selectedColor, size: item.selectedSize })
   }
@@ -1903,6 +1938,8 @@ app.patch('/api/admin/users/:id/role', requireAuth, requireRole('admin'), async 
   if (!Number.isSafeInteger(userId) || !['customer', 'seller'].includes(role)) {
     return res.status(400).json({ error: 'Choose a valid user ID and a customer or seller role.' })
   }
+  const candidate = await getRow<{role: string, seller_status: string}>('SELECT role,seller_status FROM users WHERE id=?', userId)
+  if (role === 'seller' && candidate && candidate.role !== 'seller' && candidate.seller_status !== 'approved') return res.status(409).json({error:'Approve this user’s seller verification application before granting seller access.'})
   const result = (await database.prepare('UPDATE users SET role = ? WHERE id = ? AND role != ?').run(role, userId, 'admin'))
   if (!result.changes) return res.status(404).json({ error: 'User not found or the admin role cannot be changed here.' })
   if (role === 'customer') await database.prepare('INSERT OR IGNORE INTO buyer_wallets (user_id, balance_cents) VALUES (?, 0)').run(userId)
@@ -1924,7 +1961,7 @@ app.get('/api/admin/sellers', requireAuth, requireRole('admin'), async (_req, re
       (SELECT COUNT(*) FROM store_follows WHERE seller_id = users.id) AS actual_follow_count
     FROM users
     LEFT JOIN seller_profiles ON seller_profiles.user_id = users.id
-    WHERE users.role = 'seller'
+    WHERE users.role = 'seller' OR EXISTS (SELECT 1 FROM seller_applications a WHERE a.user_id=users.id)
     ORDER BY users.id DESC
   `)).map((seller) => ({
     id: seller.id,
@@ -2077,10 +2114,12 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
 
 await registerManualOrders(app, database, requireAuth, requireRole)
 await registerMarketing(app, database, requireAuth, requireRole)
+const stopVerificationWorker = await registerSellerVerification(app, database, requireAuth, requireRole)
 app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found.' }))
 
-app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(error)
+app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
+  if (/^\/api\/(auth\/register-seller|seller\/application|admin\/seller-applications|seller-verification)/.test(req.path)) console.error('Private seller verification request failed.')
+  else console.error(error)
   if (typeof error === 'object' && error !== null && 'type' in error && error.type === 'entity.too.large') return res.status(413).json({ error: 'The upload is too large. Images must be at most 2 MB each.' })
   return res.status(500).json({ error: 'Something went wrong on the server.' })
 })
@@ -2092,6 +2131,7 @@ if (process.env.NODE_ENV === 'production') {
 
 await seedAdmin()
 export const httpServer = app.listen(port, '0.0.0.0', () => console.log(`GGU API listening on port ${port}`))
+httpServer.on('close', stopVerificationWorker)
 
 // Import in the background so the free web service can answer requests while catalog pages arrive.
 void seedImportedWarehouse(database).catch(() => console.error('Warehouse source import paused. Completed pages are saved; restarting resumes the import.'))

@@ -123,7 +123,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     const snapshots: { product: { id: number, seller_id: number, name: string, image_url: string, price: number }, quantity: number, color: string, size: string }[] = []
     for (const item of items) {
       if (!item || !Number.isSafeInteger(item.id) || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 100 || typeof item.selectedColor !== 'string' || item.selectedColor.length > 100 || typeof item.selectedSize !== 'string' || item.selectedSize.length > 100) return res.status(400).json({ error: 'Invalid order item.' })
-      const product = (await db.prepare('SELECT id, seller_id, name, image_url, price FROM products WHERE id=? AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0) AND (is_published=1 OR is_store_published=1)').get(item.id)) as { id: number, seller_id: number, name: string, image_url: string, price: number } | undefined
+      const product = (await db.prepare('SELECT id, seller_id, name, image_url, price FROM products WHERE id=? AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0 AND u.role IN (\'seller\',\'admin\')) AND (is_published=1 OR is_store_published=1)').get(item.id)) as { id: number, seller_id: number, name: string, image_url: string, price: number } | undefined
       if (!product) return res.status(400).json({ error: 'A product is no longer available.' })
       snapshots.push({ product, quantity: item.quantity, color: item.selectedColor, size: item.selectedSize })
     }
