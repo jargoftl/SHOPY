@@ -1,3 +1,5 @@
+import ProductPublishConfirmation from '../components/ProductPublishConfirmation.jsx'
+import {progressToast} from '../components/ProgressToast.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../lib/api.js'
@@ -24,6 +26,7 @@ const SellerPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const catalogVersion=useRef(0)
+  const [pendingPublish,setPendingPublish]=useState(null)
   const [user, setUser] = useState(null)
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
@@ -88,10 +91,11 @@ const SellerPage = () => {
     return()=>{active=false;window.removeEventListener('storage',storage);window.removeEventListener('focus',focus)}
   },[user])
 
-  const saveProduct = async (event) => {
+  const saveProduct = async (event, confirmed=false) => {
     event.preventDefault()
     const form = event.currentTarget
-    if (isReadingImages) return
+    if (isReadingImages || isSaving) return
+    if (!editingProduct && !confirmed) {setPendingPublish(form);return}
     setIsSaving(true)
     setMessage('')
 
@@ -101,6 +105,8 @@ const SellerPage = () => {
         method: editingProduct ? 'PATCH' : 'POST', body: JSON.stringify(payload),
       })
       catalogVersion.current+=1
+      setPendingPublish(null)
+      progressToast(editingProduct?'Product updated':'Product added to your store')
       notifyCatalogUpdated()
       setProducts((currentProducts) => editingProduct
         ? currentProducts.map((item) => item.id === product.id ? product : item)
@@ -242,6 +248,7 @@ const SellerPage = () => {
           <h1 className="mt-2 text-3xl font-semibold">{editingProduct ? 'Edit product' : 'Add a product'}</h1>
           <p className="mt-2 text-sm text-[#555555]">Published items become visible on the storefront.</p>
 
+          {pendingPublish&&<ProductPublishConfirmation product={productForm} busy={isSaving} onCancel={()=>setPendingPublish(null)} onConfirm={()=>saveProduct({preventDefault(){},currentTarget:pendingPublish},true)}/>}
           <form id="seller-product-form" key={editingProduct?.id || 'new-product'} className="mt-6 space-y-4 bg-white p-5 sm:p-6" onSubmit={saveProduct}>
             <label className="block text-sm font-medium">Product name
               <input name="name" value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} maxLength={500} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" placeholder="Example: Mira Everyday Tote" />

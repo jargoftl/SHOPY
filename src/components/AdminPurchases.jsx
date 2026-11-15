@@ -1,3 +1,4 @@
+import {progressToast} from './ProgressToast.jsx'
 import DeliveryProgress from './DeliveryProgress.jsx'
 import {sessionUrl} from '../lib/tabSession.js'
 import { useEffect, useState } from 'react'
@@ -29,7 +30,7 @@ const AdminPurchases = ({ selectedNumber, autoOpen=false, showWalletSettings=fal
   }, [reload])
   const run = async (operation, success) => {
     setBusy(true); setMessage('')
-    try { await operation(); setMessage(success); setReload((value) => value + 1) }
+    try { await operation(); setMessage(success); progressToast(success); setReload((value) => value + 1) }
     catch (error) { setMessage(error.message) } finally { setBusy(false) }
   }
   const saveWallet = (event) => {

@@ -115,3 +115,9 @@ Buyers can search their own shipments by the 11-digit code from their dashboard.
 **Seller funding** is a separate administrator tab. Credits require an amount, reason and explicit authorization, use an idempotency key, and record the administrator and before/after balance in fund history. No external coin transfer is performed by this action.
 
 Unread notifications are red and read notifications green, with text labels. Account reads share only concurrent requests within the same tab; completed balances are not cached. The admin overview uses counts, wallet receipts load in batches, and indexed account/order lookups reduce database work. Hosting cold starts remain outside these improvements.
+
+### Password controls and delivery estimates
+
+Password and transaction-PIN inputs offer accessible show/hide controls and remain masked initially. Seller-created products now require a price-summary confirmation before POST; cancel makes no changes. Wholesale and gross profit remain estimates at 85% and 15% of retail.
+
+The buyer tracking panel displays a timed three-day estimate (preparation during day one, expected transit from day two, estimated arrival window after 72 hours). Estimates do not change order status, confirm delivery, or release funds. Actual seller/admin progress changes generate success toasts, and buyer tracking refreshes announce changed statuses. Carrier integration is required for automatic verified delivery.

@@ -1,0 +1,7 @@
+import {useEffect,useRef} from 'react'
+import {formatMoney} from '../lib/money.js'
+export default function ProductPublishConfirmation({product,busy,onCancel,onConfirm}){
+ const dialog=useRef(null),retail=Math.round(Number(product.price)*100),wholesale=Math.round(retail*.85)
+ useEffect(()=>{const node=dialog.current;node.showModal();return()=>node.close()},[])
+ return <dialog ref={dialog} aria-labelledby="publish-confirm-title" onCancel={e=>{e.preventDefault();if(!busy)onCancel()}} className="m-auto w-[calc(100%-2rem)] max-w-sm rounded-xl border-0 bg-white p-6 text-black shadow-2xl backdrop:bg-black/50"><h2 id="publish-confirm-title" className="text-lg font-semibold">Confirm your product</h2><p className="mt-3 break-words text-sm">{product.name}</p><dl className="my-5 space-y-3 text-sm">{[['Retail price',retail],['Estimated wholesale price',wholesale],['Estimated gross profit',retail-wholesale]].map(([label,value])=><div key={label} className="flex justify-between gap-3"><dt>{label}</dt><dd className="font-semibold">{formatMoney(value)}</dd></div>)}</dl><p className="text-xs leading-5 text-gray-500">15% margin estimate, before fees, shipping and taxes. This does not charge your wallet.</p><div className="mt-5 grid grid-cols-2 gap-3"><button type="button" autoFocus disabled={busy} onClick={onCancel} className="rounded bg-black py-3 text-white">Cancel</button><button type="button" disabled={busy} onClick={onConfirm} className="rounded bg-[#ee4d42] py-3 font-semibold text-white disabled:opacity-50">{busy?'Saving…':'Confirm'}</button></div></dialog>
+}

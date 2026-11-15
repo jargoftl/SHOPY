@@ -1,3 +1,4 @@
+import PasswordInput from '../../components/PasswordInput.jsx'
 import SiteName from '../../components/SiteName.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -272,10 +273,10 @@ const SellerRegister = () => {
           {existingAccount && <p className="rounded-lg bg-[#f7f7f7] p-3 text-xs leading-6 text-[#555555]">You’re applying with your signed-in account. Your current password and purchases stay the same.</p>}
           {!existingAccount && <>          <div className="grid grid-cols-2 gap-3">
             <label className="block text-sm font-medium">Password
-              <input name="password" value={form.password} onChange={updateForm} type="password" autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Create password" />
+              <PasswordInput name="password" value={form.password} onChange={updateForm}  autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Create password" />
             </label>
             <label className="block text-sm font-medium">Confirm password
-              <input name="confirmPassword" value={form.confirmPassword} onChange={updateForm} type="password" autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Type again" />
+              <PasswordInput name="confirmPassword" value={form.confirmPassword} onChange={updateForm}  autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Type again" />
             </label>
           </div>
           </>}

@@ -1,3 +1,4 @@
+import PasswordInput from '../../components/PasswordInput.jsx'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AuthLayout from '../../components/AuthLayout.jsx'
@@ -55,7 +56,7 @@ const Login = () => {
           <input className="mt-2 block h-12 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="email" name="email" autoComplete="email" placeholder="you@example.com" required />
         </label>
         <label className="block text-sm font-medium">Password
-          <input className="mt-2 block h-12 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="password" name="password" autoComplete="current-password" placeholder="Enter your password" required />
+          <PasswordInput className="mt-2 block h-12 w-full border border-[#cccccc] px-3 outline-none focus:border-black"  name="password" autoComplete="current-password" placeholder="Enter your password" required />
         </label>
         <div className="text-right"><Link to="/forgot-password" className="text-sm font-medium underline underline-offset-2">Forgot password?</Link></div>
 
