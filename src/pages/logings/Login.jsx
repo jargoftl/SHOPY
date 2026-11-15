@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import CaptchaPuzzle from '../../components/CaptchaPuzzle.jsx'
 import AuthLayout from '../../components/AuthLayout.jsx'
 import { apiRequest } from '../../lib/api.js'
 
 const Login = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const [captchaToken,setCaptchaToken]=useState('')
   const [message, setMessage] = useState(location.state?.sessionNotice || '')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
@@ -23,6 +25,7 @@ const Login = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    if(!captchaToken){setMessage('Complete the image puzzle to continue.');return}
     setIsSubmitting(true)
     setMessage('')
     const formData = new FormData(event.currentTarget)
@@ -30,10 +33,11 @@ const Login = () => {
     try {
       const { user } = await apiRequest('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email: formData.get('email'), password: formData.get('password') }),
+        body: JSON.stringify({ captchaToken, email: formData.get('email'), password: formData.get('password') }),
       })
       navigate(user.role === 'admin' ? '/admin' : user.role === 'seller' ? '/seller' : '/profile')
     } catch (error) {
+      setCaptchaToken('')
       setMessage(error.message)
     } finally {
       setIsSubmitting(false)
@@ -56,8 +60,9 @@ const Login = () => {
           <input className="mt-2 block h-12 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" type="password" name="password" autoComplete="current-password" placeholder="Enter your password" required />
         </label>
         <div className="text-right"><Link to="/forgot-password" className="text-sm font-medium underline underline-offset-2">Forgot password?</Link></div>
+        <CaptchaPuzzle purpose="login" token={captchaToken} onVerified={setCaptchaToken} disabled={isSubmitting}/>
         {message && <p role="alert" className="text-sm text-[#a33]">{message}</p>}
-        <button disabled={isSubmitting} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-60" type="submit">{isSubmitting ? 'Signing in…' : 'Log in'}</button>
+        <button disabled={isSubmitting || !captchaToken} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-60" type="submit">{isSubmitting ? 'Signing in…' : 'Log in'}</button>
       </form>
       <p className="mt-7 text-center text-sm text-[#666]">New here? <Link to="/register" className="font-semibold text-black underline underline-offset-2">Create an account</Link></p>
       <p className="mt-3 text-center text-sm text-[#666]">Selling? <Link to="/seller/login" className="font-semibold text-black underline underline-offset-2">Seller login</Link></p>

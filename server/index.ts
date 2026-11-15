@@ -10,6 +10,7 @@ import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { resolve } from 'node:path'
 import { isSellerEmailVerificationRequired, isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
 import { prepareVerificationPhotos, optionalSsnLast4, verificationPhone, uploadVerificationPhotos, insertApplicationPhotos, queuePhotoCleanup, registerSellerVerification, type StoredVerificationPhoto } from './sellerVerification.ts'
+import { registerAuthCaptcha, captchaBinding, captchaEnabled } from './authCaptcha.ts'
 import { registerMarketing } from './marketing.ts'
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
@@ -50,6 +51,7 @@ interface ProductRow {
 }
 
 interface VerificationRow {
+  requester_hash: string | null
   email: string
   code_hash: string
   expires_at: string
@@ -549,12 +551,14 @@ app.get('/api/product-images/:id', async (req, res) => {
   return res.set('Cache-Control', 'public, max-age=31536000, immutable').set('X-Content-Type-Options', 'nosniff').type(image.content_type).send(image.image)
 })
 
+const authCaptcha=registerAuthCaptcha(app,database)
+
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
-app.post('/api/auth/seller-verification-code', authLimiter, async (req, res, next) => {
+app.post(['/api/auth/seller-verification-code','/api/auth/registration-verification-code'], authLimiter, authCaptcha.guard('signup'), async (req, res, next) => {
   try {
     const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
-    const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : 'seller'
+    const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : 'there'
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
       return res.status(400).json({ error: 'Enter a valid email address first.' })
     }
@@ -569,10 +573,10 @@ app.post('/api/auth/seller-verification-code', authLimiter, async (req, res, nex
     const code = String(randomInt(100000, 1000000))
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
     await database.prepare(`
-      INSERT INTO seller_email_verifications (email, code_hash, expires_at, attempts)
-      VALUES (?, ?, ?, 0)
-      ON CONFLICT(email) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at, attempts = 0, created_at = CURRENT_TIMESTAMP
-    `).run(email, hashToken(code), expiresAt)
+      INSERT INTO seller_email_verifications (email, code_hash, expires_at, attempts, requester_hash)
+      VALUES (?, ?, ?, 0, ?)
+      ON CONFLICT(email) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at, attempts = 0, verified_at = NULL, requester_hash = excluded.requester_hash, created_at = CURRENT_TIMESTAMP
+    `).run(email, hashToken(code), expiresAt, captchaBinding(req))
 
     const sent = await sendSellerVerificationCode({ to: email, name: fullName, code, siteName: (await getSiteName()) })
     if (!sent) {
@@ -588,17 +592,18 @@ app.post('/api/auth/seller-verification-code', authLimiter, async (req, res, nex
   }
 })
 
-app.post('/api/auth/verify-seller-email-code', authLimiter, async (req, res) => {
+app.post(['/api/auth/verify-seller-email-code','/api/auth/verify-registration-email-code'], authLimiter, authCaptcha.guard('signup'), async (req, res) => {
   if (!isSellerEmailVerificationRequired()) return res.json({ verified: false, verificationRequired: false })
   const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
   const code = typeof req.body.code === 'string' ? req.body.code.trim() : ''
   const verification = (await getRow<VerificationRow>('SELECT * FROM seller_email_verifications WHERE email = ?', email))
   const codeMatches = verification && verification.expires_at > new Date().toISOString()
+    && (!captchaEnabled() || (verification.requester_hash === captchaBinding(req) && Boolean(captchaBinding(req))))
     && verification.attempts < 5 && /^\d{6}$/.test(code)
     && hashToken(code) === verification.code_hash
 
   if (!codeMatches) {
-    if (verification && verification.attempts < 5) {
+    if (verification && verification.attempts < 5 && (!captchaEnabled() || verification.requester_hash === captchaBinding(req))) {
       await database.prepare('UPDATE seller_email_verifications SET attempts = attempts + 1 WHERE email = ?').run(email)
     }
     return res.status(400).json({ error: 'The email verification code is invalid or expired.' })
@@ -634,12 +639,13 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     if (phone.length > 30) return res.status(400).json({ error: 'Phone number must be under 30 characters.' })
     if (!existingAccount && (Buffer.byteLength(password, 'utf8') < 8 || Buffer.byteLength(password, 'utf8') > 72)) return res.status(400).json({ error: 'Password must be between 8 and 72 bytes.' })
 
-    if (role === 'seller') {
+    if (role === 'seller' || role === 'customer') {
       const verification = (await getRow<VerificationRow>('SELECT * FROM seller_email_verifications WHERE email = ?', email))
-      if (isSellerEmailVerificationRequired() && (!verification?.verified_at || verification.expires_at <= new Date().toISOString())) {
+      if (isSellerEmailVerificationRequired() && (!verification?.verified_at || verification.expires_at <= new Date().toISOString() || (captchaEnabled() && verification.requester_hash !== captchaBinding(req)))) {
         return res.status(400).json({ error: 'The email verification code is invalid or expired.' })
       }
-
+    }
+    if (role === 'seller') {
       const profile = {
         storeName: typeof req.body.storeName === 'string' ? req.body.storeName.trim() : '',
         storeDescription: typeof req.body.storeDescription === 'string' ? req.body.storeDescription.trim() : '',
@@ -681,6 +687,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     if (verificationPhotos && 'photos' in verificationPhotos) uploadedVerification = await uploadVerificationPhotos(database, verificationPhotos.photos)
     const passwordHash = existingAccount ? null : await bcrypt.hash(password, 12)
     const user = await database.transaction(async () => {
+      await authCaptcha.consumeSignup(req)
       let user: UserRow
       if (existingAccount) {
         const current = await getRow<UserRow>('SELECT * FROM users WHERE id=?',req.user!.id)
@@ -716,6 +723,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
         await database.prepare('DELETE FROM seller_email_verifications WHERE email = ?').run(email)
         await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'seller_signup', ?, ?, ? FROM users WHERE role = 'admin'").run(`New seller #${user.id}`, `${fullName} (${email}) submitted ${sellerProfile.storeName} for verification. Seller access is pending approval.`, `/admin/users/${user.id}`)
       }
+      if (role === 'customer') await database.prepare('DELETE FROM seller_email_verifications WHERE email=?').run(email)
       return user
     })()
     registrationCommitted = true
@@ -746,11 +754,11 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
   }
 }
 
-app.post('/api/auth/register', authLimiter, registerAccount('customer'))
-app.post('/api/auth/register-seller', authLimiter, registerAccount('seller'))
-app.post('/api/seller/application', requireAuth, authLimiter, registerAccount('seller', true))
+app.post('/api/auth/register', authLimiter, authCaptcha.guard('signup'), registerAccount('customer'))
+app.post('/api/auth/register-seller', authLimiter, authCaptcha.guard('signup'), registerAccount('seller'))
+app.post('/api/seller/application', requireAuth, authLimiter, authCaptcha.guard('signup'), registerAccount('seller', true))
 
-app.post('/api/auth/login', authLimiter, async (req, res, next) => {
+app.post('/api/auth/login', authLimiter, authCaptcha.guard('login',true), async (req, res, next) => {
   try {
     const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
     const password = typeof req.body.password === 'string' ? req.body.password : ''

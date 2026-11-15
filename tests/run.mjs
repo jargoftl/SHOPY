@@ -1,4 +1,5 @@
 import { tableNames } from '../dist-server/schema.js';
+import { testAuthCaptcha } from './auth-captcha-flow.mjs';
 import { testSellerVerification } from './seller-verification-flow.mjs';
 import { testMarketing } from './marketing-flow.mjs';
 import { PGlite } from '@electric-sql/pglite';
@@ -23,7 +24,8 @@ const query=async(sql,params=[])=>{
 pg.Pool.prototype.query=query;
 pg.Pool.prototype.connect=async()=>({query,release(){}});
 pg.Pool.prototype.end=async()=>{};
-Object.assign(process.env,{SELLER_VERIFICATION_WORKER:'disabled',SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
+// The legacy regression scenarios run without puzzles; testAuthCaptcha enables and tests real enforcement below.
+Object.assign(process.env,{AUTH_CAPTCHA:'disabled',SELLER_VERIFICATION_WORKER:'disabled',SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
 const { ObjectStorage } = await import('../dist-server/storage.js');
 const realPut=ObjectStorage.prototype.put,realGet=ObjectStorage.prototype.get,realVerify=ObjectStorage.prototype.verifyBucket;
 ObjectStorage.prototype.verifyBucket=async()=>{};
@@ -230,6 +232,7 @@ try{
   check('seller code email',await email.sendSellerVerificationCode({to:'seller@example.test',name:'Seller',code:'123456',siteName:'Shop'}));
   check('HTTPS email uses backend header and existing template',sent.url==='https://api.brevo.com/v3/smtp/email'&&sent.options.headers['api-key']==='test-only-placeholder'&&sent.body.textContent.includes('123456')&&sent.body.sender.email==='sender@example.test');
  }finally{globalThis.fetch=realFetch;delete process.env.BREVO_API_KEY;delete process.env.EMAIL_FROM}
+ await testAuthCaptcha({req,check,db});
  // The migration itself runs against a separate, empty PostgreSQL engine.
  const liveDb=db;db=new PGlite();await db.waitReady;
  const temporary=mkdtempSync(join(tmpdir(),'shopy-migration-test-'));

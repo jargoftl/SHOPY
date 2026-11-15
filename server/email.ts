@@ -84,8 +84,8 @@ const sendEmail = async ({ to, subject, text }: EmailMessage): Promise<boolean> 
 
 export const sendSellerVerificationCode = ({ to, name, code, siteName }: SellerCodeEmail): Promise<boolean> => sendEmail({
   to,
-  subject: `Verify your ${siteName} seller email`,
-  text: `Hi ${name},\n\nYour ${siteName} seller verification code is ${code}. It expires in 10 minutes. If you did not request this, you can ignore this email.`,
+  subject: `Verify your ${siteName} email`,
+  text: `Hi ${name},\n\nYour ${siteName} verification code is ${code}. It expires in 10 minutes. If you did not request this, you can ignore this email.`,
 })
 
 export const sendPasswordResetEmail = (to: string, resetUrl: string | null, siteName: string): Promise<boolean> => sendEmail({

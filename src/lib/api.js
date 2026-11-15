@@ -30,6 +30,7 @@ export const apiRequest = (path, { background = false, ...options } = {}) => tra
   if (!response.ok) {
     const error = new Error(data.error || 'The server is unavailable. Please try again later.')
     error.status = response.status
+    error.captchaRequired = Boolean(data.captchaRequired)
     throw error
   }
 
