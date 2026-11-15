@@ -1,3 +1,5 @@
+import {testBalanceMarketplace} from './balance-marketplace-flow.mjs';
+import {testTabSessions} from './tab-sessions-flow.mjs';
 import {testTransactionPin} from './transaction-pin-flow.mjs';
 import {testSellerFinance} from './seller-finance-flow.mjs';
 import { tableNames } from '../dist-server/schema.js';
@@ -82,7 +84,12 @@ try{
   }
   r=await req('/api/admin/payment-wallets/USDT',{method:'PUT',body:JSON.stringify({network:'Test',address:'test-address',usdRate:'1'})},cookie);check('wallet configuration',r.status===200,r);
   body.coin='USDT';body.requestKey='22222222-2222-2222-2222-222222222222';delete body.expectedTotalCents;
-  r=await req('/api/purchases',{method:'POST',body:JSON.stringify(body)},buyer);check('crypto purchase',r.status===201,r);const cryptoId=r.data.id;
+  r=await req('/api/purchases',{method:'POST',body:JSON.stringify(body)},buyer);check('new direct coin checkout is rejected',r.status===400,r);
+  // Existing historical coin orders remain reviewable; new checkout uses only account balance.
+  const cryptoId=(await db.query("INSERT INTO shop.purchase_orders(buyer_id,request_key,coin,billing_json,subtotal_cents,shipping_cents,tax_cents,coin_amount,network,wallet_address,usd_rate,status) VALUES($1,$2,'USDT',$3,1000,0,30,'10.3','Test','test-address','1','awaiting_receipt') RETURNING id",[buyerId,body.requestKey,JSON.stringify(body.billing)])).rows[0].id;
+  await db.query("INSERT INTO shop.order_numbers(kind,order_id,number) VALUES('purchase',$1,98761234)",[cryptoId]);
+  await db.query("INSERT INTO shop.purchase_sellers(order_id,seller_id) VALUES($1,$2)",[cryptoId,sellerId]);
+
   r=await req('/api/purchases/'+cryptoId+'/receipt',{method:'POST',headers:{'Content-Type':'image/png'},body:png},buyer);check('private receipt upload',r.status===201,r);
   const receipt=(await db.query('SELECT id FROM shop.purchase_receipts')).rows[0];
   if(receipt){
@@ -217,6 +224,8 @@ try{
  await testBuyerFollowedStores({req,check,db,buyer,buyerId,sellerId});
  await testSellerFinance({req,check,db,cookie,seller,buyer,sellerId,buyerId});
  await testTransactionPin({req,check,db,buyer,seller,buyerId,sellerId});
+ await testBalanceMarketplace({req,check,db,cookie,seller,sellerId});
+ await testTabSessions({req,check,db});
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.
  const storageFetch=globalThis.fetch;
  Object.assign(process.env,{SUPABASE_URL:'https://storage.example.test',SUPABASE_SERVICE_ROLE_KEY:'test-only-placeholder',SUPABASE_STORAGE_BUCKET:'shop-uploads'});

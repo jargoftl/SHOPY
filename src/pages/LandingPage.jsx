@@ -1,3 +1,4 @@
+import StoreAccountMenu from '../components/StoreAccountMenu.jsx'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -18,7 +19,6 @@ import {
   Menu,
   Search,
   ShoppingBag,
-  UserRound,
   X,
 } from 'lucide-react'
 
@@ -321,12 +321,12 @@ const LandingPage = () => {
   }
 
   return (
-    <div id="top" className="min-h-screen bg-[#f7f9f5] text-[#142217]">
-      <div className="bg-[#173b29] px-4 py-2 text-center text-[11px] font-medium tracking-wide text-white sm:text-xs">
+    <div id="top" className="min-h-screen bg-[#f7f7f7] text-[#111111]">
+      <div className="bg-[#111111] px-4 py-2 text-center text-[11px] font-medium tracking-wide text-white sm:text-xs">
         {text.promo}
       </div>
 
-      <header className="relative z-40 border-b border-[#e1e8df] bg-white">
+      <header className="relative z-40 border-b border-[#e5e5e5] bg-white">
         <div
           className="relative mx-auto flex min-h-[76px] max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-7 lg:px-10"
           onMouseLeave={() => setActiveMenu('')}
@@ -337,7 +337,7 @@ const LandingPage = () => {
               aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={mobileMenuOpen}
               onClick={() => setMobileMenuOpen((open) => !open)}
-              className="grid size-10 place-items-center md:hidden"
+              className="grid size-10 place-items-center lg:hidden"
             >
               {mobileMenuOpen ? <X size={24} strokeWidth={1.6} /> : <Menu size={24} strokeWidth={1.6} />}
             </button>
@@ -346,21 +346,21 @@ const LandingPage = () => {
             </Link>
           </div>
 
-          <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-5 lg:flex xl:gap-8" aria-label="Main navigation">
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-4 px-3 lg:flex xl:gap-6" aria-label="Main navigation">
             {text.nav.map((label, index) => {
               const keys = ['Home', 'Category', 'Product', 'Discounts', 'Partnership', 'Seller']
               const key = keys[index]
 
               if (key === 'Home') {
-                return <a key={key} href="#top" className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#1f5a37]">{label}</a>
+                return <a key={key} href="#top" className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#111111]">{label}</a>
               }
 
               if (key === 'Seller') {
-                return <button key={key} type="button" onClick={() => setSellerModalOpen(true)} className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#1f5a37]">{label}</button>
+                return <button key={key} type="button" onClick={() => setSellerModalOpen(true)} className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#111111]">{label}</button>
               }
 
-              if (key === 'Product') return <Link key={key} to="/products" className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#1f5a37]">{label}</Link>
-              if (key === 'Discounts') return <Link key={key} to="/discounts" className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#1f5a37]">{label}</Link>
+              if (key === 'Product') return <Link key={key} to="/products" className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#111111]">{label}</Link>
+              if (key === 'Discounts') return <Link key={key} to="/discounts" className="py-7 text-xs font-medium uppercase tracking-wide hover:text-[#111111]">{label}</Link>
 
               return (
                 <button
@@ -370,7 +370,7 @@ const LandingPage = () => {
                   onMouseEnter={() => setActiveMenu(key)}
                   onFocus={() => setActiveMenu(key)}
                   onClick={() => setActiveMenu((menu) => (menu === key ? '' : key))}
-                  className={`flex items-center gap-1 py-7 text-xs font-medium uppercase tracking-wide transition-colors hover:text-[#1f5a37] ${activeMenu === key ? 'text-[#1f5a37]' : ''}`}
+                  className={`flex items-center gap-1 py-7 text-xs font-medium uppercase tracking-wide transition-colors hover:text-[#111111] ${activeMenu === key ? 'text-[#111111]' : ''}`}
                 >
                   {label}<ChevronDown size={12} />
                 </button>
@@ -387,9 +387,7 @@ const LandingPage = () => {
             >
               {searchOpen ? <X size={20} strokeWidth={1.6} /> : <Search size={20} strokeWidth={1.6} />}
             </button>
-            <Link to="/login" aria-label="Log in or create an account" className="grid size-10 place-items-center">
-              <UserRound size={20} strokeWidth={1.6} />
-            </Link>
+            <StoreAccountMenu />
             <label className="hidden items-center gap-1.5 sm:flex" aria-label="Choose language">
               <Languages size={17} strokeWidth={1.6} />
               <select
@@ -413,7 +411,7 @@ const LandingPage = () => {
                   <p className="mb-5 text-[11px] font-semibold uppercase tracking-[0.15em] text-[#777]">{text.discover}</p>
                   <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                     {categories.map((category) => (
-                      <button key={category} type="button" onClick={() => selectCategory(category)} className="flex items-center justify-between border-b border-[#eee] pb-3 text-left text-sm hover:text-[#8a5a4d]">
+                      <button key={category} type="button" onClick={() => selectCategory(category)} className="flex items-center justify-between border-b border-[#eee] pb-3 text-left text-sm hover:text-[#111111]">
                         {categoryLabel(category)}<ChevronRight size={15} />
                       </button>
                     ))}
@@ -443,7 +441,7 @@ const LandingPage = () => {
       </header>
 
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-white px-5 pb-10 pt-5 md:hidden">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-white px-5 pb-10 pt-5 lg:hidden">
           <div className="flex items-center justify-between border-b border-[#e7e7e7] pb-5">
             <Link to="/" onClick={() => setMobileMenuOpen(false)} className="text-[30px] font-black leading-none tracking-[-0.08em]"><SiteName /><span className="ml-1 text-[18px]">▰</span></Link>
             <button type="button" aria-label="Close menu" onClick={() => setMobileMenuOpen(false)} className="grid size-11 place-items-center"><X size={25} strokeWidth={1.5} /></button>
@@ -484,7 +482,7 @@ const LandingPage = () => {
       )}
 
       <main>
-        <section className="relative isolate flex min-h-[480px] items-end overflow-hidden bg-[#10291b] sm:min-h-[560px] lg:min-h-[620px]">
+        <section className="relative isolate flex min-h-[480px] items-end overflow-hidden bg-[#111111] sm:min-h-[560px] lg:min-h-[620px]">
           <AnimatePresence mode="wait">
             <motion.img
               key={activeHero.image}
@@ -497,21 +495,21 @@ const LandingPage = () => {
               className="absolute inset-0 -z-20 size-full object-cover object-center"
             />
           </AnimatePresence>
-          <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#08170e]/80 via-[#10291b]/35 to-transparent" />
+          <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#111111]/80 via-[#111111]/35 to-transparent" />
           <div className="mx-auto w-full max-w-[1440px] px-6 pb-12 text-white sm:px-10 sm:pb-16 lg:px-16 lg:pb-20">
             <AnimatePresence mode="wait">
               <motion.div key={activeHeroIndex} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.35 }}>
-                <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#d3fa4b] sm:text-xs">{activeHero.eyebrow}</p>
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[#e5e5e5] sm:text-xs">{activeHero.eyebrow}</p>
                 <h1 className="max-w-2xl text-5xl font-semibold leading-[1.02] tracking-tight sm:text-6xl lg:text-7xl">{activeHero.title}</h1>
                 <p className="mt-4 max-w-md text-sm text-white/90 sm:text-base">{activeHero.description}</p>
-                <Link to="/products" className="mt-7 inline-flex items-center gap-3 rounded-md bg-[#c8f135] px-5 py-3 text-xs font-bold uppercase tracking-wide text-[#142217] transition-colors hover:bg-white">
+                <Link to="/products" className="mt-7 inline-flex items-center gap-3 rounded-md bg-[#cccccc] px-5 py-3 text-xs font-bold uppercase tracking-wide text-[#111111] transition-colors hover:bg-white">
                   {text.shopNow}<ChevronRight size={15} />
                 </Link>
               </motion.div>
             </AnimatePresence>
             <div className="mt-7 flex items-center gap-2" aria-label="Featured categories">
               {heroSlides.map((slide, index) => (
-                <button key={slide.category} type="button" aria-label={`Show ${slide.category} banner`} aria-pressed={activeHeroIndex === index} onClick={() => setActiveHeroIndex(index)} className={`h-1.5 rounded-full transition-all ${activeHeroIndex === index ? 'w-8 bg-[#c8f135]' : 'w-3 bg-white/60 hover:bg-white'}`} />
+                <button key={slide.category} type="button" aria-label={`Show ${slide.category} banner`} aria-pressed={activeHeroIndex === index} onClick={() => setActiveHeroIndex(index)} className={`h-1.5 rounded-full transition-all ${activeHeroIndex === index ? 'w-8 bg-[#cccccc]' : 'w-3 bg-white/60 hover:bg-white'}`} />
               ))}
               <span className="ml-2 text-[10px] text-white/75">Changes every minute</span>
             </div>
@@ -519,12 +517,12 @@ const LandingPage = () => {
         </section>
 
         <section className="grid min-h-[260px] grid-cols-1 sm:grid-cols-2">
-          <div className="relative flex min-h-[300px] items-end overflow-hidden bg-[#244a32] sm:min-h-[390px]">
+          <div className="relative flex min-h-[300px] items-end overflow-hidden bg-[#111111] sm:min-h-[390px]">
             <img src="https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1200&q=85" alt="A bright and comfortable home interior" loading="lazy" className="absolute inset-0 size-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
             <div className="relative p-6 text-white sm:p-9"><p className="text-[10px] font-semibold uppercase tracking-[0.18em]">{text.sale}</p><h2 className="mt-2 max-w-md text-3xl font-semibold sm:text-4xl">{text.saleTitle}</h2><a href="#products" className="mt-5 inline-block text-xs font-semibold uppercase underline underline-offset-4">{text.saleAction}</a></div>
           </div>
-          <div className="relative flex min-h-[300px] items-end overflow-hidden bg-[#244a32] sm:min-h-[390px]">
+          <div className="relative flex min-h-[300px] items-end overflow-hidden bg-[#111111] sm:min-h-[390px]">
             <img src="https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=1200&q=85" alt="A selection of consumer electronics" loading="lazy" className="absolute inset-0 size-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
             <div className="relative p-6 text-white sm:p-9"><p className="text-[10px] font-semibold uppercase tracking-[0.18em]">{text.productEyebrow}</p><a href="#products" className="mt-3 inline-flex items-center gap-2 text-sm font-semibold uppercase underline underline-offset-4">{text.discover}<ChevronRight size={15} /></a></div>
@@ -532,14 +530,14 @@ const LandingPage = () => {
         </section>
 
         {stores.length > 0 && <section className="mx-auto max-w-[1440px] px-4 py-12 sm:px-7 lg:px-10">
-          <div className="mb-5 flex items-end justify-between gap-4 border-b border-[#e1e8df] pb-4">
-            <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#52715b]">Independent sellers</p><h2 className="mt-2 text-2xl font-semibold sm:text-3xl">Discover partner stores</h2></div>
+          <div className="mb-5 flex items-end justify-between gap-4 border-b border-[#e5e5e5] pb-4">
+            <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#555555]">Independent sellers</p><h2 className="mt-2 text-2xl font-semibold sm:text-3xl">Discover partner stores</h2></div>
             <Link to="/products" className="shrink-0 text-xs font-semibold underline underline-offset-4">Explore marketplace</Link>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {stores.slice(0, 4).map((store) => <Link key={store.id} to={`/stores/${store.id}`} className="group overflow-hidden border border-[#e2e8e1] bg-white transition-colors hover:border-[#1f5a37]">
+            {stores.slice(0, 4).map((store) => <Link key={store.id} to={`/stores/${store.id}`} className="group overflow-hidden border border-[#e5e5e5] bg-white transition-colors hover:border-[#111111]">
               <img src={store.imageUrl || store.logoUrl || 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80'} alt={store.storeName} loading="lazy" className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-[1.025]" />
-              <div className="p-3 sm:p-4"><h3 className="truncate text-sm font-semibold">{store.storeName}</h3><p className="mt-1 truncate text-xs text-[#728074]">{store.ownerName} · {store.productCount} products</p><p className="mt-2 line-clamp-2 text-xs leading-5 text-[#59675d]">{store.storeDescription}</p></div>
+              <div className="p-3 sm:p-4"><h3 className="truncate text-sm font-semibold">{store.storeName}</h3><p className="mt-1 truncate text-xs text-[#555555]">{store.ownerName} · {store.productCount} products</p><p className="mt-2 line-clamp-2 text-xs leading-5 text-[#111111]">{store.storeDescription}</p></div>
             </Link>)}
           </div>
         </section>}
@@ -550,7 +548,7 @@ const LandingPage = () => {
           <div className="mb-7 flex flex-col justify-between gap-5 border-b border-[#e5e5e5] pb-5 sm:flex-row sm:items-end">
             <div className="flex items-end justify-between gap-4">
               <div>
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8a5a4d]">{text.productEyebrow}</p>
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#111111]">{text.productEyebrow}</p>
                 <h2 className="text-3xl font-semibold sm:text-4xl">{activeCategory === 'All' ? text.productHeading : categoryLabel(activeCategory)}</h2>
               </div>
               <Link to="/products" className="shrink-0 text-xs font-semibold underline underline-offset-4">View all</Link>
@@ -577,7 +575,7 @@ const LandingPage = () => {
 
       <PromotedProducts />
       <StoreFooter language={language} setLanguage={setLanguage} languages={languages} text={text} />
-      {showScrollTop && <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Scroll to top" title="Scroll to top" className="fixed bottom-24 right-4 z-30 grid size-11 place-items-center rounded-full bg-[#1f3a2b] text-white shadow-lg transition-colors hover:bg-[#c8f135] hover:text-[#142217] md:bottom-6 md:right-7"><ArrowUp size={19} /></button>}
+      {showScrollTop && <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Scroll to top" title="Scroll to top" className="fixed bottom-24 right-4 z-30 grid size-11 place-items-center rounded-full bg-[#111111] text-white shadow-lg transition-colors hover:bg-[#cccccc] hover:text-[#111111] md:bottom-6 md:right-7"><ArrowUp size={19} /></button>}
       <SellerAccessModal isOpen={sellerModalOpen} onClose={() => setSellerModalOpen(false)} />
     </div>
   )

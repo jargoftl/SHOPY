@@ -51,25 +51,25 @@ const Register = () => {
   return (
     <AuthLayout>
       <div className="mb-5">
-        <p className="mb-2 text-xs font-bold tracking-[0.14em] text-[#c87800]">JOIN THE GOOD STUFF</p>
+        <p className="mb-2 text-xs font-bold tracking-[0.14em] text-[#555555]">JOIN THE GOOD STUFF</p>
         <h1 className="text-4xl font-bold tracking-tight">Register</h1>
-        <p className="mt-3 text-sm text-[#85907d]">Your next favorite find starts here.</p>
+        <p className="mt-3 text-sm text-[#555555]">Your next favorite find starts here.</p>
       </div>
       <form ref={formRef} className="space-y-4" onSubmit={handleSubmit}>
         <label className="block text-sm font-medium">Full name
-          <input className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" type="text" name="fullName" autoComplete="name" maxLength={100} required placeholder="Enter your full name" />
+          <input className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="text" name="fullName" autoComplete="name" maxLength={100} required placeholder="Enter your full name" />
         </label>
         <label className="block text-sm font-medium">Email
-          <input className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" type="email" name="email" readOnly={codeSent} autoComplete="email" maxLength={254} required placeholder="Enter your email address" />
+          <input className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="email" name="email" readOnly={codeSent} autoComplete="email" maxLength={254} required placeholder="Enter your email address" />
         </label>
         <label className="block text-sm font-medium">Phone number <span className="font-normal text-[#777]">(optional)</span>
-          <input className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" type="tel" name="phone" autoComplete="tel" maxLength={30} placeholder="Enter your phone number" />
+          <input className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="tel" name="phone" autoComplete="tel" maxLength={30} placeholder="Enter your phone number" />
         </label>
         <label className="block text-sm font-medium">Password
-          <input className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" type="password" name="password" autoComplete="new-password" minLength={8} required placeholder="Create a password" />
+          <input className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="password" name="password" autoComplete="new-password" minLength={8} required placeholder="Create a password" />
         </label>
         <label className="block text-sm font-medium">Confirm password
-          <input className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" type="password" name="confirmPassword" autoComplete="new-password" minLength={8} required placeholder="Enter your password again" />
+          <input className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="password" name="confirmPassword" autoComplete="new-password" minLength={8} required placeholder="Enter your password again" />
         </label>
 
         {codeSent&&<div className="auth-email-code"><p>Check your inbox for your six-digit verification code. It expires in 10 minutes.</p><label>Email verification code<input name="verificationCode" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required value={verificationCode} onChange={event=>setVerificationCode(event.target.value.replace(/[^0-9]/g,''))} className="mt-2 h-12 w-full border px-3"/></label><div className="mt-3 flex gap-4"><button type="button" disabled={isSubmitting} className="text-xs underline" onClick={async()=>{setIsSubmitting(true);setMessage('');try{await apiRequest('/api/auth/registration-verification-code',{method:'POST',body:JSON.stringify({email:new FormData(formRef.current).get('email'),fullName:new FormData(formRef.current).get('fullName')})});setMessage('A new code was sent.')}catch(error){setMessage(error.message)}finally{setIsSubmitting(false)}}}>Resend code</button><button type="button" className="text-xs underline" onClick={()=>{setCodeSent(false);setVerificationCode('');setMessage('')}}>Change email</button></div></div>}

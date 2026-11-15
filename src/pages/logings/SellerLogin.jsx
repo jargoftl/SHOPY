@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import AuthLayout from '../../components/AuthLayout.jsx'
 import { apiRequest } from '../../lib/api.js'
 
 const SellerLogin = () => {
   const navigate = useNavigate()
+  const location=useLocation()
   const [message, setMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
 
   useEffect(() => {
+    if(new URLSearchParams(location.search).get('switch')==='1'){setIsCheckingSession(false);return}
     let active = true
     apiRequest('/api/auth/me', { background: true })
       .then(({ user }) => {
@@ -19,7 +21,7 @@ const SellerLogin = () => {
       .catch((error) => { if (active && error.status !== 401) setMessage(error.message) })
       .finally(() => { if (active) setIsCheckingSession(false) })
     return () => { active = false }
-  }, [navigate])
+  }, [navigate,location.search])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -50,16 +52,16 @@ const SellerLogin = () => {
     <AuthLayout>
       {isCheckingSession ? <p role="status" className="text-sm text-[#666]">Checking your account…</p> : <>
       <div className="mb-7">
-        <p className="mb-2 text-xs font-bold tracking-[0.14em] text-[#c87800]">SELLER CENTER</p>
+        <p className="mb-2 text-xs font-bold tracking-[0.14em] text-[#555555]">SELLER CENTER</p>
         <h1 className="text-4xl font-bold tracking-tight">Seller login</h1>
         <p className="mt-2 text-sm text-[#686868]">Sign in to continue to your seller workspace and profile.</p>
       </div>
       <form className="space-y-5" onSubmit={handleSubmit}>
         <label className="block text-sm font-medium">Email address
-          <input className="mt-2 h-12 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" type="email" name="email" autoComplete="email" required placeholder="you@example.com" />
+          <input className="mt-2 h-12 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="email" name="email" autoComplete="email" required placeholder="you@example.com" />
         </label>
         <label className="block text-sm font-medium">Password
-          <input className="mt-2 h-12 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" type="password" name="password" autoComplete="current-password" required placeholder="Enter your password" />
+          <input className="mt-2 h-12 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="password" name="password" autoComplete="current-password" required placeholder="Enter your password" />
         </label>
         <div className="text-right"><Link to="/forgot-password" className="text-sm font-medium underline underline-offset-2">Forgot password?</Link></div>
 

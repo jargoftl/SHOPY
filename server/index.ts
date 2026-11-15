@@ -13,6 +13,7 @@ import { prepareVerificationPhotos, optionalSsnLast4, verificationPhone, uploadV
 import { registerAuthBrowser, authBrowserBinding } from './authBrowser.ts'
 import { warehousePricing } from './warehousePricing.ts'
 import { registerMarketing } from './marketing.ts'
+import {registerSellerDisplayStats} from './sellerDisplayStats.ts'
 import { registerTransactionPin, checkTransactionPin } from './transactionPin.ts'
 import { registerSellerFinance } from './sellerFinance.ts'
 import { registerManualOrders } from './manualOrders.ts'
@@ -361,6 +362,7 @@ app.use('/api/seller/application', express.json({ limit: '12mb' }))
 app.use('/api/admin/warehouse', express.json({ limit: '24mb' }))
 app.use(express.json({ limit: '1mb' }))
 app.use(cookieParser())
+app.use('/api',(_req,res,next)=>{res.set('Cache-Control','private, no-store').vary('X-Session-Scope');next()})
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -369,8 +371,14 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-const setSessionCookie = (res: Response, token: string): void => {
-  res.cookie(cookieName, token, {
+const sessionCookieName=(req:Request):string=>{
+ const scope=req.get('X-Session-Scope')||(req.method==='GET'?req.query.sessionScope:'')
+ if(!scope)return cookieName
+ return typeof scope==='string'&&/^[a-f0-9]{32}$/.test(scope)?`${cookieName}_${scope}`:'invalid_session_scope'
+}
+const sessionToken=(req:Request)=>{const token=req.cookies[sessionCookieName(req)];return typeof token==='string'&&/^[a-f0-9]{64}$/.test(token)?token:null}
+const setSessionCookie = (req: Request, res: Response, token: string): void => {
+  res.cookie(sessionCookieName(req), token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true',
@@ -379,8 +387,8 @@ const setSessionCookie = (res: Response, token: string): void => {
   })
 }
 
-const clearSessionCookie = (res: Response): void => {
-  res.clearCookie(cookieName, {
+const clearSessionCookie = (req: Request, res: Response): void => {
+  res.clearCookie(sessionCookieName(req), {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true',
@@ -388,16 +396,16 @@ const clearSessionCookie = (res: Response): void => {
   })
 }
 
-const createSession = async (userId: number | bigint, res: Response): Promise<void> => {
+const createSession = async (userId: number | bigint, req: Request, res: Response): Promise<void> => {
   const token = randomBytes(32).toString('hex')
   const expiresAt = new Date(Date.now() + sessionDurationMs).toISOString()
   await database.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)')
     .run(hashToken(token), userId, expiresAt)
-  setSessionCookie(res, token)
+  setSessionCookie(req, res, token)
 }
 
 const requireAuth: RequestHandler = async (req, res, next) => {
-  const token = req.cookies[cookieName]
+  const token = sessionToken(req)
   if (!token) return res.status(401).json({ error: 'Please log in to continue.' })
 
   const session = (await getRow<UserRow & { session_expires_at: string }>(`
@@ -408,18 +416,18 @@ const requireAuth: RequestHandler = async (req, res, next) => {
   `, hashToken(token), new Date().toISOString()))
 
   if (!session) {
-    clearSessionCookie(res)
+    clearSessionCookie(req, res)
     return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
   }
   if (session.suspended) {
-    clearSessionCookie(res)
+    clearSessionCookie(req, res)
     return res.status(403).json({ error: 'Your account is suspended. Contact the administrator.' })
   }
 
   if (Date.parse(session.session_expires_at) - Date.now() <= sessionRenewalWindowMs) {
     const expiresAt = new Date(Date.now() + sessionDurationMs).toISOString()
     await database.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?').run(expiresAt, session.token_hash)
-    setSessionCookie(res, token)
+    setSessionCookie(req, res, token)
   }
 
   req.user = session
@@ -736,7 +744,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     })()
     registrationCommitted = true
     if (!existingAccount) {
-      await createSession(user.id, res)
+      await createSession(user.id, req, res)
       await database.prepare('INSERT INTO auth_events (user_id, event_type) VALUES (?, ?)').run(user.id, 'registered')
     }
     if (role === 'seller' && sellerProfile) {
@@ -778,7 +786,7 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
     if (!currentUser || currentUser.suspended) return res.status(403).json({ error: 'Your account is suspended. Contact the administrator.' })
     if (req.body.loginType === 'seller' && !['seller', 'admin'].includes(currentUser.role) && !['pending','rejected','needs_changes'].includes(currentUser.seller_status)) return res.status(403).json({ error: 'This account is not a seller account. Use customer login instead.' })
 
-    await createSession(currentUser.id, res)
+    await createSession(currentUser.id, req, res)
     await database.prepare('INSERT INTO auth_events (user_id, event_type) VALUES (?, ?)').run(currentUser.id, 'login')
     const emailNotifications = await sendAuthNotifications(currentUser, 'login', (await getSiteName()))
     return res.json({ user: publicUser(currentUser), emailNotifications })
@@ -851,7 +859,7 @@ app.post('/api/auth/reset-password', passwordResetLimiter, async (req, res, next
       return true
     })())
     if (!updated) return res.status(400).json({ error: 'This reset link is invalid or expired. Request a new one.' })
-    clearSessionCookie(res)
+    clearSessionCookie(req, res)
     return res.json({ ok: true })
   } catch (error: unknown) {
     return next(error)
@@ -861,9 +869,9 @@ app.post('/api/auth/reset-password', passwordResetLimiter, async (req, res, next
 app.get('/api/auth/me', requireAuth, (req, res) => res.json({ user: publicUser(req.user!) }))
 
 app.post('/api/auth/logout', async (req, res) => {
-  const token = req.cookies[cookieName]
+  const token = sessionToken(req)
   if (token) await database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(token))
-  clearSessionCookie(res)
+  clearSessionCookie(req, res)
   return res.json({ ok: true })
 })
 
@@ -937,7 +945,7 @@ app.get('/api/stores/:sellerId', async (req, res) => {
   await database.prepare('UPDATE seller_profiles SET visitor_count = visitor_count + 1 WHERE user_id = ?').run(sellerId)
   await database.prepare('INSERT INTO store_daily_visits(seller_id,day,visits) VALUES(?,SUBSTRING(CURRENT_TIMESTAMP,1,10),1) ON CONFLICT(seller_id,day) DO UPDATE SET visits=store_daily_visits.visits+1').run(sellerId)
   store.visitor_count += 1
-  const token = req.cookies[cookieName]
+  const token = sessionToken(req)
   if (token) {
     const visitor = (await getRow<{ id: number }>(`
       SELECT users.id FROM users JOIN sessions ON sessions.user_id = users.id
@@ -972,7 +980,7 @@ app.get('/api/stores/:sellerId', async (req, res) => {
 
 app.get('/api/stores/:sellerId/follow', async (req, res) => {
   const sellerId = Number(req.params.sellerId)
-  const token = req.cookies[cookieName]
+  const token = sessionToken(req)
   if (!token) return res.json({ isFollowing: false })
   const session = (await getRow<{ id: number }>(`
     SELECT users.id
@@ -1402,9 +1410,12 @@ const getConversationMessages = async (sellerId: number, currentUserId: number) 
   }))
 }
 
-app.get('/api/rewards', requireAuth, requireRole('customer', 'seller'), async (req, res) => {
-  const balance = (await getRow<{ balanceUnits: number }>('SELECT balance_units AS balanceUnits FROM reward_balances WHERE user_id = ?', req.user!.id))
-  return res.json({ balanceUnits: balance?.balanceUnits ?? 0 })
+app.get('/api/rewards', requireAuth, requireRole('customer','seller'),async(req,res)=>{
+ const credit=(await getRow<{amount:number}>('SELECT balance_units AS amount FROM reward_balances WHERE user_id=?',req.user!.id))?.amount||0
+ const hold=(await getRow<{amount:number}>('SELECT amount_cents AS amount FROM buyer_wallet_holds WHERE user_id=?',req.user!.id))?.amount||0
+ const merchant=req.user!.role==='seller'?await getRow<{balance_cents:number,reserved_cents:number}>('SELECT balance_cents,reserved_cents FROM seller_wallets WHERE seller_id=?',req.user!.id):null
+ const balanceUnits=credit+(merchant?.balance_cents||0),reservedUnits=hold+(merchant?.reserved_cents||0)
+ return res.set('Cache-Control','no-store').json({balanceUnits,availableUnits:Math.max(0,balanceUnits-reservedUnits),reservedUnits})
 })
 
 app.patch('/api/admin/users/:id/rewards', requireAuth, requireRole('admin'), async (req, res) => {
@@ -1419,7 +1430,8 @@ app.patch('/api/admin/users/:id/rewards', requireAuth, requireRole('admin'), asy
   const balanceUnits = (await database.transaction(async () => {
     const balance = (await getRow<{ balance_units: number }>('SELECT balance_units FROM reward_balances WHERE user_id = ?', userId))?.balance_units ?? 0
     const next = balance + adjustmentUnits
-    if (!Number.isSafeInteger(next) || next < 0 || next > 10000000000) return null
+    const held=(await getRow<{amount:number}>('SELECT amount_cents AS amount FROM buyer_wallet_holds WHERE user_id=?',userId))?.amount||0
+    if (!Number.isSafeInteger(next) || next < held || next > 10000000000) return null
     await database.prepare('INSERT INTO reward_balances (user_id, balance_units) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance_units = excluded.balance_units').run(userId, next)
     await database.prepare('INSERT INTO reward_history (user_id, admin_id, adjustment_units, balance_units, reason) VALUES (?, ?, ?, ?, ?)').run(userId, req.user!.id, adjustmentUnits, next, reason)
     const amount = (Math.abs(adjustmentUnits) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -1592,7 +1604,7 @@ app.get('/api/buyer/profile', requireAuth, requireRole('customer'), async (req, 
   res.set('Cache-Control','private, no-store')
   const userId=req.user!.id
   const [wallet,requests,follows,security,favoriteRows,addresses,visits]=await Promise.all([
-    getRow<{balanceCents:number}>('SELECT balance_units AS balanceCents FROM reward_balances WHERE user_id=?',userId),
+    getRow<{balanceCents:number,heldCents:number,availableCents:number}>('SELECT balance_units AS balanceCents,COALESCE((SELECT amount_cents FROM buyer_wallet_holds WHERE user_id=?),0) AS heldCents,balance_units-COALESCE((SELECT amount_cents FROM buyer_wallet_holds WHERE user_id=?),0) AS availableCents FROM reward_balances WHERE user_id=?',userId,userId,userId),
     walletRequests(userId),
     getRows<{sellerId:number,storeName:string,logoUrl:string,storeDescription:string,productCount:number,followerCount:number}>(`
       SELECT p.user_id AS sellerId,p.store_name AS storeName,p.logo_url AS logoUrl,p.store_description AS storeDescription,
@@ -1769,14 +1781,25 @@ app.post('/api/buyer/requests', authLimiter, requireAuth, requireRole('customer'
   }
   const pinError=await checkTransactionPin(database,req.user!.id,req.body.transactionPin)
   if(pinError)return res.status(403).json({error:pinError})
-  const id = (await database.transaction(async () => {
-    const result = (await database.prepare('INSERT INTO buyer_wallet_requests (user_id, kind, coin, amount_cents, destination) VALUES (?, ?, ?, ?, ?)').run(req.user!.id, kind, coin, amountCents, destination))
+  let id:number
+  try{id = (await database.transaction(async () => {
+    let reserved=0
+    if(kind==='withdrawal'){
+      const balance=(await getRow<{amount:number}>('SELECT balance_units AS amount FROM reward_balances WHERE user_id=?',req.user!.id))?.amount||0
+      const held=(await getRow<{amount:number}>('SELECT amount_cents AS amount FROM buyer_wallet_holds WHERE user_id=?',req.user!.id))?.amount||0
+      if(balance-held<amountCents)throw Object.assign(new Error('Insufficient available account balance for this withdrawal.'),{status:409})
+      reserved=amountCents
+      await database.prepare('INSERT INTO buyer_wallet_holds(user_id,amount_cents) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET amount_cents=buyer_wallet_holds.amount_cents+excluded.amount_cents').run(req.user!.id,reserved)
+    }
+    const configured=kind==='deposit'?await getRow<{network:string,address:string}>('SELECT network,address FROM payment_wallets WHERE coin=?',coin):null
+    const result=await database.prepare('INSERT INTO buyer_wallet_requests(user_id,kind,coin,amount_cents,destination,reserved_cents,payment_coin,network,wallet_address) VALUES(?,?,?,?,?,?,?,?,?)').run(req.user!.id,kind,coin,amountCents,destination,reserved,configured?coin:'',configured?.network||'',configured?.address||'')
     await database.prepare(`
       INSERT INTO notifications (user_id, type, title, body, link)
       SELECT id, 'buyer_request', ?, ?, ? FROM users WHERE role = 'admin'
     `).run(`Buyer ${kind} request`, `${req.user!.full_name} (#${req.user!.public_id}) requested ${coin}.`, `/admin/users/${req.user!.id}#buyer-controls`)
     return result.lastInsertRowid
   })())
+  }catch(error){const e=error as Error&{status?:number};if(e.status)return res.status(e.status).json({error:e.message});throw error}
   return res.status(201).json({ id })
 })
 
@@ -1849,45 +1872,58 @@ app.patch('/api/admin/buyers/:id/balance', requireAuth, requireRole('admin'), as
   if (!Number.isSafeInteger(userId) || !(isAdjustment ? Number.isSafeInteger(adjustmentCents) && adjustmentCents !== 0 : Number.isSafeInteger(balanceCents) && adjustmentCents === undefined) || !reason || reason.length > 500) {
     return res.status(400).json({ error: 'Enter a valid manual wallet balance and a reason (up to 500 characters).' })
   }
-  const wallet = (await getRow<{ balance_cents: number }>(`
-    SELECT COALESCE(w.balance_units, 0) AS balance_cents FROM users u LEFT JOIN reward_balances w ON w.user_id = u.id WHERE u.id = ? AND u.role = 'customer'
-  `, userId))
-  if (!wallet) return res.status(404).json({ error: 'Buyer not found.' })
-  const newBalance = isAdjustment ? wallet.balance_cents + adjustmentCents : balanceCents
-  if (!Number.isSafeInteger(newBalance) || newBalance < 0 || newBalance > 10000000000) return res.status(400).json({ error: 'The resulting balance must be between $0 and $100,000,000.' })
-  await database.transaction(async () => {
-    await database.prepare('INSERT INTO reward_balances (user_id, balance_units) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance_units = excluded.balance_units').run(userId, newBalance)
-    await database.prepare('INSERT INTO buyer_balance_history (user_id, admin_id, old_cents, new_cents, reason) VALUES (?, ?, ?, ?, ?)').run(userId, req.user!.id, wallet.balance_cents, newBalance, reason)
-    await database.prepare('INSERT INTO reward_history (user_id, admin_id, adjustment_units, balance_units, reason) VALUES (?, ?, ?, ?, ?)').run(userId, req.user!.id, newBalance - wallet.balance_cents, newBalance, reason)
-    if (newBalance !== wallet.balance_cents) {
-      const difference = newBalance - wallet.balance_cents
-      const amount = (Math.abs(difference) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-      await database.prepare('INSERT INTO notifications (user_id, type, title, body, link) VALUES (?, ?, ?, ?, ?)').run(userId, difference > 0 ? 'reward' : 'reward_adjustment', difference > 0 ? 'Balance added' : 'Balance updated', `$${amount} ${difference > 0 ? 'added to' : 'removed from'} your store-credit balance.`, '/profile/wallet')
-    }
+  const newBalance=await database.transaction(async()=>{
+    const wallet=await getRow<{balance_cents:number}>("SELECT COALESCE(w.balance_units,0) AS balance_cents FROM users u LEFT JOIN reward_balances w ON w.user_id=u.id WHERE u.id=? AND u.role='customer'",userId)
+    if(!wallet)return null
+    const next=isAdjustment?wallet.balance_cents+adjustmentCents:balanceCents
+    const held=(await getRow<{amount:number}>('SELECT amount_cents AS amount FROM buyer_wallet_holds WHERE user_id=?',userId))?.amount||0
+    if(!Number.isSafeInteger(next)||next<held||next>10000000000)return null
+    await database.prepare('INSERT INTO reward_balances(user_id,balance_units) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET balance_units=excluded.balance_units').run(userId,next)
+    await database.prepare('INSERT INTO buyer_balance_history(user_id,admin_id,old_cents,new_cents,reason) VALUES(?,?,?,?,?)').run(userId,req.user!.id,wallet.balance_cents,next,reason)
+    await database.prepare('INSERT INTO reward_history(user_id,admin_id,adjustment_units,balance_units,reason) VALUES(?,?,?,?,?)').run(userId,req.user!.id,next-wallet.balance_cents,next,reason)
+    await database.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'balance','Account balance updated',?,'/profile/wallet')").run(userId,reason)
+    return next
   })()
+  if(newBalance===null)return res.status(400).json({error:'Buyer not found or resulting balance is invalid. Pending withdrawal holds must stay covered.'})
   return res.json({ balanceCents: newBalance })
 })
 
-app.patch('/api/admin/buyer-requests/:id', requireAuth, requireRole('admin'), async (req, res) => {
-  const id = Number(req.params.id)
-  const { status } = req.body
-  const instructions = typeof req.body.instructions === 'string' ? req.body.instructions.trim() : ''
-  if (!Number.isSafeInteger(id) || !['pending', 'confirmed', 'rejected'].includes(status) || instructions.length > 2000) return res.status(400).json({ error: 'Enter a valid request status and instructions.' })
-  const request = (await getRow<{ user_id: number, status: string, kind: string, payment_coin: string, network: string, wallet_address: string, amount_cents: number | null }>('SELECT user_id, status, kind, payment_coin, network, wallet_address, amount_cents FROM buyer_wallet_requests WHERE id = ?', id))
-  if (!request) return res.status(404).json({ error: 'Request not found.' })
-  if (request.status !== 'pending') return res.status(409).json({ error: 'This request has already been resolved.' })
-  if (status === 'confirmed' && request.kind === 'deposit' && request.amount_cents === null) return res.status(400).json({ error: 'The buyer must enter the deposit amount before confirmation.' })
-  const paymentCoin = typeof req.body.paymentCoin === 'string' ? req.body.paymentCoin.trim() : request.payment_coin
-  const network = typeof req.body.network === 'string' ? req.body.network.trim() : request.network
-  const walletAddress = typeof req.body.walletAddress === 'string' ? req.body.walletAddress.trim() : request.wallet_address
-  if (network.length > 100 || walletAddress.length > 500 || (paymentCoin && !buyerCoins.includes(paymentCoin))) return res.status(400).json({ error: 'Enter a supported coin, network and wallet address.' })
-  if (status === 'pending' && request.kind === 'deposit' && (!paymentCoin || !network || !walletAddress)) return res.status(400).json({ error: 'Choose a payment coin and enter its network and wallet address.' })
-  if (status === 'pending' && request.kind !== 'deposit' && !instructions) return res.status(400).json({ error: 'Enter instructions before sending.' })
-  await database.transaction(async () => {
-    await database.prepare('UPDATE buyer_wallet_requests SET status = ?, instructions = ?, payment_coin = ?, network = ?, wallet_address = ? WHERE id = ?').run(status, instructions, paymentCoin, network, walletAddress, id)
-    await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) VALUES (?, 'buyer_request', ?, ?, '/profile/wallet')").run(request.user_id, `Request #${id} ${status === 'pending' ? 'updated' : status}`, instructions || 'Your request status has been updated.')
-  })()
-  return res.json({ ok: true })
+app.patch('/api/admin/buyer-requests/:id',requireAuth,requireRole('admin'),async(req,res)=>{
+ const id=Number(req.params.id),{status}=req.body||{}
+ const instructions=typeof req.body.instructions==='string'?req.body.instructions.trim():''
+ const reference=typeof req.body.transferReference==='string'?req.body.transferReference.trim():''
+ if(!Number.isSafeInteger(id)||!['pending','confirmed','rejected'].includes(status)||instructions.length>2000||reference.length>300)return res.status(400).json({error:'Enter valid request details.'})
+ type WalletReview={user_id:number,status:string,kind:string,coin:string,payment_coin:string,network:string,wallet_address:string,amount_cents:number|null,reserved_cents:number}
+ try{await database.transaction(async()=>{
+  const request=await getRow<WalletReview>('SELECT * FROM buyer_wallet_requests WHERE id=?',id)
+  if(!request)throw Object.assign(new Error('Request not found.'),{status:404})
+  if(request.status!=='pending')throw Object.assign(new Error('This request has already been resolved.'),{status:409})
+  const paymentCoin=typeof req.body.paymentCoin==='string'?req.body.paymentCoin.trim():request.payment_coin
+  const network=typeof req.body.network==='string'?req.body.network.trim():request.network
+  const wallet=typeof req.body.walletAddress==='string'?req.body.walletAddress.trim():request.wallet_address
+  if(network.length>100||wallet.length>500||(paymentCoin&&!buyerCoins.includes(paymentCoin)))throw Object.assign(new Error('Enter supported payment details.'),{status:400})
+  if(status==='pending'&&request.kind==='deposit'&&(!paymentCoin||!network||!wallet))throw Object.assign(new Error('Choose a coin, network and funding wallet.'),{status:400})
+  if(status==='confirmed'){
+   if(!request.amount_cents||req.body.verified!==true||!reference)throw Object.assign(new Error('Verify the transfer independently and enter its transaction reference and amount.'),{status:400})
+   if(request.kind==='deposit'){
+    if(!request.payment_coin||!request.network||!request.wallet_address||!await getRow('SELECT id FROM buyer_request_receipts WHERE request_id=?',id))throw Object.assign(new Error('A configured deposit wallet and receipt are required.'),{status:409})
+    if(await getRow('SELECT request_id FROM buyer_deposit_credits WHERE coin=? AND network=? AND transfer_reference=?',request.payment_coin,request.network,reference))throw Object.assign(new Error('That transfer has already credited an account.'),{status:409})
+    await database.prepare('INSERT INTO buyer_deposit_credits(request_id,user_id,amount_cents,coin,network,transfer_reference,admin_id) VALUES(?,?,?,?,?,?,?)').run(id,request.user_id,request.amount_cents,request.payment_coin,request.network,reference,req.user!.id)
+   }
+   const before=(await getRow<{amount:number}>('SELECT balance_units AS amount FROM reward_balances WHERE user_id=?',request.user_id))?.amount||0
+   const after=before+(request.kind==='deposit'?request.amount_cents:-request.amount_cents)
+   const held=(await getRow<{amount:number}>('SELECT amount_cents AS amount FROM buyer_wallet_holds WHERE user_id=?',request.user_id))?.amount||0
+   if(!Number.isSafeInteger(after)||after>10000000000||after<held-request.reserved_cents)throw Object.assign(new Error('Insufficient available account balance to complete this withdrawal.'),{status:409})
+   await database.prepare('INSERT INTO reward_balances(user_id,balance_units) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET balance_units=excluded.balance_units').run(request.user_id,after)
+   const reason=`Verified ${request.kind} request #${id}; transfer ${reference}`
+   await database.prepare('INSERT INTO buyer_balance_history(user_id,admin_id,old_cents,new_cents,reason) VALUES(?,?,?,?,?)').run(request.user_id,req.user!.id,before,after,reason)
+   await database.prepare('INSERT INTO reward_history(user_id,admin_id,adjustment_units,balance_units,reason) VALUES(?,?,?,?,?)').run(request.user_id,req.user!.id,after-before,after,reason)
+  }
+  if(status!=='pending'&&request.reserved_cents)await database.prepare('UPDATE buyer_wallet_holds SET amount_cents=amount_cents-? WHERE user_id=?').run(request.reserved_cents,request.user_id)
+  await database.prepare('UPDATE buyer_wallet_requests SET status=?,instructions=?,payment_coin=?,network=?,wallet_address=? WHERE id=?').run(status,instructions,paymentCoin,network,wallet,id)
+  await database.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'buyer_request',?,?, '/profile/wallet')").run(request.user_id,`Request #${id} ${status}`,status==='confirmed'?`${request.kind==='deposit'?'Funds added to':'Funds withdrawn from'} your account balance.`:instructions||'Your request status changed.')
+ })()}catch(error){const e=error as Error&{status?:number};if(e.status)return res.status(e.status).json({error:e.message});throw error}
+ return res.json({ok:true})
 })
 
 app.get('/api/admin/users', requireAuth, requireRole('admin'), async (_req, res) => {
@@ -2150,6 +2186,7 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
   return res.json({ events })
 })
 
+registerSellerDisplayStats(app,database,requireAuth,requireRole)
 registerTransactionPin(app, database, requireAuth, requireRole)
 registerSellerFinance(app, database, requireAuth, requireRole)
 await registerManualOrders(app, database, requireAuth, requireRole)

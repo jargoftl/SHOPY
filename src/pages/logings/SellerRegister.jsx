@@ -260,33 +260,33 @@ const SellerRegister = () => {
         <form className="space-y-4" onSubmit={continueFromAccount}>
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-sm font-medium">Full name
-              <input name="fullName" value={form.fullName} onChange={updateForm} autoComplete="name" maxLength={100} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Your legal full name" />
+              <input name="fullName" value={form.fullName} onChange={updateForm} autoComplete="name" maxLength={100} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Your legal full name" />
             </label>
             <label className="block text-sm font-medium">Phone
-              <input name="phone" value={form.phone} onChange={updateForm} type="tel" autoComplete="tel" maxLength={30} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="+234 801 234 5678" />
+              <input name="phone" value={form.phone} onChange={updateForm} type="tel" autoComplete="tel" maxLength={30} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="+234 801 234 5678" />
             </label>
           </div>
           <label className="block text-sm font-medium">Email address
-            <input name="email" readOnly={Boolean(existingAccount)} value={form.email} onChange={updateForm} type="email" autoComplete="email" maxLength={254} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="you@example.com" />
+            <input name="email" readOnly={Boolean(existingAccount)} value={form.email} onChange={updateForm} type="email" autoComplete="email" maxLength={254} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="you@example.com" />
           </label>
-          {existingAccount && <p className="rounded-lg bg-[#edf3e7] p-3 text-xs leading-6 text-[#5e7850]">You’re applying with your signed-in account. Your current password and purchases stay the same.</p>}
+          {existingAccount && <p className="rounded-lg bg-[#f7f7f7] p-3 text-xs leading-6 text-[#555555]">You’re applying with your signed-in account. Your current password and purchases stay the same.</p>}
           {!existingAccount && <>          <div className="grid grid-cols-2 gap-3">
             <label className="block text-sm font-medium">Password
-              <input name="password" value={form.password} onChange={updateForm} type="password" autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Create password" />
+              <input name="password" value={form.password} onChange={updateForm} type="password" autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Create password" />
             </label>
             <label className="block text-sm font-medium">Confirm password
-              <input name="confirmPassword" value={form.confirmPassword} onChange={updateForm} type="password" autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Type again" />
+              <input name="confirmPassword" value={form.confirmPassword} onChange={updateForm} type="password" autoComplete="new-password" minLength={8} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Type again" />
             </label>
           </div>
           </>}
 
           {codeSent && <label className="block text-sm font-medium">Email verification code
-            <input name="verificationCode" value={form.verificationCode} onChange={updateForm} type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="6-digit email code" />
+            <input name="verificationCode" value={form.verificationCode} onChange={updateForm} type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="6-digit email code" />
           </label>}
-          {developmentCode && <div role="status" className="border border-[#eadfc7] bg-[#fff9eb] px-4 py-3">
-            <p className="text-xs font-semibold text-[#71521e]">Local development code</p>
-            <p className="mt-1 font-mono text-lg tracking-[0.12em] text-[#20231f]">{developmentCode}</p>
-            <p className="mt-1 text-[10px] text-[#71521e]">Shown only in local development. It expires in 10 minutes.</p>
+          {developmentCode && <div role="status" className="border border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3">
+            <p className="text-xs font-semibold text-[#111111]">Local development code</p>
+            <p className="mt-1 font-mono text-lg tracking-[0.12em] text-[#111111]">{developmentCode}</p>
+            <p className="mt-1 text-[10px] text-[#111111]">Shown only in local development. It expires in 10 minutes.</p>
           </div>}
           {codeSent && <p className="text-[11px] leading-5 text-[#777]">Enter the code sent to your email. It expires after 10 minutes.</p>}
           {codeSent && <button type="button" disabled={isSendingCode} className="text-xs underline underline-offset-4" onClick={async()=>{setIsSendingCode(true);setMessage('');try{const result=await apiRequest('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:form.email.trim(),fullName:form.fullName.trim()})});setForm(current=>({...current,verificationCode:result.developmentCode||''}));setDevelopmentCode(result.developmentCode||'');setMessage(result.sent?'A new verification code was sent.':'Please continue with the current registration settings.')}catch(error){setMessage(error.message)}finally{setIsSendingCode(false)}}}>Resend email code</button>}
@@ -299,11 +299,11 @@ const SellerRegister = () => {
         <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (isReadingLogo) return; setMessage(''); setStep(2) }}>
           <p className="text-sm leading-6 text-[#666]">Set the public details for your seller workspace. You can edit these later.</p>
           <label className="block text-sm font-medium">Store or workspace name
-            <input name="storeName" value={form.storeName} onChange={updateForm} maxLength={100} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Your shop name" />
+            <input name="storeName" value={form.storeName} onChange={updateForm} maxLength={100} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Your shop name" />
           </label>
           <div className="space-y-3">
             <label className="block text-sm font-medium">Shop logo <span className="font-normal text-[#777]">(optional)</span>
-              <input ref={logoInput} name="storeLogoFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseLogo} aria-describedby="store-logo-help" className="mt-2 block w-full border border-[#d9dce2] p-2 text-xs file:mr-3 file:border-0 file:bg-[#f3f4f1] file:px-3 file:py-2 file:text-xs file:font-medium" />
+              <input ref={logoInput} name="storeLogoFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseLogo} aria-describedby="store-logo-help" className="mt-2 block w-full border border-[#cccccc] p-2 text-xs file:mr-3 file:border-0 file:bg-[#f7f7f7] file:px-3 file:py-2 file:text-xs file:font-medium" />
             </label>
             <p id="store-logo-help" className="text-xs text-[#777]">Choose a PNG, JPEG or WebP image up to 2 MB.</p>
             {isReadingLogo && <p role="status" className="text-xs text-[#777]">Preparing logo…</p>}
@@ -312,11 +312,11 @@ const SellerRegister = () => {
               {logoUpload && <div className="min-w-0"><p className="truncate text-xs text-[#666]">{logoUpload.name}</p><button type="button" onClick={clearLogoUpload} className="mt-1 text-xs underline underline-offset-2">Remove logo</button></div>}
             </div>}
             <label className="block text-xs font-medium text-[#777]">Or use a logo URL
-              <input name="storeLogoUrl" value={form.storeLogoUrl} onChange={updateForm} type="url" maxLength={2000} className="mt-2 h-11 w-full border border-[#d9dce2] px-3 text-sm outline-none focus:border-black" placeholder="https://example.com/your-logo.jpg" />
+              <input name="storeLogoUrl" value={form.storeLogoUrl} onChange={updateForm} type="url" maxLength={2000} className="mt-2 h-11 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" placeholder="https://example.com/your-logo.jpg" />
             </label>
           </div>
           <label className="block text-sm font-medium">About your store
-            <textarea name="storeDescription" value={form.storeDescription} onChange={updateForm} maxLength={500} rows={4} className="mt-2 w-full border border-[#d9dce2] px-3 py-2 outline-none focus:border-black" placeholder="What will you sell?" />
+            <textarea name="storeDescription" value={form.storeDescription} onChange={updateForm} maxLength={500} rows={4} className="mt-2 w-full border border-[#cccccc] px-3 py-2 outline-none focus:border-black" placeholder="What will you sell?" />
           </label>
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
           <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(0)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isReadingLogo} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">Continue to verification</button></div>
@@ -327,23 +327,23 @@ const SellerRegister = () => {
         <form className="space-y-4" onSubmit={finishRegistration}>
           <p className="text-sm leading-6 text-[#666]">Add your contact location and verification photos. Your administrator must approve your application before seller access is enabled.</p>
           <label className="block text-sm font-medium">Country
-            <select name="country" value={form.country} onChange={updateForm} required className="mt-2 h-11 w-full border border-[#d9dce2] bg-white px-3 outline-none focus:border-black">
+            <select name="country" value={form.country} onChange={updateForm} required className="mt-2 h-11 w-full border border-[#cccccc] bg-white px-3 outline-none focus:border-black">
               <option value="">Select country</option><option>United States</option><option>Canada</option><option>United Kingdom</option><option>Nigeria</option><option>Germany</option><option>Japan</option><option>Other</option>
             </select>
           </label>
           <label className="block text-sm font-medium">Home or business address
-            <input name="address" value={form.address} onChange={updateForm} maxLength={200} required autoComplete="street-address" className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Street address" />
+            <input name="address" value={form.address} onChange={updateForm} maxLength={200} required autoComplete="street-address" className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Street address" />
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-sm font-medium">City
-              <input name="city" value={form.city} onChange={updateForm} maxLength={100} required autoComplete="address-level2" className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" />
+              <input name="city" value={form.city} onChange={updateForm} maxLength={100} required autoComplete="address-level2" className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" />
             </label>
             <label className="block text-sm font-medium">State / region
-              <input name="region" value={form.region} onChange={updateForm} maxLength={100} required autoComplete="address-level1" className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" />
+              <input name="region" value={form.region} onChange={updateForm} maxLength={100} required autoComplete="address-level1" className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" />
             </label>
           </div>
           <label className="block text-sm font-medium">Postal code
-            <input name="postalCode" value={form.postalCode} onChange={updateForm} maxLength={20} required autoComplete="postal-code" className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" />
+            <input name="postalCode" value={form.postalCode} onChange={updateForm} maxLength={20} required autoComplete="postal-code" className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" />
           </label>
 
           {form.country === 'United States' && <OptionalSellerSsn value={optionalSsn} onChange={setOptionalSsn}/>}

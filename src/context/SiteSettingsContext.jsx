@@ -52,7 +52,7 @@ export function SiteSettingsProvider({ children }) {
 
   return (
     <SiteSettingsContext.Provider value={{ siteName, saveSiteName }}>
-      {error && <p role="alert" className="bg-[#fff3df] px-4 py-2 text-center text-sm text-[#704522]">{error}</p>}
+      {error && <p role="alert" className="bg-[#f7f7f7] px-4 py-2 text-center text-sm text-[#111111]">{error}</p>}
       {children}
     </SiteSettingsContext.Provider>
   )

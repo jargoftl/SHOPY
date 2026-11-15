@@ -111,7 +111,7 @@ const ProductsPage = () => {
             onFocus={() => setExpandedCategory(category.name)}
             aria-expanded={expandedCategory === category.name}
             aria-pressed={selectedCategory === category.name}
-            className={`flex min-h-9 w-full items-center justify-between gap-2 text-left text-sm ${selectedCategory === category.name ? 'font-semibold text-[#1f5a37]' : 'text-[#333]'}`}
+            className={`flex min-h-9 w-full items-center justify-between gap-2 text-left text-sm ${selectedCategory === category.name ? 'font-semibold text-[#111111]' : 'text-[#333]'}`}
           >
             <span>{category.name}</span>
             <ChevronRight size={15} className={`shrink-0 text-[#777] transition-transform ${expandedCategory === category.name ? 'rotate-90' : ''}`} />
@@ -119,7 +119,7 @@ const ProductsPage = () => {
           {expandedCategory === category.name && category.items.length > 0 && (
             <div className="grid grid-cols-1 gap-1 pb-2 pl-3">
               {category.items.map((item) => (
-                <button key={item} type="button" onClick={() => chooseItem(category.name, item)} className={`py-1.5 text-left text-xs ${selectedItem === item ? 'font-semibold text-[#1f5a37]' : 'text-[#666] hover:text-black'}`}>
+                <button key={item} type="button" onClick={() => chooseItem(category.name, item)} className={`py-1.5 text-left text-xs ${selectedItem === item ? 'font-semibold text-[#111111]' : 'text-[#666] hover:text-black'}`}>
                   {item}
                 </button>
               ))}

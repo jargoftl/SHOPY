@@ -1,3 +1,4 @@
+import {tabScope} from '../lib/tabSession.js'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Bell, X } from 'lucide-react'
@@ -17,9 +18,10 @@ export default function OrderNotifications() {
   useEffect(() => {
     let active = true
     const refresh = async () => {
+      const scope=tabScope()
       try {
         const { user: account } = await apiRequest('/api/auth/me', { background: true })
-        if (!active) return
+        if (!active||scope!==tabScope()) return
         if (currentUser.current !== account.id) {
           currentUser.current = account.id
           seen.current.clear()
@@ -27,7 +29,7 @@ export default function OrderNotifications() {
         }
         setUser(account)
         const data = await apiRequest('/api/notifications', { background: true })
-        if (!active) return
+        if (!active||scope!==tabScope()) return
         setUnread(data.unreadCount)
         setError('')
         const fresh = data.notifications.filter((item) => {
@@ -40,7 +42,7 @@ export default function OrderNotifications() {
           setToast({ title: fresh[0].title, body: fresh[0].body, link: fresh[0].link, linkLabel: fresh[0].type === 'reward' ? 'View balance' : 'View order' })
         }
       } catch (err) {
-        if (!active) return
+        if (!active||scope!==tabScope()) return
         if (err.status === 401) {
           const previous = currentUser.current
           currentUser.current = null; seen.current.clear(); setUser(null); setToast(null); setError('')
@@ -52,7 +54,9 @@ export default function OrderNotifications() {
     refresh()
     const timer = window.setInterval(refresh, 15000)
     window.addEventListener('focus', refresh)
-    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh) }
+    const changed=()=>{currentUser.current=null;seen.current.clear();setUser(null);setToast(null);setError('');refresh()}
+    window.addEventListener('account-session-changed',changed)
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh);window.removeEventListener('account-session-changed',changed) }
   }, [location.pathname, navigate])
 
   useEffect(() => {
@@ -73,8 +77,8 @@ export default function OrderNotifications() {
   const showBell = user && (user.role === 'customer' || location.pathname.startsWith('/purchase/') || location.pathname === '/orders')
   if (!showBell && !toast && !error) return null
   return <div data-preserve-theme className="fixed right-4 top-20 z-[70] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2">
-    {showBell && <Link to="/messages?view=notifications" aria-label={`Notifications, ${unread} unread`} className="relative grid size-11 place-items-center rounded-full border border-[#dce4da] bg-white text-[#315941] shadow-md"><Bell size={20} />{unread > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-[#d84250] px-1.5 py-0.5 text-xs font-bold text-white">{unread > 99 ? '99+' : unread}</span>}</Link>}
-    {toast && <div role="status" className="w-80 max-w-full rounded-xl border border-[#b8d2ba] bg-white p-4 text-[#19231b] shadow-lg"><div className="flex items-start gap-3"><div className="flex-1"><p className="font-semibold">{toast.title}</p><p className="mt-1 text-sm">{toast.body}</p><Link to={toast.link} onClick={() => setToast(null)} className="mt-2 inline-block text-sm underline">{toast.linkLabel || 'View order'}</Link></div><button type="button" aria-label="Dismiss notification" onClick={() => setToast(null)}><X size={18} /></button></div></div>}
+    {showBell && <Link to="/messages?view=notifications" aria-label={`Notifications, ${unread} unread`} className="relative grid size-11 place-items-center rounded-full border border-[#e5e5e5] bg-white text-[#111111] shadow-md"><Bell size={20} />{unread > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-[#d84250] px-1.5 py-0.5 text-xs font-bold text-white">{unread > 99 ? '99+' : unread}</span>}</Link>}
+    {toast && <div role="status" className="w-80 max-w-full rounded-xl border border-[#cccccc] bg-white p-4 text-[#111111] shadow-lg"><div className="flex items-start gap-3"><div className="flex-1"><p className="font-semibold">{toast.title}</p><p className="mt-1 text-sm">{toast.body}</p><Link to={toast.link} onClick={() => setToast(null)} className="mt-2 inline-block text-sm underline">{toast.linkLabel || 'View order'}</Link></div><button type="button" aria-label="Dismiss notification" onClick={() => setToast(null)}><X size={18} /></button></div></div>}
     {error && <p role="status" className="rounded border border-red-200 bg-white p-2 text-xs text-red-800">{error}</p>}
   </div>
 }

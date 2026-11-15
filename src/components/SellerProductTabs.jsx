@@ -8,7 +8,7 @@ const links = [
 ]
 
 export default function SellerProductTabs() {
-  return <nav aria-label="Product management" className="flex flex-wrap gap-2 border-b border-[#e1e7df] pb-4">
-    {links.map(([href, label]) => <NavLink key={href} to={href} className={({ isActive }) => `rounded-full px-4 py-2 text-sm ${isActive ? 'bg-[#263d35] text-white' : 'bg-white text-[#315941]'}`}>{label}</NavLink>)}
+  return <nav aria-label="Product management" className="flex flex-wrap gap-2 border-b border-[#e5e5e5] pb-4">
+    {links.map(([href, label]) => <NavLink key={href} to={href} className={({ isActive }) => `rounded-full px-4 py-2 text-sm ${isActive ? 'bg-[#111111] text-white' : 'bg-white text-[#111111]'}`}>{label}</NavLink>)}
   </nav>
 }

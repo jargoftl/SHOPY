@@ -46,7 +46,7 @@ const products = [
     note: 'Small-batch studio pottery',
     image:
       'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=900&q=85',
-    color: 'bg-[#e7e5dc]',
+    color: 'bg-[#e5e5e5]',
   },
   {
     id: 2,
@@ -56,7 +56,7 @@ const products = [
     note: 'Made for the long way home',
     image:
       'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=900&q=85',
-    color: 'bg-[#e6e9df]',
+    color: 'bg-[#e5e5e5]',
   },
   {
     id: 3,
@@ -66,7 +66,7 @@ const products = [
     note: 'A little room for big ideas',
     image:
       'https://images.unsplash.com/photo-1531346878377-a5be20888e57?auto=format&fit=crop&w=900&q=85',
-    color: 'bg-[#e8e4de]',
+    color: 'bg-[#e5e5e5]',
   },
   {
     id: 4,
@@ -76,7 +76,7 @@ const products = [
     note: 'Keeps the good stuff cold',
     image:
       'https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=900&q=85',
-    color: 'bg-[#e3e8e5]',
+    color: 'bg-[#e5e5e5]',
   },
 ]
 
@@ -97,7 +97,7 @@ function Storefront() {
 
   return (
     <div className="min-h-screen">
-      <div className="bg-[#263d35] px-4 py-2 text-center text-xs font-semibold tracking-[0.12em] text-white">
+      <div className="bg-[#111111] px-4 py-2 text-center text-xs font-semibold tracking-[0.12em] text-white">
         GOOD FINDS, FAIR PRICES. FREE SHIPPING OVER $75.
       </div>
 
@@ -118,23 +118,23 @@ function Storefront() {
           <button
             type="button"
             aria-label={`Shopping bag, ${bagCount} items`}
-            className="flex items-center gap-2 rounded-full border border-[#d9dbd5] px-4 py-2 text-sm font-semibold transition-colors hover:border-[#263d35]"
+            className="flex items-center gap-2 rounded-full border border-[#cccccc] px-4 py-2 text-sm font-semibold transition-colors hover:border-[#111111]"
           >
-            Bag <span className="grid size-6 place-items-center rounded-full bg-[#263d35] text-xs text-white">{bagCount}</span>
+            Bag <span className="grid size-6 place-items-center rounded-full bg-[#111111] text-xs text-white">{bagCount}</span>
           </button>
         </div>
       </header>
 
       <main id="top" className="mx-auto max-w-[1320px] px-5 pb-20 md:px-10">
-        <section className="relative isolate flex min-h-[430px] items-end overflow-hidden bg-[#31483f] px-7 py-9 sm:px-12 md:min-h-[490px] md:px-16 md:py-14">
+        <section className="relative isolate flex min-h-[430px] items-end overflow-hidden bg-[#111111] px-7 py-9 sm:px-12 md:min-h-[490px] md:px-16 md:py-14">
           <img
             className="absolute inset-0 -z-20 size-full object-cover object-center"
             src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=2000&q=90"
             alt="Sunlit shelves in a thoughtfully curated shop"
           />
-          <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#17251f]/80 via-[#17251f]/35 to-transparent" />
+          <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#111111]/80 via-[#111111]/35 to-transparent" />
           <div className="max-w-xl text-white">
-            <p className="mb-4 text-xs font-semibold tracking-[0.18em] text-[#f4c9ad]">A LITTLE SHOP FOR EVERYDAY LIFE</p>
+            <p className="mb-4 text-xs font-semibold tracking-[0.18em] text-[#cccccc]">A LITTLE SHOP FOR EVERYDAY LIFE</p>
             <h1 className="font-[Fraunces] text-5xl leading-[1.03] sm:text-6xl md:text-7xl">Find your next favorite thing.</h1>
             <p className="mt-5 max-w-md text-sm leading-6 text-white/85 sm:text-base">
               Useful, lovely, made-to-last things for home, out there, and everywhere in between.
@@ -147,19 +147,19 @@ function Storefront() {
         </section>
 
         <section id="shop" className="pt-16 md:pt-20">
-          <div className="flex flex-col justify-between gap-6 border-b border-[#dfe0da] pb-7 md:flex-row md:items-end">
+          <div className="flex flex-col justify-between gap-6 border-b border-[#e5e5e5] pb-7 md:flex-row md:items-end">
             <div>
               <p className="mb-2 text-xs font-bold tracking-[0.15em] text-[#e76b45]">THE GOOD STUFF</p>
               <h2 className="font-[Fraunces] text-4xl sm:text-5xl">A few things we love</h2>
             </div>
-            <label className="flex w-full items-center gap-3 border-b border-[#aeb3a9] pb-2 md:max-w-[260px]">
-              <span className="text-sm text-[#747a72]">Search</span>
+            <label className="flex w-full items-center gap-3 border-b border-[#a3a3a3] pb-2 md:max-w-[260px]">
+              <span className="text-sm text-[#555555]">Search</span>
               <input
                 type="search"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Try ‘ceramic’"
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#9b9f98]"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#777777]"
               />
             </label>
           </div>
@@ -171,7 +171,7 @@ function Storefront() {
                 type="button"
                 aria-pressed={category === item}
                 onClick={() => setCategory(item)}
-                className={`shrink-0 rounded-full border px-4 py-2 text-sm transition-colors ${category === item ? 'border-[#263d35] bg-[#263d35] text-white' : 'border-[#d9dbd5] text-[#4e554e] hover:border-[#263d35]'}`}
+                className={`shrink-0 rounded-full border px-4 py-2 text-sm transition-colors ${category === item ? 'border-[#111111] bg-[#111111] text-white' : 'border-[#cccccc] text-[#111111] hover:border-[#111111]'}`}
               >
                 {item}
               </button>
@@ -189,19 +189,19 @@ function Storefront() {
                       loading="lazy"
                       className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
                     />
-                    <span className="absolute left-3 top-3 bg-[#f8f8f5] px-2.5 py-1 text-[10px] font-bold tracking-[0.1em] text-[#4e554e]">{product.category.toUpperCase()}</span>
+                    <span className="absolute left-3 top-3 bg-[#f7f7f7] px-2.5 py-1 text-[10px] font-bold tracking-[0.1em] text-[#111111]">{product.category.toUpperCase()}</span>
                   </div>
                   <div className="flex items-start justify-between gap-2 pt-3">
                     <div className="min-w-0">
                       <h3 className="truncate text-sm font-semibold sm:text-base">{product.name}</h3>
-                      <p className="mt-1 text-xs text-[#737970] sm:text-sm">{product.note}</p>
+                      <p className="mt-1 text-xs text-[#555555] sm:text-sm">{product.note}</p>
                     </div>
                     <span className="shrink-0 text-sm font-semibold">${product.price}</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setBagCount((count) => count + 1)}
-                    className="mt-4 w-full border border-[#cfd2ca] py-2.5 text-xs font-bold transition-colors hover:border-[#263d35] hover:bg-[#263d35] hover:text-white sm:text-sm"
+                    className="mt-4 w-full border border-[#cccccc] py-2.5 text-xs font-bold transition-colors hover:border-[#111111] hover:bg-[#111111] hover:text-white sm:text-sm"
                   >
                     Add to bag
                   </button>
@@ -209,13 +209,13 @@ function Storefront() {
               ))}
             </div>
           ) : (
-            <p className="py-16 text-center text-sm text-[#737970]">No finds match that search. Try another one.</p>
+            <p className="py-16 text-center text-sm text-[#555555]">No finds match that search. Try another one.</p>
           )}
         </section>
 
-        <section id="about" className="mt-20 flex flex-col justify-between gap-5 border-t border-[#dfe0da] pt-7 sm:flex-row sm:items-center">
+        <section id="about" className="mt-20 flex flex-col justify-between gap-5 border-t border-[#e5e5e5] pt-7 sm:flex-row sm:items-center">
           <p className="font-[Fraunces] text-2xl">Good things, for the everyday.</p>
-          <p className="text-xs text-[#737970]">A personal shop in progress · Made with care</p>
+          <p className="text-xs text-[#555555]">A personal shop in progress · Made with care</p>
         </section>
       </main>
     </div>

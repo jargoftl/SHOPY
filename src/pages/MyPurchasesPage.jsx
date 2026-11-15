@@ -3,7 +3,7 @@ import BuyerOrders from '../components/BuyerOrders.jsx'
 import SiteName from '../components/SiteName.jsx'
 
 const MyPurchasesPage = () => (
-  <main className="min-h-screen bg-[#f4f6f1] px-5 py-8 text-[#19231b]">
+  <main className="min-h-screen bg-[#f7f7f7] px-5 py-8 text-[#111111]">
     <div className="mx-auto max-w-3xl">
       <Link to="/" className="text-2xl font-black"><SiteName /> ▰</Link>
       <div className="mt-8"><BuyerOrders includeTestOrders={false} /></div>

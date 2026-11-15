@@ -42,11 +42,11 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  (SELECT id FROM seller_wallet_receipts WHERE request_id=r.id) AS receiptId FROM seller_wallet_requests r JOIN users u ON u.id=r.seller_id LEFT JOIN seller_profiles p ON p.user_id=r.seller_id ${seller===undefined?'':'WHERE r.seller_id=?'} ORDER BY r.id DESC LIMIT 200`).all(...(seller===undefined?[]:[seller]))
  const sales=async(seller?:number)=>db.prepare(`SELECT o.id AS orderId,n.number AS orderNumber,i.seller_id AS sellerId,u.public_id AS sellerPublicId,
  COALESCE(p.store_name,u.full_name) AS storeName,o.coin,o.status AS paymentStatus,s.status AS deliveryStatus,o.created_at AS createdAt,
- SUM(i.price_cents*i.quantity)::bigint AS amountCents,MAX(r.status) AS releaseStatus,MAX(f.status) AS refundStatus
+ SUM(i.price_cents*i.quantity)::bigint AS amountCents,MAX(r.status) AS releaseStatus,MAX(f.status) AS refundStatus,MAX(r.confirmed_role) AS confirmedRole,MAX(actor.full_name) AS confirmedBy,MAX(r.created_at) AS confirmedAt,MAX(o.account_balance_payment) AS accountBalancePayment
  FROM purchase_items i JOIN purchase_orders o ON o.id=i.order_id JOIN users u ON u.id=i.seller_id
  JOIN order_numbers n ON n.order_id=o.id AND n.kind='purchase' JOIN purchase_sellers s ON s.order_id=o.id AND s.seller_id=i.seller_id
  LEFT JOIN seller_profiles p ON p.user_id=u.id LEFT JOIN seller_sale_releases r ON r.order_id=o.id AND r.seller_id=i.seller_id
- LEFT JOIN purchase_refunds f ON f.order_id=o.id AND f.seller_id=i.seller_id
+ LEFT JOIN users actor ON actor.id=r.admin_id LEFT JOIN purchase_refunds f ON f.order_id=o.id AND f.seller_id=i.seller_id
  ${seller===undefined?'':'WHERE i.seller_id=?'} GROUP BY o.id,n.number,i.seller_id,u.public_id,p.store_name,u.full_name,s.status
  ORDER BY o.id DESC LIMIT 500`).all(...(seller===undefined?[]:[seller]))
  const analytics=async(seller:number)=>{
@@ -61,7 +61,8 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  (SELECT COUNT(DISTINCT o.id)::integer FROM purchase_orders o JOIN purchase_items i ON i.order_id=o.id WHERE i.seller_id=? AND o.status='paid') AS paidOrders,
  (SELECT COALESCE(SUM(i.price_cents*i.quantity),0)::bigint FROM purchase_items i JOIN purchase_orders o ON o.id=i.order_id WHERE i.seller_id=? AND o.status='paid') AS salesCents,
  (SELECT COALESCE(SUM(amount_cents),0)::bigint FROM seller_sale_releases WHERE seller_id=? AND status='released') AS releasedCents`).get(seller,seller,seller,seller,seller,seller)
- return {overview,daily,orders,activity:await db.prepare('SELECT * FROM seller_store_activity WHERE seller_id=? ORDER BY id DESC LIMIT 100').all(seller),visits:await db.prepare('SELECT day,visits FROM store_daily_visits WHERE seller_id=? ORDER BY day DESC').all(seller),
+ const display=await db.prepare('SELECT values_json,updated_at FROM seller_stat_adjustments WHERE seller_id=?').get(seller) as {values_json:string,updated_at:string}|undefined
+ return {today:new Date().toISOString().slice(0,10),overview,daily,orders,displayStats:display?JSON.parse(display.values_json):{},displayStatsUpdatedAt:display?.updated_at||null,activity:await db.prepare('SELECT * FROM seller_store_activity WHERE seller_id=? ORDER BY id DESC LIMIT 100').all(seller),visits:await db.prepare('SELECT day,visits FROM store_daily_visits WHERE seller_id=? ORDER BY day DESC').all(seller),
  products:await db.prepare(`SELECT i.product_id AS id,MAX(i.name) AS name,SUM(CASE WHEN o.status='paid' THEN i.quantity ELSE 0 END)::integer AS units,
  SUM(CASE WHEN o.status='paid' THEN i.price_cents*i.quantity ELSE 0 END)::bigint AS salesCents FROM purchase_items i JOIN purchase_orders o ON o.id=i.order_id WHERE i.seller_id=? GROUP BY i.product_id ORDER BY "salesCents" DESC LIMIT 10`).all(seller)}
  }
@@ -69,7 +70,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  app.get('/api/admin/sellers/:id/analytics',auth,role('admin'),protectedRoute(async(req,res)=>{res.json(await analytics(Number(req.params.id)))}))
  app.get('/api/seller/finance',auth,role('seller','admin'),protectedRoute(async(req,res)=>{
  const wallet=await db.prepare('SELECT balance_cents AS balanceCents,reserved_cents AS reservedCents FROM seller_wallets WHERE seller_id=?').get(req.user!.id)||{balanceCents:0,reservedCents:0}
- res.set('Cache-Control','no-store').json({wallet,hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:await requests(req.user!.id),records:await db.prepare('SELECT * FROM seller_fund_records WHERE seller_id=? ORDER BY id DESC LIMIT 1000').all(req.user!.id)})
+ res.set('Cache-Control','no-store').json({wallet,sales:await sales(req.user!.id),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:await requests(req.user!.id),records:await db.prepare("SELECT f.*,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? ORDER BY f.id DESC LIMIT 1000").all(req.user!.id)})
  }))
  app.post('/api/seller/finance/requests',auth,role('seller'),rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many wallet attempts. Please try again later.'}}),protectedRoute(async(req,res)=>{
  const {kind,coin,amountCents,requestKey}=req.body||{}
@@ -136,20 +137,26 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  })()
  res.json({ok:true})
  }))
- app.post('/api/admin/seller-finance/releases',auth,role('admin'),protectedRoute(async(req,res)=>{
+ const releaseSale:RequestHandler=protectedRoute(async(req,res)=>{
  const order=Number(req.body.orderId),seller=Number(req.body.sellerId)
+ if(req.user!.role==='seller'&&seller!==req.user!.id)return void res.status(403).json({error:'You can only confirm sales for your own store.'})
  await db.transaction(async()=>{
- const eligible=await db.prepare(`SELECT o.status,o.coin,s.status AS fulfillment,SUM(i.price_cents*i.quantity)::bigint AS amount
+ const eligible=await db.prepare(`SELECT o.status,o.coin,o.account_balance_payment AS funded,s.status AS fulfillment,SUM(i.price_cents*i.quantity)::bigint AS amount
  FROM purchase_orders o JOIN purchase_sellers s ON s.order_id=o.id JOIN purchase_items i ON i.order_id=o.id AND i.seller_id=s.seller_id
- WHERE o.id=? AND s.seller_id=? GROUP BY o.id,s.status`).get(order,seller) as {status:string,coin:string,fulfillment:string,amount:number}|undefined
- if(!eligible||eligible.status!=='paid'||eligible.coin==='BALANCE'||eligible.fulfillment!=='delivered') fail('Only delivered, externally paid sales can be released. Store credit is not withdrawable cash.')
+ WHERE o.id=? AND s.seller_id=? GROUP BY o.id,s.status`).get(order,seller) as {status:string,coin:string,funded:number,fulfillment:string,amount:number}|undefined
+ if(!eligible||eligible.status!=='paid')fail('The buyer must pay from their account balance before this sale can be confirmed.')
+ if(!eligible.funded&&(req.user!.role!=='admin'||eligible.coin==='BALANCE'||eligible.fulfillment!=='delivered'))fail('Legacy sales require admin review; legacy store credit cannot be released.')
  if(await db.prepare("SELECT id FROM purchase_refunds WHERE order_id=? AND seller_id=? AND status<>'rejected'").get(order,seller)) fail('Resolve this order’s refund before releasing funds.')
  if(req.body.verified!==true||req.body.amountCents!==eligible.amount) fail('Confirm the full product-sale amount before release.')
  if(await db.prepare('SELECT 1 FROM seller_sale_releases WHERE order_id=? AND seller_id=?').get(order,seller)) fail('This sale has already been released.')
- await db.prepare("INSERT INTO seller_sale_releases(order_id,seller_id,amount_cents,status,admin_id) VALUES(?,?,?,'released',?)").run(order,seller,eligible.amount,req.user!.id)
+ await db.prepare("INSERT INTO seller_sale_releases(order_id,seller_id,amount_cents,status,admin_id,confirmed_role) VALUES(?,?,?,'released',?,?)").run(order,seller,eligible.amount,req.user!.id,req.user!.role)
  await postSellerFunds(db,seller,'sale_release',`${order}:${seller}`,eligible.amount,0,req.user!.id)
+ await db.prepare("UPDATE purchase_sellers SET status='confirmed' WHERE order_id=? AND seller_id=? AND status='pending'").run(order,seller)
+ await db.prepare("INSERT INTO seller_store_activity(seller_id,kind,details) VALUES(?,'sale_confirmed',?)").run(seller,`${req.user!.role==='admin'?'Administrator':'Store owner'} ${req.user!.full_name} confirmed ${eligible.amount} cents of paid sale proceeds.`)
  await notify(seller,'Sale funds released','The full product-sale amount has been credited to your seller wallet.')
  })()
  res.json({ok:true})
- }))
+ })
+ app.post('/api/admin/seller-finance/releases',auth,role('admin'),releaseSale)
+ app.post('/api/seller/finance/releases',auth,role('seller'),releaseSale)
 }

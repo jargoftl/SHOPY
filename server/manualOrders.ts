@@ -1,6 +1,6 @@
 import type { Express, RequestHandler } from 'express'
 import express from 'express'
-import { reverseSellerRelease } from './sellerFinance.ts'
+import { postSellerFunds, reverseSellerRelease } from './sellerFinance.ts'
 import type { Database } from './database.ts'
 import { allocateOrderNumber, initializeOrderNumbers } from './orderNumbers.ts'
 
@@ -21,7 +21,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     return decimal ? `${integer}.${decimal}` : integer.toString()
   }
 
-  type Order = { id: number, buyer_id: number, coin: string, billing_json: string, subtotal_cents: number, shipping_cents: number | null, tax_cents: number | null, coin_amount: string | null, network: string | null, wallet_address: string | null, usd_rate: string | null, status: string, created_at: string }
+  type Order = { account_balance_payment:number, id: number, buyer_id: number, coin: string, billing_json: string, subtotal_cents: number, shipping_cents: number | null, tax_cents: number | null, coin_amount: string | null, network: string | null, wallet_address: string | null, usd_rate: string | null, status: string, created_at: string }
   type Item = { id: number, seller_id: number, product_id: number | null, name: string, image_url: string, price_cents: number, quantity: number, color: string, size: string }
   const orderById = async (id: number) => (await db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(id)) as Order | undefined
   const orderNumber = async (id: number) => {
@@ -33,11 +33,11 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
   const serialize = async (order: Order, sellerId?: number) => {
     const items = ((await db.prepare('SELECT * FROM purchase_items WHERE order_id = ? AND (? IS NULL OR seller_id = ?) ORDER BY id').all(order.id, sellerId ?? null, sellerId ?? null)) as Item[])
       .map((item) => ({ id: item.id, sellerId: item.seller_id, productId: item.product_id, name: item.name, imageUrl: item.image_url, priceCents: item.price_cents, quantity: item.quantity, color: item.color, size: item.size }))
-    const sellers = (await db.prepare('SELECT s.seller_id AS sellerId, s.status, COALESCE(p.store_name,u.full_name) AS storeName FROM purchase_sellers s JOIN users u ON u.id=s.seller_id LEFT JOIN seller_profiles p ON p.user_id=s.seller_id WHERE s.order_id=? AND (? IS NULL OR s.seller_id=?)').all(order.id, sellerId ?? null, sellerId ?? null))
+    const sellers = (await db.prepare('SELECT s.seller_id AS sellerId, s.status,s.tracking_number AS trackingNumber,s.carrier,s.tracking_assigned_at AS trackingAssignedAt,(SELECT status FROM seller_sale_releases r WHERE r.order_id=s.order_id AND r.seller_id=s.seller_id) AS releaseStatus, COALESCE(p.store_name,u.full_name) AS storeName FROM purchase_sellers s JOIN users u ON u.id=s.seller_id LEFT JOIN seller_profiles p ON p.user_id=s.seller_id WHERE s.order_id=? AND (? IS NULL OR s.seller_id=?)').all(order.id, sellerId ?? null, sellerId ?? null))
     const billing = JSON.parse(order.billing_json) as Record<string, string>
     return {
       id: order.id, orderNumber: (await orderNumber(order.id)), buyerId: order.buyer_id, buyerName: billing.fullName, ...(sellerId === undefined ? { billing } : {}),
-      coin: order.coin, status: order.status, subtotalCents: sellerId === undefined ? order.subtotal_cents : items.reduce((sum, item) => sum + item.priceCents * item.quantity, 0),
+      coin: order.coin, status: order.status, accountBalancePayment:Boolean(order.account_balance_payment), subtotalCents: sellerId === undefined ? order.subtotal_cents : items.reduce((sum, item) => sum + item.priceCents * item.quantity, 0),
       ...(sellerId === undefined ? { shippingCents: order.shipping_cents, taxCents: order.tax_cents, coinAmount: order.coin_amount, network: order.network, walletAddress: order.wallet_address, usdRate: order.usd_rate } : {}),
       createdAt: order.created_at, items, sellers,
       ...(sellerId === undefined ? { receipts: (await db.prepare('SELECT id, created_at AS createdAt FROM purchase_receipts WHERE order_id=? ORDER BY id').all(order.id)) } : {}),
@@ -118,6 +118,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     const { items, billing, coin, requestKey } = req.body ?? {}
     const fields = ['fullName', 'email', 'phone', 'address', 'city', 'region', 'postalCode', 'country']
     const useBalance = coin === 'BALANCE'
+    if(!useBalance)return res.status(400).json({error:'Orders can only be paid from your account balance. Add funds to your account before checkout.'})
     if ((!useBalance && !coins.includes(coin)) || typeof requestKey !== 'string' || !/^[a-f0-9-]{36}$/i.test(requestKey) || !Array.isArray(items) || !items.length || items.length > 100 || !billing || !fields.every((field) => text(billing[field], 200))) return res.status(400).json({ error: 'Enter valid billing details, products and a supported payment method.' })
     if (useBalance && !['customer', 'seller'].includes(req.user!.role)) return res.status(403).json({ error: 'Account balance is available to buyers and sellers.' })
     const existing = (await db.prepare('SELECT id FROM purchase_orders WHERE buyer_id=? AND request_key=?').get(req.user!.id, requestKey)) as { id: number } | undefined
@@ -139,25 +140,38 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       if (previous) return { id: previous.id, created: false }
       const tax = Math.floor(subtotal * 3 / 100)
       const total = subtotal + tax
-      if (useBalance) {
-        const debit = (await db.prepare('UPDATE reward_balances SET balance_units = balance_units - ? WHERE user_id = ? AND balance_units >= ?').run(total, req.user!.id, total))
-        if (!debit.changes) return null
+      if(useBalance){
+        if(req.user!.role==='seller'){
+          const credit=(await db.prepare('SELECT balance_units AS amount FROM reward_balances WHERE user_id=?').get(req.user!.id) as {amount:number}|undefined)?.amount||0
+          const merchant=await db.prepare('SELECT balance_cents,reserved_cents FROM seller_wallets WHERE seller_id=?').get(req.user!.id) as {balance_cents:number,reserved_cents:number}|undefined
+          const heldCredit=(await db.prepare('SELECT amount_cents AS amount FROM buyer_wallet_holds WHERE user_id=?').get(req.user!.id) as {amount:number}|undefined)?.amount||0
+          const spendableCredit=Math.max(0,credit-heldCredit)
+          const fromCredit=Math.min(total,spendableCredit),fromWallet=total-fromCredit
+          if(spendableCredit+(merchant?merchant.balance_cents-merchant.reserved_cents:0)<total)return null
+          if(fromCredit)await db.prepare('UPDATE reward_balances SET balance_units=balance_units-? WHERE user_id=?').run(fromCredit,req.user!.id)
+          if(fromWallet)await postSellerFunds(db,req.user!.id,'purchase_payment',`${req.user!.id}:${requestKey}`,-fromWallet,0,req.user!.id)
+        }else{
+          const debit=await db.prepare('UPDATE reward_balances SET balance_units=balance_units-? WHERE user_id=? AND balance_units-COALESCE((SELECT amount_cents FROM buyer_wallet_holds WHERE user_id=reward_balances.user_id),0)>=?').run(total,req.user!.id,total)
+          if(!debit.changes)return null
+        }
       }
-      const result = (await db.prepare('INSERT INTO purchase_orders (buyer_id,request_key,coin,billing_json,subtotal_cents,shipping_cents,tax_cents,coin_amount,network,wallet_address,usd_rate,status) VALUES (?,?,?,?,?,0,?,?,?,?,?,?)').run(req.user!.id, requestKey, coin, JSON.stringify(Object.fromEntries(fields.map((field) => [field, text(billing[field], 200)]))), subtotal, tax, useBalance ? null : coinAmount(total, wallet!.usd_rate!), wallet?.network ?? null, wallet?.address ?? null, wallet?.usd_rate ?? null, useBalance ? 'paid' : 'awaiting_receipt'))
+      const result = (await db.prepare('INSERT INTO purchase_orders (buyer_id,request_key,coin,billing_json,subtotal_cents,shipping_cents,tax_cents,coin_amount,network,wallet_address,usd_rate,status,account_balance_payment) VALUES (?,?,?,?,?,0,?,?,?,?,?,?,1)').run(req.user!.id, requestKey, coin, JSON.stringify(Object.fromEntries(fields.map((field) => [field, text(billing[field], 200)]))), subtotal, tax, useBalance ? null : coinAmount(total, wallet!.usd_rate!), wallet?.network ?? null, wallet?.address ?? null, wallet?.usd_rate ?? null, useBalance ? 'paid' : 'awaiting_receipt'))
       const orderId = Number(result.lastInsertRowid)
       const number = (await allocateOrderNumber(db, 'purchase', orderId))
       if (useBalance) {
-        const balance = (await db.prepare('SELECT balance_units FROM reward_balances WHERE user_id = ?').get(req.user!.id)) as { balance_units: number }
+        const creditBalance=(await db.prepare('SELECT balance_units FROM reward_balances WHERE user_id=?').get(req.user!.id) as {balance_units:number}|undefined)?.balance_units||0
+        const merchantBalance=req.user!.role==='seller'?(await db.prepare('SELECT balance_cents FROM seller_wallets WHERE seller_id=?').get(req.user!.id) as {balance_cents:number}|undefined)?.balance_cents||0:0
+        const balance={balance_units:creditBalance+merchantBalance}
         await db.prepare('INSERT INTO balance_purchase_history (order_id,user_id,amount_cents,balance_after_cents) VALUES (?,?,?,?)').run(orderId, req.user!.id, total, balance.balance_units)
-        await notify.run(req.user!.id, 'purchase', `Order #${number} paid from balance`, 'Your store-credit balance was used for this order.', `/purchase/${orderId}`)
+        await notify.run(req.user!.id, 'purchase', `Order #${number} paid from balance`, 'Your account balance was charged. The store owner or administrator can now confirm your order.', `/purchase/${orderId}`)
       }
       const insert = db.prepare('INSERT INTO purchase_items (order_id,seller_id,product_id,name,image_url,price_cents,quantity,color,size) VALUES (?,?,?,?,?,?,?,?,?)')
       const seller = db.prepare('INSERT OR IGNORE INTO purchase_sellers (order_id,seller_id) VALUES (?,?)')
       for (const item of snapshots) { await insert.run(orderId, item.product.seller_id, item.product.id, item.product.name, item.product.image_url, Math.round(item.product.price * 100), item.quantity, item.color, item.size); await seller.run(orderId, item.product.seller_id) }
       for (const sellerId of new Set(snapshots.map((item) => item.product.seller_id))) {
-        await notify.run(sellerId, 'purchase', `New order #${number}`, useBalance ? 'Paid using store credit. No external payment or payout was processed.' : 'Payment is pending confirmation. Do not fulfill until the administrator confirms payment.', `/seller/orders?order=${number}`)
+        await notify.run(sellerId, 'purchase', `New order #${number}`, useBalance ? 'Paid from the buyer’s account balance. Confirm the order to begin fulfillment.' : 'Payment is pending confirmation. Do not fulfill until the administrator confirms payment.', `/seller/orders?order=${number}`)
       }
-      await db.prepare("INSERT INTO notifications (user_id,type,title,body,link) SELECT id,'purchase',?,?,? FROM users WHERE role='admin'").run(`Order #${number} created`, useBalance ? `${req.user!.full_name} paid using store credit; no external payment was processed.` : `${req.user!.full_name} selected ${coin}.`, `/admin?order=${number}#purchase-orders`)
+      await db.prepare("INSERT INTO notifications (user_id,type,title,body,link) SELECT id,'purchase',?,?,? FROM users WHERE role='admin'").run(`Order #${number} created`, useBalance ? `${req.user!.full_name} paid from their account balance. The store owner or administrator can confirm fulfillment.` : `${req.user!.full_name} selected ${coin}.`, `/admin?order=${number}#purchase-orders`)
       return { id: orderId, created: true }
     })())
     if (!purchase) return res.status(409).json({ error: 'Insufficient account balance for this order.' })
@@ -231,6 +245,21 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
   app.get('/api/seller/purchases', auth, role('seller'), async (req, res) => {
     const orders = (await db.prepare('SELECT o.* FROM purchase_orders o JOIN purchase_sellers s ON s.order_id=o.id WHERE s.seller_id=? ORDER BY o.id DESC').all(req.user!.id)) as Order[]
     return res.json({ orders: (await Promise.all(orders.map(async (order) => (await serialize(order, req.user!.id))))) })
+  })
+  app.put('/api/admin/purchase-sellers/:orderId/:sellerId/tracking',auth,role('admin'),async(req,res)=>{
+    const orderId=validId(req.params.orderId),sellerId=validId(req.params.sellerId),tracking=text(req.body?.trackingNumber,150),carrier=text(req.body?.carrier,100)
+    if(!tracking||/[\r\n]/.test(tracking+carrier))return res.status(400).json({error:'Enter a valid tracking number and carrier.'})
+    await db.transaction(async()=>{
+      const shipment=await db.prepare('SELECT 1 FROM purchase_sellers WHERE order_id=? AND seller_id=?').get(orderId,sellerId)
+      if(!shipment)return
+      await db.prepare('UPDATE purchase_sellers SET tracking_number=?,carrier=?,tracking_assigned_by=?,tracking_assigned_at=CURRENT_TIMESTAMP WHERE order_id=? AND seller_id=?').run(tracking,carrier,req.user!.id,orderId,sellerId)
+      await db.prepare("INSERT INTO seller_store_activity(seller_id,kind,details) VALUES(?,'tracking_assigned',?)").run(sellerId,`Admin assigned tracking ${tracking}${carrier?' · '+carrier:''} to order #${await orderNumber(orderId)}`)
+      await notify.run(sellerId,'purchase','Tracking number assigned',`${carrier} ${tracking}`.trim(),'/seller/orders')
+      const order=await orderById(orderId)
+      if(order)await notify.run(order.buyer_id,'purchase','Order tracking updated',`${carrier} ${tracking}`.trim(),`/purchase/${orderId}`)
+    })()
+    if(!await db.prepare('SELECT 1 FROM purchase_sellers WHERE order_id=? AND seller_id=?').get(orderId,sellerId))return res.status(404).json({error:'Shipment not found.'})
+    return res.json({ok:true})
   })
   app.patch('/api/purchase-sellers/:orderId/:sellerId', auth, role('seller', 'admin'), async (req, res) => {
     const orderId = validId(req.params.orderId), sellerId = validId(req.params.sellerId)

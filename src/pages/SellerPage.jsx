@@ -209,24 +209,24 @@ const SellerPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5] text-[#20231f]">
-      <header className="border-b border-[#e4e5e0] bg-white">
+    <div className="min-h-screen bg-[#f7f7f5] text-[#111111]">
+      <header className="border-b border-[#e5e5e5] bg-white">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 md:px-10">
           <div>
             <Link to="/" className="text-2xl font-black tracking-[-0.07em]"><SiteName /><span className="ml-1 text-sm">▰</span></Link>
-            <p className="mt-1 text-xs text-[#737970]">Seller workspace</p>
+            <p className="mt-1 text-xs text-[#555555]">Seller workspace</p>
           </div>
           <div className="flex items-center gap-4 text-sm">
             <span className="hidden text-[#666] sm:inline">{user.fullName} · #{user.publicId || '—'}</span>
             {user.role === 'admin' && <Link to="/admin" className="underline underline-offset-4">Admin</Link>}
-            <button type="button" onClick={logOut} className="border border-[#d9dbd5] px-4 py-2">Log out</button>
+            <button type="button" onClick={logOut} className="border border-[#cccccc] px-4 py-2">Log out</button>
           </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-[1440px] px-5 pt-6 md:px-10"><SellerProductTabs/></div>
       <section className="mx-auto max-w-[1440px] px-5 pt-8 md:px-10">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-widest text-[#799079]">Ready-to-add catalog</p><h2 className="mt-2 text-2xl font-semibold">Choose from your warehouse</h2><p className="mt-2 text-sm text-[#737970]">Choose a product, review its retail and wholesale prices, then confirm to publish. Its category and details are copied automatically.</p></div><button onClick={() => setShowWarehouse((value) => !value)} className="rounded-full border border-[#cbd7cc] bg-white px-5 py-3 text-sm">{showWarehouse ? 'Hide warehouse' : 'Browse warehouse'}</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-widest text-[#555555]">Ready-to-add catalog</p><h2 className="mt-2 text-2xl font-semibold">Choose from your warehouse</h2><p className="mt-2 text-sm text-[#555555]">Choose a product, review its retail and wholesale prices, then confirm to publish. Its category and details are copied automatically.</p></div><button onClick={() => setShowWarehouse((value) => !value)} className="rounded-full border border-[#cccccc] bg-white px-5 py-3 text-sm">{showWarehouse ? 'Hide warehouse' : 'Browse warehouse'}</button></div>
         {showWarehouse && <WarehouseBrowser onPublished={product=>{setShowWarehouse(false);requestAnimationFrame(()=>document.getElementById(`seller-product-${product.id}`)?.scrollIntoView({behavior:'smooth',block:'center'}))}} onAdd={async(selected,pricing)=>{
           const product=await publishWarehouseProduct(selected,pricing)
           catalogVersion.current+=1
@@ -238,17 +238,17 @@ const SellerPage = () => {
       </section>
       <main className="mx-auto grid max-w-[1440px] gap-8 px-5 py-9 md:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] md:px-10 md:py-12">
         <section className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a5a4d]">Catalog tools</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#111111]">Catalog tools</p>
           <h1 className="mt-2 text-3xl font-semibold">{editingProduct ? 'Edit product' : 'Add a product'}</h1>
-          <p className="mt-2 text-sm text-[#737970]">Published items become visible on the storefront.</p>
+          <p className="mt-2 text-sm text-[#555555]">Published items become visible on the storefront.</p>
 
           <form id="seller-product-form" key={editingProduct?.id || 'new-product'} className="mt-6 space-y-4 bg-white p-5 sm:p-6" onSubmit={saveProduct}>
             <label className="block text-sm font-medium">Product name
-              <input name="name" value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} maxLength={500} required className="mt-2 h-11 w-full border border-[#d9dbd5] px-3 text-sm outline-none focus:border-black" placeholder="Example: Mira Everyday Tote" />
+              <input name="name" value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} maxLength={500} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" placeholder="Example: Mira Everyday Tote" />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-sm font-medium">Category
-                <select name="category" value={productForm.category} onChange={(event) => setProductForm((current) => ({ ...current, category: event.target.value }))} required className="mt-2 h-11 w-full border border-[#d9dbd5] bg-white px-3 text-sm outline-none focus:border-black">
+                <select name="category" value={productForm.category} onChange={(event) => setProductForm((current) => ({ ...current, category: event.target.value }))} required className="mt-2 h-11 w-full border border-[#cccccc] bg-white px-3 text-sm outline-none focus:border-black">
                   <option value="" disabled>Select category</option>
                   {taxonomyCategoryGroups.map((group) => (
                     <optgroup key={group.name} label={group.name}>
@@ -263,15 +263,15 @@ const SellerPage = () => {
                 </select>
               </label>
               <label className="block text-sm font-medium">Price
-                <input name="price" type="number" value={productForm.price} onChange={(event) => setProductForm((current) => ({ ...current, price: event.target.value }))} min="0" max="1000000" step="0.01" required className="mt-2 h-11 w-full border border-[#d9dbd5] px-3 text-sm outline-none focus:border-black" placeholder="49.00" />
+                <input name="price" type="number" value={productForm.price} onChange={(event) => setProductForm((current) => ({ ...current, price: event.target.value }))} min="0" max="1000000" step="0.01" required className="mt-2 h-11 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" placeholder="49.00" />
               </label>
             </div>
             <label className="block text-sm font-medium">Compare-at price <span className="font-normal text-[#777]">(optional, must be higher than current price)</span>
-              <input name="compareAtPrice" type="number" value={productForm.compareAtPrice} onChange={(event) => setProductForm((current) => ({ ...current, compareAtPrice: event.target.value }))} min="0" max="1000000" step="0.01" className="mt-2 h-11 w-full border border-[#d9dbd5] px-3 text-sm outline-none focus:border-black" placeholder="Original price" />
+              <input name="compareAtPrice" type="number" value={productForm.compareAtPrice} onChange={(event) => setProductForm((current) => ({ ...current, compareAtPrice: event.target.value }))} min="0" max="1000000" step="0.01" className="mt-2 h-11 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" placeholder="Original price" />
             </label>
             <ProductImageFields key={imageFormVersion} form={productForm} setForm={setProductForm} uploads={imageUploads} setUploads={setImageUploads} onBusyChange={setIsReadingImages} onError={setMessage} />
             <label className="block text-sm font-medium">Description
-              <textarea name="description" value={productForm.description} onChange={(event) => setProductForm((current) => ({ ...current, description: event.target.value }))} maxLength={100000} rows={3} className="mt-2 w-full border border-[#d9dbd5] px-3 py-2 text-sm outline-none focus:border-black" placeholder="A few details about this product" />
+              <textarea name="description" value={productForm.description} onChange={(event) => setProductForm((current) => ({ ...current, description: event.target.value }))} maxLength={100000} rows={3} className="mt-2 w-full border border-[#cccccc] px-3 py-2 text-sm outline-none focus:border-black" placeholder="A few details about this product" />
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" name="isPublished" checked={productForm.isPublished} onChange={(event) => setProductForm((current) => ({ ...current, isPublished: event.target.checked }))} className="accent-black" /> Publish on the storefront
@@ -283,7 +283,7 @@ const SellerPage = () => {
           <details className="mt-4 bg-white p-5 sm:p-6">
             <summary className="cursor-pointer text-sm font-semibold">Manage categories ({categories.length})</summary>
             <form className="mt-4 flex gap-2" onSubmit={addCategory}>
-              <input value={newCategory} onChange={(event) => setNewCategory(event.target.value)} maxLength={60} required className="h-10 min-w-0 flex-1 border border-[#d9dbd5] px-3 text-sm outline-none focus:border-black" placeholder="New category name" />
+              <input value={newCategory} onChange={(event) => setNewCategory(event.target.value)} maxLength={60} required className="h-10 min-w-0 flex-1 border border-[#cccccc] px-3 text-sm outline-none focus:border-black" placeholder="New category name" />
               <button type="submit" className="bg-black px-4 text-xs font-semibold text-white">Add</button>
             </form>
             <ul className="mt-4 divide-y divide-[#eee]">
@@ -299,24 +299,24 @@ const SellerPage = () => {
 
         <section id="seller-catalog" className="min-w-0">
           <div className="mb-5 flex items-end justify-between gap-4">
-            <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a5a4d]">Your catalog</p><h2 className="mt-2 text-2xl font-semibold">Products <span className="text-base font-normal text-[#777]">({products.length})</span></h2></div>
+            <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#111111]">Your catalog</p><h2 className="mt-2 text-2xl font-semibold">Products <span className="text-base font-normal text-[#777]">({products.length})</span></h2></div>
             <div className="flex flex-wrap gap-4 text-xs">{user.role==='seller'&&<Link to={`/stores/${user.id}`} className="underline underline-offset-4">View my store</Link>}<Link to="/" className="underline underline-offset-4">View homepage</Link></div>
           </div>
 
-          {message && <p role="status" className="mb-4 border border-[#e1e2dc] bg-white px-4 py-3 text-sm">{message}</p>}
+          {message && <p role="status" className="mb-4 border border-[#e5e5e5] bg-white px-4 py-3 text-sm">{message}</p>}
 
           <div className="divide-y divide-[#eee] bg-white">
             {products.map((product) => (
               <article id={`seller-product-${product.id}`} key={product.id} className="flex items-center gap-3 p-4 sm:gap-4 sm:p-5">
-                <img src={product.imageUrl} alt="" className="size-16 shrink-0 bg-[#f2f2ef] object-cover" />
-                <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{product.name}</h3><p className="mt-1 text-xs text-[#737970]">{product.category} · ${product.price.toFixed(2)}{product.compareAtPrice ? ` · Was $${product.compareAtPrice.toFixed(2)}` : ''}</p><p className="mt-1 text-[10px] uppercase tracking-wide text-[#777]">{product.isPublished ? 'Published' : 'Draft'}</p></div>
+                <img src={product.imageUrl} alt="" className="size-16 shrink-0 bg-[#f7f7f7] object-cover" />
+                <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{product.name}</h3><p className="mt-1 text-xs text-[#555555]">{product.category} · ${product.price.toFixed(2)}{product.compareAtPrice ? ` · Was $${product.compareAtPrice.toFixed(2)}` : ''}</p><p className="mt-1 text-[10px] uppercase tracking-wide text-[#777]">{product.isPublished ? 'Published' : 'Draft'}</p></div>
                 <div className="flex shrink-0 gap-2">
                   <button type="button" onClick={() => editProduct(product)} aria-label={`Edit ${product.name}`} className="border border-[#ddd] px-3 py-2 text-xs hover:border-black">Edit</button>
                   <button type="button" onClick={() => deleteProduct(product.id)} aria-label={`Delete ${product.name}`} className="border border-[#ddd] px-3 py-2 text-xs hover:border-black">Delete</button>
                 </div>
               </article>
             ))}
-            {!products.length && <p className="p-8 text-center text-sm text-[#737970]">No products yet. Add one using the form.</p>}
+            {!products.length && <p className="p-8 text-center text-sm text-[#555555]">No products yet. Add one using the form.</p>}
           </div>
         </section>
       </main>

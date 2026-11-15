@@ -3,8 +3,8 @@
 
 :root {
   font-family: 'DM Sans', sans-serif;
-  color: #20231f;
-  background: #f8f8f5;
+  color: #111111;
+  background: #f7f7f7;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -46,9 +46,9 @@ button {
   width: 40px;
   height: 40px;
   place-items: center;
-  border: 1px solid #728778;
+  border: 1px solid #555555;
   border-radius: 50%;
-  background: #263d35;
+  background: #111111;
   color: white;
   box-shadow: 0 2px 10px #0003;
 }
@@ -56,31 +56,39 @@ button {
 .theme-control span {
   max-width: 150px;
   padding: 6px;
-  background: #263d35;
+  background: #111111;
   color: white;
   font-size: 12px;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  color: #e4ece4;
-  background: #101914;
+  color: #e5e5e5;
+  background: #111111;
 }
 
 :root[data-theme='dark'] :is([class~='bg-white'], [class*='bg-white/'], [class*='bg-[#f'], [class*='bg-[#e'], [class*='bg-[#fff'], [class~='bg-gray-50']):not([data-preserve-theme], [data-preserve-theme] *) {
-  background-color: #1b2a21;
+  background-color: #111111;
 }
 
-:root[data-theme='dark'] :is([class*='text-[#202'], [class*='text-[#1'], [class*='text-[#2'], [class*='text-[#3'], [class*='text-[#4'], [class*='text-[#5'], [class*='text-[#6'], [class*='text-[#7'], [class*='text-[#8'], [class~='text-black']):not([data-preserve-theme], [data-preserve-theme] *, [class*='bg-[#c8f135'], [class*='bg-[#e76'], [class*='bg-[#ff'], [class*='bg-[#67'], [class*='bg-[#74'], [class*='bg-[#52']) {
-  color: #cfdbd0;
+:root[data-theme='dark'] :is([class*='text-[#202'], [class*='text-[#1'], [class*='text-[#2'], [class*='text-[#3'], [class*='text-[#4'], [class*='text-[#5'], [class*='text-[#6'], [class*='text-[#7'], [class*='text-[#8'], [class~='text-black']):not([data-preserve-theme], [data-preserve-theme] *, [class*='bg-[#cccccc'], [class*='bg-[#e76'], [class*='bg-[#ff'], [class*='bg-[#67'], [class*='bg-[#74'], [class*='bg-[#52']) {
+  color: #cccccc;
 }
 
 :root[data-theme='dark'] :is(input, select, textarea):not([data-preserve-theme] *) {
-  background-color: #23352a;
-  color: #edf3e9;
-  border-color: #526457;
+  background-color: #111111;
+  color: #f7f7f7;
+  border-color: #111111;
 }
 
 :root[data-theme='dark'] :is([class*='border-[#d'], [class*='border-[#e'], [class~='border-white']):not([data-preserve-theme], [data-preserve-theme] *) {
-  border-color: #43574a;
+  border-color: #111111;
 }
+
+/* The admin centre uses a neutral light workspace, including legacy embedded controls. */
+.admin-workspace { color:#111; background:#f7f7f7; }
+.admin-workspace :is([class*="bg-[#111111]"],[class*="bg-[#171717]"]) { background-color:#fff !important; color:#111 !important; }
+.admin-workspace :is([class*="text-[#e5e5e5]"],[class*="text-[#cccccc]"],[class*="text-[#f7f7f7]"]) { color:#444 !important; }
+.admin-workspace [class*="border-[#111111]"] { border-color:#dedede !important; }
+.admin-workspace :is(input,select,textarea) { color:#111 !important; background-color:#fff !important; border-color:#ccc !important; }
+.admin-workspace summary { line-height:1.6; }

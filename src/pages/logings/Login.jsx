@@ -11,6 +11,7 @@ const Login = () => {
   const [isCheckingSession, setIsCheckingSession] = useState(true)
 
   useEffect(() => {
+    if(new URLSearchParams(location.search).get('switch')==='1'){setIsCheckingSession(false);return}
     let active = true
     apiRequest('/api/auth/me', { background: true })
       .then(({ user }) => {
@@ -19,7 +20,7 @@ const Login = () => {
       .catch((error) => { if (active && error.status !== 401) setMessage(error.message) })
       .finally(() => { if (active) setIsCheckingSession(false) })
     return () => { active = false }
-  }, [navigate])
+  }, [navigate,location.search])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -45,16 +46,16 @@ const Login = () => {
     <AuthLayout>
       {isCheckingSession ? <p role="status" className="text-sm text-[#666]">Checking your account…</p> : <>
       <div className="mb-7">
-        <p className="mb-2 text-xs font-bold tracking-[0.14em] text-[#c87800]">WELCOME BACK</p>
+        <p className="mb-2 text-xs font-bold tracking-[0.14em] text-[#555555]">WELCOME BACK</p>
         <h1 className="text-4xl font-bold tracking-tight">Log in</h1>
         <p className="mt-2 text-sm text-[#686868]">Good to see you again.</p>
       </div>
       <form className="space-y-5" onSubmit={handleSubmit}>
         <label className="block text-sm font-medium">Email address
-          <input className="mt-2 block h-12 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" type="email" name="email" autoComplete="email" placeholder="you@example.com" required />
+          <input className="mt-2 block h-12 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="email" name="email" autoComplete="email" placeholder="you@example.com" required />
         </label>
         <label className="block text-sm font-medium">Password
-          <input className="mt-2 block h-12 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" type="password" name="password" autoComplete="current-password" placeholder="Enter your password" required />
+          <input className="mt-2 block h-12 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="password" name="password" autoComplete="current-password" placeholder="Enter your password" required />
         </label>
         <div className="text-right"><Link to="/forgot-password" className="text-sm font-medium underline underline-offset-2">Forgot password?</Link></div>
 

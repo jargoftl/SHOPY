@@ -28,7 +28,7 @@ const SellerAccessModal = ({ isOpen, onClose }) => {
         <button type="button" onClick={onClose} aria-label="Close seller options" className="absolute right-4 top-4 grid size-10 place-items-center text-[#555] hover:text-black">
           <X size={21} strokeWidth={1.6} />
         </button>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8a5a4d]"><SiteName /> SELLER CENTER</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#111111]"><SiteName /> SELLER CENTER</p>
         <h2 id="seller-access-title" className="mt-3 text-3xl font-semibold">Ready to sell with us?</h2>
         <p className="mt-3 text-sm leading-6 text-[#666]">Sign in to manage your shop, or create a seller account to get started.</p>
         <div className="mt-7 grid gap-3">

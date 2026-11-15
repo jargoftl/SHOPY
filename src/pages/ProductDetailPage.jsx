@@ -7,9 +7,9 @@ import { apiRequest } from '../lib/api.js'
 import ProductCard from '../components/store/ProductCard.jsx'
 
 const colorSwatches = {
-  black: '#171717', white: '#ffffff', cream: '#ede5d4', red: '#c83c35', blue: '#386fa1',
-  'sky blue': '#63b6cf', green: '#426c4d', moss: '#727b51', pink: '#df8fa2', brown: '#79543c',
-  gray: '#8b8b88', grey: '#8b8b88', yellow: '#e5c751', orange: '#d97a36', navy: '#263855',
+  black: '#171717', white: '#ffffff', cream: '#e5e5e5', red: '#c83c35', blue: '#555555',
+  'sky blue': '#777777', green: '#111111', moss: '#555555', pink: '#777777', brown: '#111111',
+  gray: '#555555', grey: '#555555', yellow: '#cccccc', orange: '#555555', navy: '#111111',
 }
 
 const ProductDetailPage = () => {
@@ -101,7 +101,7 @@ const ProductDetailPage = () => {
 
   if (isLoading) return <main className="mx-auto max-w-5xl px-5 py-20 text-sm text-[#666]">Loading product…</main>
   if (loadError || !product) {
-    return <main className="mx-auto max-w-xl px-5 py-24 text-center"><h1 className="text-3xl font-semibold">Product unavailable</h1><p className="mt-3 text-sm text-[#737970]">{loadError || 'This product may have been removed.'}</p><Link to="/products" className="mt-7 inline-flex border border-[#d9dbd5] px-4 py-3 text-sm">Browse products</Link></main>
+    return <main className="mx-auto max-w-xl px-5 py-24 text-center"><h1 className="text-3xl font-semibold">Product unavailable</h1><p className="mt-3 text-sm text-[#555555]">{loadError || 'This product may have been removed.'}</p><Link to="/products" className="mt-7 inline-flex border border-[#cccccc] px-4 py-3 text-sm">Browse products</Link></main>
   }
 
   const isDiscounted = Number.isFinite(product.compareAtPrice) && product.compareAtPrice > product.price
@@ -133,11 +133,11 @@ const ProductDetailPage = () => {
           </section>
 
           <section>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8a5a4d]">{product.category}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#111111]">{product.category}</p>
             <h1 className="mt-2 text-2xl font-semibold leading-tight sm:text-3xl">{product.name}</h1><p className="mt-1 font-mono text-xs opacity-60">#{product.publicId}</p>
             <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#eee] pb-4">
               <div className="flex items-center gap-1" aria-label={`${product.rating.toFixed(1)} out of 5 stars`}>
-                {Array.from({ length: 5 }, (_, index) => <Star key={index} size={15} className={index < Math.round(product.rating) ? 'fill-[#d99b37] text-[#d99b37]' : 'text-[#aaa]'} />)}
+                {Array.from({ length: 5 }, (_, index) => <Star key={index} size={15} className={index < Math.round(product.rating) ? 'fill-[#777777] text-[#777777]' : 'text-[#aaa]'} />)}
               </div>
               <span className="text-xs text-[#666]">{product.rating > 0 ? `${product.rating.toFixed(1)} rating` : 'New product'}</span>
               <button type="button" onClick={toggleFavorite} aria-pressed={isFavorite} aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'} className="ml-auto inline-flex items-center gap-1 text-xs text-[#555]"><Heart size={16} className={isFavorite ? 'fill-current' : ''} /> {isFavorite ? 'Favorited' : 'Favorite'}</button>
@@ -146,17 +146,17 @@ const ProductDetailPage = () => {
             <div className="flex items-baseline gap-3 border-b border-[#eee] py-5">
               {isDiscounted && <span className="text-xs text-[#8a8a8a]">Retail price</span>}
               {isDiscounted && <span className="text-sm text-[#888] line-through">${product.compareAtPrice.toFixed(2)}</span>}
-              <span className="text-2xl font-semibold text-[#d97706]">${product.price.toFixed(2)}</span>
-              {isDiscounted && <span className="text-xs font-semibold text-[#1f5a37]">Save {Math.round((1 - product.price / product.compareAtPrice) * 100)}%</span>}
+              <span className="text-2xl font-semibold text-[#555555]">${product.price.toFixed(2)}</span>
+              {isDiscounted && <span className="text-xs font-semibold text-[#111111]">Save {Math.round((1 - product.price / product.compareAtPrice) * 100)}%</span>}
             </div>
 
             <p className="py-5 text-sm leading-6 text-[#555]">{product.description || 'Details from the partner seller are coming soon.'}</p>
-            {product.sellerReportedStock != null && <p className="mb-4 rounded-lg bg-[#fff9eb] px-3 py-2 text-xs text-[#71521e]">{product.sellerReportedStock === 0 ? 'Seller-reported stock: 0.' : product.sellerReportedStock <= 5 ? `Seller-reported: few left (${product.sellerReportedStock}).` : `Seller-reported stock: ${product.sellerReportedStock}.`} This count is manually maintained and may not be current; it does not limit orders.</p>}
+            {product.sellerReportedStock != null && <p className="mb-4 rounded-lg bg-[#f7f7f7] px-3 py-2 text-xs text-[#111111]">{product.sellerReportedStock === 0 ? 'Seller-reported stock: 0.' : product.sellerReportedStock <= 5 ? `Seller-reported: few left (${product.sellerReportedStock}).` : `Seller-reported stock: ${product.sellerReportedStock}.`} This count is manually maintained and may not be current; it does not limit orders.</p>}
 
             {product.colors.length > 0 && <fieldset className="border-t border-[#eee] py-4">
               <legend className="mb-3 text-xs font-medium">Color{selectedColor ? `: ${selectedColor}` : ''}</legend>
               <div className="flex flex-wrap gap-2">
-                {product.colors.map((color) => <button key={color} type="button" onClick={() => setSelectedColor(color)} aria-pressed={selectedColor === color} className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs ${selectedColor === color ? 'border-black ring-1 ring-black' : 'border-[#ccc]'}`}><span aria-hidden="true" className="size-4 rounded-full border border-[#aaa]" style={{ backgroundColor: colorSwatches[color.toLowerCase()] || '#d8d8d5' }} />{color}</button>)}
+                {product.colors.map((color) => <button key={color} type="button" onClick={() => setSelectedColor(color)} aria-pressed={selectedColor === color} className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs ${selectedColor === color ? 'border-black ring-1 ring-black' : 'border-[#ccc]'}`}><span aria-hidden="true" className="size-4 rounded-full border border-[#aaa]" style={{ backgroundColor: colorSwatches[color.toLowerCase()] || '#cccccc' }} />{color}</button>)}
               </div>
             </fieldset>}
 
@@ -169,7 +169,7 @@ const ProductDetailPage = () => {
 
             <div className="mt-3 grid grid-cols-2 gap-3">
               <button type="button" onClick={addSelectedToCart} className="cart-add-button"><ShoppingBag size={16} /> Add to cart</button>
-              <button type="button" onClick={purchaseNow} className="flex min-h-12 items-center justify-center gap-2 bg-[#1f4a32] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#c8f135] hover:text-[#142217] sm:text-sm">Purchase now</button>
+              <button type="button" onClick={purchaseNow} className="flex min-h-12 items-center justify-center gap-2 bg-[#111111] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#cccccc] hover:text-[#111111] sm:text-sm">Purchase now</button>
             </div>
             {followMessage && <p role="status" className="mt-3 text-xs text-[#555]">{followMessage} {followMessage.includes('Sign in') && <Link to="/login" className="font-semibold underline">Log in</Link>}</p>}
           </section>
@@ -177,7 +177,7 @@ const ProductDetailPage = () => {
           <aside className="border border-[#e5e5e5] bg-white p-4 sm:p-5">
             {store ? <>
               <div className="flex items-center gap-3 border-b border-[#eee] pb-4">
-                {store.logoUrl ? <img src={store.logoUrl} alt="" className="size-12 rounded-full object-cover" /> : <span className="grid size-12 place-items-center rounded-full bg-[#edf1ea] text-lg font-semibold text-[#1f4a32]">{store.storeName.slice(0, 1)}</span>}
+                {store.logoUrl ? <img src={store.logoUrl} alt="" className="size-12 rounded-full object-cover" /> : <span className="grid size-12 place-items-center rounded-full bg-[#f7f7f7] text-lg font-semibold text-[#111111]">{store.storeName.slice(0, 1)}</span>}
                 <div className="min-w-0"><p className="truncate text-sm font-semibold">{store.storeName}</p><p className="mt-1 truncate text-[10px] text-[#777]">{store.ownerName}</p></div>
               </div>
               <dl className="grid grid-cols-2 divide-x divide-y divide-[#eee] py-3 text-center">
@@ -185,12 +185,12 @@ const ProductDetailPage = () => {
                 <div className="px-2 py-3"><dt className="inline-flex items-center gap-1 text-[10px] text-[#777]"><Users size={12} /> Followers</dt><dd className="mt-1 text-sm font-semibold">{Number(store.followerCount || 0).toLocaleString()}</dd></div>
                 <div className="col-span-2 px-2 py-3"><dt className="inline-flex items-center gap-1 text-[10px] text-[#777]"><Eye size={12} /> Store visits</dt><dd className="mt-1 text-sm font-semibold">{Number(store.visitorCount || 0).toLocaleString()}</dd></div>
               </dl>
-              <button type="button" onClick={changeFollow} aria-pressed={isFollowing} className={`mb-2 flex min-h-10 w-full items-center justify-center gap-2 border px-3 text-xs font-semibold ${isFollowing ? 'border-[#1f4a32] bg-[#edf3e9] text-[#1f4a32]' : 'border-[#bbb] hover:border-black'}`}><Heart size={15} className={isFollowing ? 'fill-[#1f4a32]' : ''} />{isFollowing ? 'Following · Unfollow' : 'Follow store'}</button>
+              <button type="button" onClick={changeFollow} aria-pressed={isFollowing} className={`mb-2 flex min-h-10 w-full items-center justify-center gap-2 border px-3 text-xs font-semibold ${isFollowing ? 'border-[#111111] bg-[#f7f7f7] text-[#111111]' : 'border-[#bbb] hover:border-black'}`}><Heart size={15} className={isFollowing ? 'fill-[#111111]' : ''} />{isFollowing ? 'Following · Unfollow' : 'Follow store'}</button>
               <Link to={`/stores/${store.id}`} className="flex min-h-10 w-full items-center justify-center border border-[#bbb] px-3 text-xs font-semibold hover:border-black">Visit store</Link>
             </> : <p className="text-sm text-[#777]">Store profile is unavailable.</p>}
           </aside>
         </div>
-        {relatedProducts.length > 0 && <section aria-labelledby="related-products-heading" className="mt-14 border-t border-[#eee] pt-8"><div className="flex items-end justify-between gap-4"><div><p className="text-xs uppercase tracking-[0.16em] text-[#8a5a4d]">Discover more</p><h2 id="related-products-heading" className="mt-2 text-2xl font-semibold">You may also like</h2><p className="mt-2 text-sm text-[#737970]">More products in {product.category.split(' / ')[0]}.</p></div><Link to="/products" className="text-sm underline">Browse all</Link></div><div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{relatedProducts.map((item) => <ProductCard key={item.id} product={item} />)}</div></section>}
+        {relatedProducts.length > 0 && <section aria-labelledby="related-products-heading" className="mt-14 border-t border-[#eee] pt-8"><div className="flex items-end justify-between gap-4"><div><p className="text-xs uppercase tracking-[0.16em] text-[#111111]">Discover more</p><h2 id="related-products-heading" className="mt-2 text-2xl font-semibold">You may also like</h2><p className="mt-2 text-sm text-[#555555]">More products in {product.category.split(' / ')[0]}.</p></div><Link to="/products" className="text-sm underline">Browse all</Link></div><div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">{relatedProducts.map((item) => <ProductCard key={item.id} product={item} />)}</div></section>}
       </main>
     </div>
   )

@@ -57,8 +57,8 @@ export default function WarehouseBrowser({ dark = false, reloadKey = 0, onAdd, o
   const groups = [...new Set(data.categories.map((entry) => entry.category.split(' / ')[0]))]
   const parent = category.split(' / ')[0]
   const children = data.categories.filter((entry) => entry.category.startsWith(`${parent} / `))
-  const panel = dark ? 'border-[#3b5140] bg-[#07120b] text-white' : 'border-[#dce4da] bg-white text-[#20231f]'
-  const muted = dark ? 'text-[#a9b9ac]' : 'text-[#727b70]'
+  const panel = dark ? 'border-[#111111] bg-[#111111] text-white' : 'border-[#e5e5e5] bg-white text-[#111111]'
+  const muted = dark ? 'text-[#a3a3a3]' : 'text-[#555555]'
   return <div className="mt-6">
     <div className={`grid gap-3 rounded-xl border p-4 sm:grid-cols-3 ${panel}`}>
       <label className="text-xs font-medium">Browse category<select aria-label="Browse warehouse category" value={parent} onChange={(event) => browse(event.target.value)} className={`mt-2 block min-h-11 w-full rounded-lg border px-3 text-sm ${panel}`}><option value="">All categories</option>{groups.map((name) => <option key={name}>{name}</option>)}</select></label>
@@ -71,11 +71,11 @@ export default function WarehouseBrowser({ dark = false, reloadKey = 0, onAdd, o
     {error && <p role="alert" className="mt-3 rounded-lg border border-red-300 p-3 text-sm text-red-500">{error}</p>}
     <div aria-busy={loading} className={`mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${loading ? 'opacity-50' : ''}`}>
       {data.products.map((product) => <article key={product.id} className={`flex min-w-0 flex-col overflow-hidden rounded-xl border ${panel}`}>
-        <button onClick={() => inspect(product)} disabled={busy !== null} className="bg-[#f6f7f3] p-4" aria-label={`View details for ${product.name}`}><img src={product.imageUrl} alt={product.name} loading="lazy" className="h-44 w-full object-contain" /></button>
+        <button onClick={() => inspect(product)} disabled={busy !== null} className="bg-[#f7f7f7] p-4" aria-label={`View details for ${product.name}`}><img src={product.imageUrl} alt={product.name} loading="lazy" className="h-44 w-full object-contain" /></button>
         <div className="flex flex-1 flex-col p-4"><p className={`text-[10px] ${muted}`}>{product.category}</p><h3 className="mt-2 line-clamp-3 text-sm font-semibold">{product.name}</h3><p className="mt-1 font-mono text-xs opacity-60">#{product.publicId}</p><p className="mt-3 font-semibold">{money(product.price)} {product.compareAtPrice && <s className={`ml-2 text-xs font-normal ${muted}`}>{money(product.compareAtPrice)}</s>}</p><p className={`mt-2 text-xs ${muted}`}>{product.colors?.length || 0} colors · {product.sizes?.length || 0} sizes · {product.imageUrls?.length || 1} images</p>
           <div className="mt-auto flex flex-wrap items-center gap-3 pt-4"><button onClick={() => inspect(product)} disabled={busy !== null} className="text-xs underline disabled:opacity-50">Full details</button>{onEdit && <button onClick={() => action(onEdit, product)} disabled={busy !== null} className="text-xs underline disabled:opacity-50">Edit</button>}{onRemove && <button onClick={() => action(onRemove, product, true)} disabled={busy !== null} className="text-xs underline disabled:opacity-50">Remove</button>}</div>
-          {onSelect && <button onClick={() => action(onSelect, product)} disabled={busy !== null || loading} className="mt-4 min-h-11 rounded-full bg-[#263d35] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Use this product</button>}
-          {onAdd && (product.storeProductId?<Link to="/seller/products" className="mt-4 flex min-h-11 items-center justify-center rounded-full border border-[#bfd0b7] bg-[#edf5e6] px-4 py-2 text-xs font-semibold text-[#4c713b]">In your store · Manage</Link>:<button onClick={() => setPublishingProduct(product)} disabled={busy !== null || loading} className="mt-4 min-h-11 rounded-full bg-[#263d35] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Add to my store</button>)}
+          {onSelect && <button onClick={() => action(onSelect, product)} disabled={busy !== null || loading} className="mt-4 min-h-11 rounded-full bg-[#111111] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Use this product</button>}
+          {onAdd && (product.storeProductId?<Link to="/seller/products" className="mt-4 flex min-h-11 items-center justify-center rounded-full border border-[#cccccc] bg-[#f7f7f7] px-4 py-2 text-xs font-semibold text-[#555555]">In your store · Manage</Link>:<button onClick={() => setPublishingProduct(product)} disabled={busy !== null || loading} className="mt-4 min-h-11 rounded-full bg-[#111111] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Add to my store</button>)}
         </div>
       </article>)}
     </div>

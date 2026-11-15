@@ -21,22 +21,22 @@ export const CartProvider = ({ children }) => {
 
   useEffect(() => {
     try {
-      const savedItems = JSON.parse(localStorage.getItem(storageKey) || '[]')
+      const savedItems = JSON.parse(sessionStorage.getItem(storageKey) || localStorage.getItem(storageKey) || '[]')
       if (Array.isArray(savedItems)) setItems(savedItems.map((item) => ({ ...item, lineId: item.lineId || crypto.randomUUID() })))
-      const savedPending = JSON.parse(localStorage.getItem(pendingKey) || '[]')
+      const savedPending = JSON.parse(sessionStorage.getItem(pendingKey) || '[]')
       if (Array.isArray(savedPending)) setPendingOrders(savedPending)
     } catch {
-      localStorage.removeItem(storageKey)
+      sessionStorage.removeItem(storageKey)
     }
     setIsHydrated(true)
   }, [])
 
   useEffect(() => {
-    if (isHydrated) localStorage.setItem(storageKey, JSON.stringify(items))
+    if (isHydrated) sessionStorage.setItem(storageKey, JSON.stringify(items))
   }, [items, isHydrated])
 
   useEffect(() => {
-    if (isHydrated) localStorage.setItem(pendingKey, JSON.stringify(pendingOrders))
+    if (isHydrated) sessionStorage.setItem(pendingKey, JSON.stringify(pendingOrders))
   }, [pendingOrders, isHydrated])
 
   useEffect(() => {

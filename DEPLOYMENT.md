@@ -69,9 +69,9 @@ Seller wallets are separate from buyer/store-credit balances. The administrator 
 
 Deposit and withdrawal requests require the account's four-digit transaction PIN. Withdrawal requests immediately reserve available funds. The admin locks the coin conversion, performs the outgoing transfer externally, and confirms it with the transaction reference. Rejection releases the hold. This application does not send cryptocurrency automatically. Never mark a transfer confirmed merely because a screenshot exists.
 
-The **full product-sale amount** may be released once an externally paid order is delivered, has no active refund, and an administrator explicitly verifies the amount. Store-credit purchases do not create withdrawable cash. Each order/seller release is unique. A completed refund reverses any released proceeds; a negative balance blocks new withdrawals until funds cover it. All balance changes and holds record before/after values. The fund-record screen exports the latest 1,000 records as CSV; the activity feed shows the latest 100 events. The admin review queue shows the latest 200 wallet requests and 500 order/store combinations.
+For legacy externally paid orders, the **full product-sale amount** may be released once delivered, with no active refund, after admin review. Legacy store-credit purchases remain noncash. New balance-only checkout and store-owner confirmation follow the newer rules documented below. Each order/seller release is unique. A completed refund reverses any released proceeds; a negative balance blocks new withdrawals until funds cover it. All balance changes and holds record before/after values. The fund-record screen exports the latest 1,000 records as CSV; the activity feed shows the latest 100 events. The admin review queue shows the latest 200 wallet requests and 500 order/store combinations.
 
-No new environment variables are required. Existing private Supabase storage and payment wallet settings are reused. Existing configured seller metrics remain in the legacy admin editor but no longer drive the real sales dashboard.
+No new environment variables are required. Existing private Supabase storage and payment wallet settings are reused. Legacy configured seller metrics remain in the old editor. New labeled display overrides are managed separately; actual sales and financial records remain authoritative.
 
 
 ### Four-digit transaction PIN and puzzle-free authentication
@@ -81,3 +81,29 @@ Buyers set or reset their PIN under **Profile → Setup**. Sellers use **My wall
 PINs are individually bcrypt-hashed and are never returned to the client or shown to administrators. Five wrong attempts lock the account's PIN for 15 minutes, independently of IP address. A password-authenticated PIN reset clears the lock. No new environment variables are required.
 
 The image puzzle and its client component are removed. Login and signup retain password checks and rate limits. When email verification is configured, emailed codes remain bound to an HTTP-only browser cookie and cannot be used from another browser. The legacy puzzle status endpoint returns `enabled: false` so cached older clients can continue without an image challenge. `AUTH_CAPTCHA` is no longer used.
+
+### Balance-only marketplace, sale confirmation and tracking
+
+New product checkout accepts only `BALANCE`. The server rejects direct coin orders even if a caller bypasses the checkout screen. Buyers fund their account through admin credits or coin deposits; the configured deposit wallet is supplied automatically when available. Coin wallets are configured under **Admin → Buyer funding → Configure coin deposit wallets**, rather than supplied for each product order.
+
+A buyer deposit is credited only after its receipt exists and the admin explicitly verifies the external transfer and records its transaction reference. Request closure and balance/history changes occur in one transaction; repeat confirmations and duplicate recorded transfers are rejected. Buyer withdrawals reserve funds at request creation. Checkout and admin balance reductions cannot spend those holds. Confirmation debits the account; rejection releases the hold.
+
+New balance-paid orders carry `account_balance_payment=1`. They appear in the store’s orders and actual sales immediately. Either that store owner or an admin may confirm the paid sale and credit its **full product subtotal**, once, to the seller wallet. Shipping and tax are excluded. Confirmation stores the actor, role and timestamp, creates a fund record, and confirms initial fulfillment. Seller and admin confirmations racing for the same order cannot double-credit funds. Older external-payment orders retain their admin/delivery review rules; older noncash store-credit orders are not silently converted into merchant cash.
+
+Sellers can shop from their existing signed-in account. Checkout uses any admin-credited purchase balance first, then available merchant wallet funds; held funds are excluded. Merchant-wallet spending creates a fund-record debit. No second buyer email is required to browse or buy.
+
+Admins assign tracking numbers and carriers under **Orders & tracking**. The store owner can read that assignment and update fulfillment status. Buyers see the tracking number and fulfillment status in their order. Tracking assignments and sale confirmations also appear in the store activity history. Seller wallets show confirmed-sale history and the actor who recorded each financial movement.
+
+### Separate accounts in browser tabs
+
+Every tab uses a random selector in session storage and a separate HttpOnly, Secure, SameSite=Lax session cookie. The selector is not an authentication token. Signing in establishes a fresh selector; logging out clears only the selected session. Buyer, seller and admin accounts can stay signed in concurrently in the same browser. Use **Another account in a new tab** or open a fresh tab and sign in separately. Carts and pending-cart records are tab-local too.
+
+Private receipt and verification-photo links include the tab selector, while still requiring its HttpOnly session cookie and the appropriate account permissions. Existing API clients without a selector retain their legacy cookie path. New tabs do not borrow a different tab’s session. A session or account change clears stale notification state.
+
+### Admin workspace and display statistics
+
+The admin centre now has focused sections for accounts, seller approval, orders/tracking, buyer funding, seller finance, warehouse, marketing, display statistics, activity and settings. Heavy management sections load only when opened.
+
+**Display statistics** lets an admin override displayed product/order totals, sales/profit, follower and visitor figures, and daily/weekly/monthly counters, with a required audit reason. The seller dashboard labels these as **admin-adjusted**, alongside actual figures. Adjustments never write real purchase orders, visitor events or wallet money. Before/after values and the administering account are retained in `seller_stat_audit`. Clearing an override restores the actual figure. Charts and transaction histories continue to show recorded activity.
+
+The site uses a black, white and neutral gray brand palette, retaining semantic sale/error/status colors and coin brand icons. Existing product images and the site’s own name remain in place.

@@ -21,7 +21,7 @@ const ProductCard = ({ product }) => {
         <div className="relative aspect-[4/5] overflow-hidden bg-[#f1f1ef]">
           <img src={product.imageUrl} alt={product.name} loading="lazy" className="size-full object-cover transition-transform duration-500 group-hover:scale-[1.035]" />
           <span className="absolute left-2 top-2 bg-white px-2 py-1 text-[9px] font-semibold uppercase tracking-wide sm:left-3 sm:top-3">{product.category}</span>
-          {isDiscounted && <span className="absolute right-2 top-2 bg-[#c8f135] px-2 py-1 text-[9px] font-bold uppercase text-[#142217]">-{discountPercent}%</span>}
+          {isDiscounted && <span className="absolute right-2 top-2 bg-[#cccccc] px-2 py-1 text-[9px] font-bold uppercase text-[#111111]">-{discountPercent}%</span>}
         </div>
         <div className="flex min-h-[72px] items-start justify-between gap-2 pt-3">
           <div className="min-w-0">
@@ -30,7 +30,7 @@ const ProductCard = ({ product }) => {
           </div>
           <div className="shrink-0 text-right text-xs sm:text-sm">
             {isDiscounted && <p className="text-[10px] text-[#777] line-through">${product.compareAtPrice.toFixed(2)}</p>}
-            <p className={isDiscounted ? 'font-semibold text-[#1f5a37]' : ''}>${product.price.toFixed(2)}</p>
+            <p className={isDiscounted ? 'font-semibold text-[#111111]' : ''}>${product.price.toFixed(2)}</p>
           </div>
         </div>
       </Link>

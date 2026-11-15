@@ -21,6 +21,7 @@ const BillingPage = () => {
       if (response.status === 401) return
       if (!response.ok) throw new Error('Could not load your saved billing addresses.')
       const { user } = await response.json()
+      if(user.role==='seller'){if(active)setBilling(current=>mergeBillingDefaults(current,user,[],editedFields.current));return}
       if (user.role !== 'customer') return
       const profile = await apiRequest('/api/buyer/profile')
       if (active) {
@@ -69,20 +70,20 @@ const BillingPage = () => {
         <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">Billing and delivery</h1>
         <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_320px]">
           <form onSubmit={continueToCheckout} className="space-y-5">
-            {addresses.length > 0 && <label className="block text-sm font-medium">Use a saved address<select defaultValue="" onChange={(event) => selectAddress(event.target.value)} className="mt-2 h-12 w-full border border-[#d9dce2] bg-white px-3 text-sm"><option value="">Choose a saved address</option>{addresses.map((address) => <option key={address.id} value={address.id}>{address.address}, {address.city}{address.isDefault ? ' (default)' : ''}</option>)}</select></label>}
+            {addresses.length > 0 && <label className="block text-sm font-medium">Use a saved address<select defaultValue="" onChange={(event) => selectAddress(event.target.value)} className="mt-2 h-12 w-full border border-[#cccccc] bg-white px-3 text-sm"><option value="">Choose a saved address</option>{addresses.map((address) => <option key={address.id} value={address.id}>{address.address}, {address.city}{address.isDefault ? ' (default)' : ''}</option>)}</select></label>}
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-medium">Full name<input name="fullName" value={billing.fullName || ''} onChange={updateBilling} autoComplete="name" required className="mt-2 h-12 w-full border border-[#d9dce2] px-3 text-sm outline-none focus:border-black" /></label>
-              <label className="block text-sm font-medium">Email<input name="email" value={billing.email || ''} onChange={updateBilling} type="email" autoComplete="email" required className="mt-2 h-12 w-full border border-[#d9dce2] px-3 text-sm outline-none focus:border-black" /></label>
+              <label className="block text-sm font-medium">Full name<input name="fullName" value={billing.fullName || ''} onChange={updateBilling} autoComplete="name" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
+              <label className="block text-sm font-medium">Email<input name="email" value={billing.email || ''} onChange={updateBilling} type="email" autoComplete="email" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
             </div>
-            <label className="block text-sm font-medium">Phone<input name="phone" value={billing.phone || ''} onChange={updateBilling} type="tel" autoComplete="tel" required className="mt-2 h-12 w-full border border-[#d9dce2] px-3 text-sm outline-none focus:border-black" /></label>
-            <label className="block text-sm font-medium">Street address<input name="address" value={billing.address || ''} onChange={updateBilling} autoComplete="street-address" required className="mt-2 h-12 w-full border border-[#d9dce2] px-3 text-sm outline-none focus:border-black" /></label>
+            <label className="block text-sm font-medium">Phone<input name="phone" value={billing.phone || ''} onChange={updateBilling} type="tel" autoComplete="tel" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
+            <label className="block text-sm font-medium">Street address<input name="address" value={billing.address || ''} onChange={updateBilling} autoComplete="street-address" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
             <div className="grid gap-4 sm:grid-cols-3">
-              <label className="block text-sm font-medium">City<input name="city" value={billing.city || ''} onChange={updateBilling} autoComplete="address-level2" required className="mt-2 h-12 w-full border border-[#d9dce2] px-3 text-sm outline-none focus:border-black" /></label>
-              <label className="block text-sm font-medium">State / region<input name="region" value={billing.region || ''} onChange={updateBilling} autoComplete="address-level1" required className="mt-2 h-12 w-full border border-[#d9dce2] px-3 text-sm outline-none focus:border-black" /></label>
-              <label className="block text-sm font-medium">Postal code<input name="postalCode" value={billing.postalCode || ''} onChange={updateBilling} autoComplete="postal-code" required className="mt-2 h-12 w-full border border-[#d9dce2] px-3 text-sm outline-none focus:border-black" /></label>
+              <label className="block text-sm font-medium">City<input name="city" value={billing.city || ''} onChange={updateBilling} autoComplete="address-level2" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
+              <label className="block text-sm font-medium">State / region<input name="region" value={billing.region || ''} onChange={updateBilling} autoComplete="address-level1" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
+              <label className="block text-sm font-medium">Postal code<input name="postalCode" value={billing.postalCode || ''} onChange={updateBilling} autoComplete="postal-code" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
             </div>
             <label className="block text-sm font-medium">Country
-              <select name="country" value={billing.country || ''} onChange={updateBilling} autoComplete="country-name" required className="mt-2 h-12 w-full border border-[#d9dce2] bg-white px-3 text-sm outline-none focus:border-black"><option value="">Choose country</option><option>United States</option><option>Canada</option><option>United Kingdom</option><option>Nigeria</option><option>Other</option>{billing.country && !['United States', 'Canada', 'United Kingdom', 'Nigeria', 'Other'].includes(billing.country) && <option>{billing.country}</option>}</select>
+              <select name="country" value={billing.country || ''} onChange={updateBilling} autoComplete="country-name" required className="mt-2 h-12 w-full border border-[#cccccc] bg-white px-3 text-sm outline-none focus:border-black"><option value="">Choose country</option><option>United States</option><option>Canada</option><option>United Kingdom</option><option>Nigeria</option><option>Other</option>{billing.country && !['United States', 'Canada', 'United Kingdom', 'Nigeria', 'Other'].includes(billing.country) && <option>{billing.country}</option>}</select>
             </label>
             {message && <p role="alert" className="text-sm text-[#a33]">{message}</p>}
             <button type="submit" className="h-12 w-full bg-black text-sm font-semibold text-white">Continue to checkout</button>

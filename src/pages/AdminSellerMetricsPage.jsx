@@ -137,69 +137,69 @@ const AdminSellerMetricsPage = () => {
     navigate('/', { replace: true })
   }
 
-  if (isLoading) return <main className="mx-auto max-w-5xl px-5 py-16 text-sm text-[#66716a]">{message}</main>
+  if (isLoading) return <main className="mx-auto max-w-5xl px-5 py-16 text-sm text-[#555555]">{message}</main>
   if (!admin) return <main className="mx-auto max-w-xl px-5 py-20 text-center"><h1 className="text-2xl font-semibold">Admin access required</h1><p className="mt-3 text-sm text-[#666]">{message}</p><Link to="/login" className="mt-5 inline-block underline">Admin login</Link></main>
 
   return (
-    <div className="min-h-screen bg-[#07120b] text-[#edf3e9]">
-      <header className="border-b border-[#26382b] bg-[#0b1710]">
+    <div className="min-h-screen bg-[#111111] text-[#f7f7f7]">
+      <header className="border-b border-[#111111] bg-[#111111]">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-5 py-5 md:px-10">
-          <div><Link to="/admin" className="text-2xl font-black tracking-[-0.07em]"><SiteName /><span className="ml-1 text-sm text-[#c8f135]">▰</span></Link><p className="mt-1 text-xs text-[#9baa9d]">Admin seller controls</p></div>
-          <nav className="flex items-center gap-4 text-xs"><Link to="/admin" className="underline underline-offset-4">Admin dashboard</Link><Link to="/seller/register" className="underline underline-offset-4">Create seller</Link><button type="button" onClick={logOut} className="border border-[#3b5140] px-3 py-2">Log out</button></nav>
+          <div><Link to="/admin" className="text-2xl font-black tracking-[-0.07em]"><SiteName /><span className="ml-1 text-sm text-[#cccccc]">▰</span></Link><p className="mt-1 text-xs text-[#777777]">Admin seller controls</p></div>
+          <nav className="flex items-center gap-4 text-xs"><Link to="/admin" className="underline underline-offset-4">Admin dashboard</Link><Link to="/seller/register" className="underline underline-offset-4">Create seller</Link><button type="button" onClick={logOut} className="border border-[#111111] px-3 py-2">Log out</button></nav>
         </div>
       </header>
 
       <main className="mx-auto max-w-[1440px] space-y-6 px-5 py-8 md:px-10 md:py-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c8f135]">Seller accounts</p><h1 className="mt-2 text-3xl font-semibold">Dashboard metrics</h1><p className="mt-2 max-w-2xl text-sm text-[#9baa9d]">Set the figures and activity history shown in each seller’s dashboard.</p></div>
-          <label className="text-xs text-[#b8c2b9]">Seller
-            <select value={selectedSellerId} onChange={(event) => setSelectedSellerId(event.target.value)} className="mt-2 block h-11 min-w-64 border border-[#3b5140] bg-[#101c13] px-3 text-sm text-white">
+          <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#cccccc]">Seller accounts</p><h1 className="mt-2 text-3xl font-semibold">Dashboard metrics</h1><p className="mt-2 max-w-2xl text-sm text-[#777777]">Set the figures and activity history shown in each seller’s dashboard.</p></div>
+          <label className="text-xs text-[#a3a3a3]">Seller
+            <select value={selectedSellerId} onChange={(event) => setSelectedSellerId(event.target.value)} className="mt-2 block h-11 min-w-64 border border-[#111111] bg-[#111111] px-3 text-sm text-white">
               <option value="">Select seller</option>{sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.storeName || seller.fullName} · #{seller.publicId}</option>)}
             </select>
           </label>
         </div>
 
-        {message && <p role="status" className="border border-[#263c2d] bg-[#0d1b12] px-4 py-3 text-sm">{message}</p>}
+        {message && <p role="status" className="border border-[#111111] bg-[#111111] px-4 py-3 text-sm">{message}</p>}
 
         {selectedSellerId && <form onSubmit={saveMetrics} className="space-y-6">
-          <section className="border border-[#263c2d] bg-[#0d1b12] p-5 sm:p-7">
-            <div className="mb-5"><h2 className="text-lg font-semibold">Dashboard totals</h2><p className="mt-1 text-xs text-[#9baa9d]">Leave a field blank to use live data where available.</p></div>
+          <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7">
+            <div className="mb-5"><h2 className="text-lg font-semibold">Dashboard totals</h2><p className="mt-1 text-xs text-[#777777]">Leave a field blank to use live data where available.</p></div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {metricFields.map(({ key, label, integer, max, step, prefix }) => <label key={key} className="block text-xs text-[#b8c2b9]">{label}
-                <div className="mt-2 flex h-11 items-center border border-[#3b5140] bg-[#101c13] focus-within:border-[#c8f135]">{prefix && <span className="pl-3 text-[#9baa9d]">{prefix}</span>}<input type="number" min="0" max={max || 1000000000000} step={integer ? '1' : step || '0.01'} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm text-white outline-none" placeholder="Use live value" /></div>
+              {metricFields.map(({ key, label, integer, max, step, prefix }) => <label key={key} className="block text-xs text-[#a3a3a3]">{label}
+                <div className="mt-2 flex h-11 items-center border border-[#111111] bg-[#111111] focus-within:border-[#cccccc]">{prefix && <span className="pl-3 text-[#777777]">{prefix}</span>}<input type="number" min="0" max={max || 1000000000000} step={integer ? '1' : step || '0.01'} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm text-white outline-none" placeholder="Use live value" /></div>
               </label>)}
-              <label className="block text-xs text-[#b8c2b9]">Admin follower adjustment
-                <input type="number" min="0" max="1000000000" step="1" value={adminFollowerCount} onChange={(event) => setAdminFollowerCount(event.target.value)} className="mt-2 h-11 w-full border border-[#3b5140] bg-[#101c13] px-3 text-sm text-white outline-none focus:border-[#c8f135]" />
+              <label className="block text-xs text-[#a3a3a3]">Admin follower adjustment
+                <input type="number" min="0" max="1000000000" step="1" value={adminFollowerCount} onChange={(event) => setAdminFollowerCount(event.target.value)} className="mt-2 h-11 w-full border border-[#111111] bg-[#111111] px-3 text-sm text-white outline-none focus:border-[#cccccc]" />
               </label>
             </div>
           </section>
 
-          <section className="border border-[#263c2d] bg-[#0d1b12] p-5 sm:p-7">
-            <div className="mb-5"><h2 className="text-lg font-semibold">Visitor and sales chart</h2><p className="mt-1 text-xs text-[#9baa9d]">Enter up to 31 daily values, separated by commas.</p></div>
+          <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7">
+            <div className="mb-5"><h2 className="text-lg font-semibold">Visitor and sales chart</h2><p className="mt-1 text-xs text-[#777777]">Enter up to 31 daily values, separated by commas.</p></div>
             <div className="grid gap-4 md:grid-cols-2">
-              <label className="block text-xs text-[#b8c2b9]">Sales volume history
-                <textarea value={salesTrack} onChange={(event) => setSalesTrack(event.target.value)} rows={3} className="mt-2 w-full border border-[#3b5140] bg-[#101c13] px-3 py-2 text-sm text-white outline-none focus:border-[#c8f135]" placeholder="120, 185, 90, 240" />
+              <label className="block text-xs text-[#a3a3a3]">Sales volume history
+                <textarea value={salesTrack} onChange={(event) => setSalesTrack(event.target.value)} rows={3} className="mt-2 w-full border border-[#111111] bg-[#111111] px-3 py-2 text-sm text-white outline-none focus:border-[#cccccc]" placeholder="120, 185, 90, 240" />
               </label>
-              <label className="block text-xs text-[#b8c2b9]">Visits history
-                <textarea value={visitsTrack} onChange={(event) => setVisitsTrack(event.target.value)} rows={3} className="mt-2 w-full border border-[#3b5140] bg-[#101c13] px-3 py-2 text-sm text-white outline-none focus:border-[#c8f135]" placeholder="32, 48, 41, 65" />
+              <label className="block text-xs text-[#a3a3a3]">Visits history
+                <textarea value={visitsTrack} onChange={(event) => setVisitsTrack(event.target.value)} rows={3} className="mt-2 w-full border border-[#111111] bg-[#111111] px-3 py-2 text-sm text-white outline-none focus:border-[#cccccc]" placeholder="32, 48, 41, 65" />
               </label>
             </div>
           </section>
 
-          <section className="border border-[#263c2d] bg-[#0d1b12] p-5 sm:p-7">
-            <div className="mb-5"><h2 className="text-lg font-semibold">Top-selling product records</h2><p className="mt-1 text-xs text-[#9baa9d]">Only products belonging to this seller are available.</p></div>
-            <div className="divide-y divide-[#263c2d]">
+          <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7">
+            <div className="mb-5"><h2 className="text-lg font-semibold">Top-selling product records</h2><p className="mt-1 text-xs text-[#777777]">Only products belonging to this seller are available.</p></div>
+            <div className="divide-y divide-[#111111]">
               {products.filter((product) => product.sellerId === Number(selectedSellerId)).map((product) => <label key={product.id} className="flex flex-wrap items-center gap-3 py-3 text-sm">
-                <img src={product.imageUrl} alt="" className="size-12 shrink-0 object-cover" /><span className="min-w-0 flex-1 truncate">{product.name}</span><span className="text-xs text-[#9baa9d]">${product.price.toFixed(2)}</span>
-                <span className="flex items-center gap-2 text-xs text-[#b8c2b9]">Units sold<input type="number" min="0" max="1000000000" step="1" value={topProductVolumes[product.id] || ''} onChange={(event) => setTopProductVolumes((current) => ({ ...current, [product.id]: event.target.value }))} className="h-9 w-24 border border-[#3b5140] bg-[#101c13] px-2 text-sm text-white outline-none focus:border-[#c8f135]" /></span>
+                <img src={product.imageUrl} alt="" className="size-12 shrink-0 object-cover" /><span className="min-w-0 flex-1 truncate">{product.name}</span><span className="text-xs text-[#777777]">${product.price.toFixed(2)}</span>
+                <span className="flex items-center gap-2 text-xs text-[#a3a3a3]">Units sold<input type="number" min="0" max="1000000000" step="1" value={topProductVolumes[product.id] || ''} onChange={(event) => setTopProductVolumes((current) => ({ ...current, [product.id]: event.target.value }))} className="h-9 w-24 border border-[#111111] bg-[#111111] px-2 text-sm text-white outline-none focus:border-[#cccccc]" /></span>
               </label>)}
-              {!products.some((product) => product.sellerId === Number(selectedSellerId)) && <p className="py-8 text-sm text-[#9baa9d]">This seller has no products yet.</p>}
+              {!products.some((product) => product.sellerId === Number(selectedSellerId)) && <p className="py-8 text-sm text-[#777777]">This seller has no products yet.</p>}
             </div>
           </section>
 
-          <div className="flex flex-wrap items-center justify-between gap-4"><p className="text-xs text-[#9baa9d]">Selected seller: {selectedSeller?.storeName || selectedSeller?.fullName} · #{selectedSeller?.publicId}</p><button disabled={isSaving} type="submit" className="min-h-11 bg-[#c8f135] px-6 text-sm font-semibold text-[#112016] disabled:opacity-60">{isSaving ? 'Saving…' : 'Save dashboard values'}</button></div>
+          <div className="flex flex-wrap items-center justify-between gap-4"><p className="text-xs text-[#777777]">Selected seller: {selectedSeller?.storeName || selectedSeller?.fullName} · #{selectedSeller?.publicId}</p><button disabled={isSaving} type="submit" className="min-h-11 bg-[#cccccc] px-6 text-sm font-semibold text-[#111111] disabled:opacity-60">{isSaving ? 'Saving…' : 'Save dashboard values'}</button></div>
         </form>}
-        {!selectedSellerId && <p className="border border-dashed border-[#3b5140] px-5 py-12 text-center text-sm text-[#9baa9d]">No seller accounts found. Create a seller account, then return here to set its dashboard data.</p>}
+        {!selectedSellerId && <p className="border border-dashed border-[#111111] px-5 py-12 text-center text-sm text-[#777777]">No seller accounts found. Create a seller account, then return here to set its dashboard data.</p>}
       </main>
     </div>
   )
