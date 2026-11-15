@@ -234,7 +234,7 @@ const SellerRegister = () => {
             <div className="signup-mini-store"><div className="signup-awning">{Array.from({length:6},(_,i)=><i key={i}/>)}</div><div className="signup-store-window"><Store size={38} strokeWidth={1.2}/><span>YOUR NEXT CHAPTER</span><strong>Your store.</strong></div><div className="signup-store-door"/></div>
             <div className="signup-art-label"><ShieldCheck size={20}/><span>Real people.<strong>Thoughtfully reviewed stores.</strong></span></div>
           </div>
-          <div className="signup-story-bottom"><ShieldCheck size={20}/><p>Your identity photos stay private.<br/><strong>Only you and administrators can view them.</strong></p></div>
+          <div className="signup-story-bottom"><ShieldCheck size={20}/><p>Your identity stays private.</p></div>
         </aside>
         <section className="signup-panel" aria-labelledby="signup-title">
           <ol className="signup-progress" aria-label="Seller signup progress">
