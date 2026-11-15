@@ -59,3 +59,16 @@ After deploying:
 4. Create a test record and upload an image or screenshot. Restart/redeploy the backend, then verify the record and image are still present. A missing record after restart indicates the database path is not on the persistent mount.
 
 The health endpoint is public and returns only a generic status. No deployment, data transfer, or database migration is performed by this configuration.
+### Seller references, analytics and merchant wallet
+
+User, seller and product screens now use stable eight-digit public references (`#12345678`). The migration backfills existing users, products and warehouse entries and assigns references to new entries. Internal database keys and existing URLs remain unchanged. Public references are labels, not authentication credentials.
+
+The seller overview uses actual purchase records, real follows and recorded visits, rather than manually configured dashboard figures. Daily visits and the activity feed begin recording when this update is deployed; older activity is not fabricated. Sales are grouped by the order creation date in UTC. Product sales exclude shipping and tax. The financial statement shows gross sales before refunds; the order history shows refund state. The 15% profit figure is an estimate, not an additional wallet credit.
+
+Seller wallets are separate from buyer/store-credit balances. The administrator reviews seller deposits at **Admin → Seller finance review**, supplies a coin wallet/network and locks the conversion rate. The seller uploads a private receipt. An administrator must independently verify the incoming transfer and record its transaction reference before crediting the USD-denominated seller balance.
+
+Withdrawal requests require the seller's account password and immediately reserve available funds. The admin locks the coin conversion, performs the outgoing transfer externally, and confirms it with the transaction reference. Rejection releases the hold. This application does not send cryptocurrency automatically. Never mark a transfer confirmed merely because a screenshot exists.
+
+The **full product-sale amount** may be released once an externally paid order is delivered, has no active refund, and an administrator explicitly verifies the amount. Store-credit purchases do not create withdrawable cash. Each order/seller release is unique. A completed refund reverses any released proceeds; a negative balance blocks new withdrawals until funds cover it. All balance changes and holds record before/after values. The fund-record screen exports the latest 1,000 records as CSV; the activity feed shows the latest 100 events. The admin review queue shows the latest 200 wallet requests and 500 order/store combinations.
+
+No new environment variables are required. Existing private Supabase storage and payment wallet settings are reused. Existing configured seller metrics remain in the legacy admin editor but no longer drive the real sales dashboard.

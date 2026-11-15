@@ -1,3 +1,4 @@
+import AdminSellerFinance from '../components/AdminSellerFinance.jsx'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiRequest } from '../lib/api.js'
@@ -126,7 +127,7 @@ const AdminPage = () => {
             <p className="mt-1 text-xs text-[#9baa9d]">Store administration</p>
           </div>
           <div className="flex items-center gap-4 text-sm">
-            <span className="hidden text-[#b8c2b9] sm:inline">{admin.fullName} · #{admin.id}</span>
+            <span className="hidden text-[#b8c2b9] sm:inline">{admin.fullName} · #{admin.publicId || '—'}</span>
             <Link to="/seller" className="text-[#c8f135] underline underline-offset-4">Seller tools</Link>
             <button type="button" onClick={logOut} className="border border-[#3b5140] px-4 py-2 text-[#e9f0e5] hover:border-[#c8f135]">Log out</button>
           </div>
@@ -164,7 +165,8 @@ const AdminPage = () => {
         <AdminSellerApplications />
         <AdminMarketing />
         <AdminWarehouse />
-        <AdminPurchases selectedNumber={selectedOrder} />
+        <AdminSellerFinance />
+      <AdminPurchases selectedNumber={selectedOrder} />
 
         <section className="mb-8 border border-[#263c2d] bg-[#0d1b12]">
           <details open>
@@ -177,7 +179,7 @@ const AdminPage = () => {
               <tbody>
                 {users.map((user) => (
                   <tr key={user.id} className="border-t border-[#263c2d]">
-                    <td className="px-5 py-4 font-mono text-xs sm:px-7">#{user.id}</td>
+                    <td className="px-5 py-4 font-mono text-xs sm:px-7">#{user.publicId || '—'}</td>
                     <td className="px-5 py-4"><Link to={`/admin/users/${user.id}`} className="flex items-center gap-2 underline-offset-2 hover:underline"><span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#1e3426] text-[10px] font-semibold text-[#c8f135]">{user.fullName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>{user.fullName}</Link></td>
                     <td className="px-5 py-4">{user.email}</td>
                     <td className="px-5 py-4">{user.phone || '—'}</td>
@@ -203,7 +205,7 @@ const AdminPage = () => {
           <div className="divide-y divide-[#263c2d]">
             {sellers.map((seller) => (
               <article key={seller.id} className="grid gap-3 px-5 py-5 text-sm md:grid-cols-[1fr_1fr_1.2fr] sm:px-7">
-                <div><Link to={`/admin/users/${seller.id}`} className="flex items-center gap-2 font-semibold underline-offset-2 hover:underline">{seller.storeLogoUrl ? <img src={seller.storeLogoUrl} alt="" className="size-9 shrink-0 rounded-full object-cover" /> : <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#1e3426] text-xs font-semibold text-[#c8f135]">{(seller.storeName || seller.fullName).slice(0, 1).toUpperCase()}</span>}<span>{seller.storeName || 'Seller workspace'} <span className="font-mono text-xs font-normal text-[#9baa9d]">#{seller.id}</span></span></Link><p className="mt-1 text-xs text-[#b8c2b9]">{seller.fullName} · {seller.email}</p><p className="mt-1 text-xs text-[#b8c2b9]">{seller.phone || 'No phone provided'}</p></div>
+                <div><Link to={`/admin/users/${seller.id}`} className="flex items-center gap-2 font-semibold underline-offset-2 hover:underline">{seller.storeLogoUrl ? <img src={seller.storeLogoUrl} alt="" className="size-9 shrink-0 rounded-full object-cover" /> : <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#1e3426] text-xs font-semibold text-[#c8f135]">{(seller.storeName || seller.fullName).slice(0, 1).toUpperCase()}</span>}<span>{seller.storeName || 'Seller workspace'} <span className="font-mono text-xs font-normal text-[#9baa9d]">#{seller.publicId || '—'}</span></span></Link><p className="mt-1 text-xs text-[#b8c2b9]">{seller.fullName} · {seller.email}</p><p className="mt-1 text-xs text-[#b8c2b9]">{seller.phone || 'No phone provided'}</p></div>
                 <div><p>{seller.country || 'Country not provided'}</p><p className="mt-1 text-xs text-[#b8c2b9]">{[seller.address, seller.city, seller.region, seller.postalCode].filter(Boolean).join(', ') || 'Address not provided'}</p></div>
                 <div><p className="text-xs leading-5 text-[#c9d2c8]">{seller.storeDescription || 'No store description provided.'}</p><p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-[#c8f135]">{seller.verificationStatus === 'demo_documents_not_stored' ? 'Identity files not stored' : seller.verificationStatus?.replaceAll('_', ' ') || 'Profile not completed'}</p></div>
               </article>
@@ -220,7 +222,7 @@ const AdminPage = () => {
             {events.map((event) => (
               <article key={event.id} className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-4 text-sm sm:px-7">
                 <span className="min-w-24 text-xs font-semibold uppercase tracking-wide text-[#c8f135]">{event.type === 'registered' ? 'Registered' : 'Signed in'}</span>
-                <span className="min-w-32 flex-1">{event.fullName} <span className="text-xs text-[#9baa9d]">#{event.userId}</span></span>
+                <span className="min-w-32 flex-1">{event.fullName} <span className="text-xs text-[#9baa9d]">#{event.publicId || '—'}</span></span>
                 <span className="text-xs text-[#b8c2b9]">{event.email}</span>
                 <time className="text-xs text-[#9baa9d]" dateTime={`${event.createdAt.replace(' ', 'T')}Z`}>{new Date(`${event.createdAt.replace(' ', 'T')}Z`).toLocaleString()}</time>
               </article>
@@ -237,7 +239,7 @@ const AdminPage = () => {
             {products.map((product) => (
               <article key={product.id} className="flex items-center gap-4 px-5 py-4 sm:px-7">
                 <img src={product.imageUrl} alt="" className="size-14 shrink-0 bg-[#132217] object-cover" />
-                <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{product.name}</h3><p className="mt-1 text-xs text-[#9baa9d]">{product.category} · ID #{product.id}</p></div>
+                <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{product.name}</h3><p className="mt-1 text-xs text-[#9baa9d]">{product.category} · ID #{product.publicId || '—'}</p></div>
                 <span className="text-right text-sm">
                   {product.compareAtPrice && <span className="mr-2 text-xs text-[#9baa9d] line-through">${product.compareAtPrice.toFixed(2)}</span>}
                   <span className={product.compareAtPrice ? 'font-semibold text-[#c8f135]' : ''}>${product.price.toFixed(2)}</span>

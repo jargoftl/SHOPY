@@ -1,5 +1,6 @@
 import type { Express, RequestHandler } from 'express'
 import express from 'express'
+import { reverseSellerRelease } from './sellerFinance.ts'
 import type { Database } from './database.ts'
 import { allocateOrderNumber, initializeOrderNumbers } from './orderNumbers.ts'
 
@@ -90,6 +91,9 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     const reference = text(req.body?.transferReference, 500)
     if (req.body?.verified !== true || !reference) return res.status(400).json({ error: 'Confirm the manual transfer and enter its reference.' })
     await db.transaction(async () => {
+      const latest=await db.prepare('SELECT status FROM purchase_refunds WHERE id=?').get(refund.id) as {status:string}
+      if(latest.status!=='approved') throw Object.assign(new Error('Refund has already been processed.'),{status:409})
+      await reverseSellerRelease(db, refund.order_id, refund.seller_id, req.user!.id)
       await db.prepare("UPDATE purchase_refunds SET status='completed',transfer_reference=? WHERE id=?").run(reference, refund.id)
       await notify.run(refund.buyer_id, 'purchase', `Refund recorded for order #${(await orderNumber(refund.order_id))}`, 'The administrator recorded a manual refund transfer.', '/orders')
       await notify.run(refund.seller_id, 'purchase', `Refund recorded for order #${(await orderNumber(refund.order_id))}`, 'The administrator recorded a manual refund transfer.', '/seller/refunds')

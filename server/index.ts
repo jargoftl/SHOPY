@@ -13,6 +13,7 @@ import { prepareVerificationPhotos, optionalSsnLast4, verificationPhone, uploadV
 import { registerAuthCaptcha, captchaBinding, captchaEnabled } from './authCaptcha.ts'
 import { warehousePricing } from './warehousePricing.ts'
 import { registerMarketing } from './marketing.ts'
+import { registerSellerFinance } from './sellerFinance.ts'
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
 import { seedWarehouseSamples } from './warehouseSamples.ts'
@@ -21,6 +22,7 @@ import { seedImportedWarehouse } from './warehouseCatalog.ts'
 type UserRole = 'customer' | 'seller' | 'admin'
 
 interface UserRow {
+  public_id: string
   id: number
   full_name: string
   email: string
@@ -34,6 +36,7 @@ interface UserRow {
 }
 
 interface ProductRow {
+  public_id: string
   id: number
   name: string
   category: string
@@ -66,9 +69,10 @@ interface CategoryRow {
   name: string
 }
 
-interface AdminUserRow extends Pick<UserRow, 'id' | 'full_name' | 'email' | 'phone' | 'role' | 'created_at'> {}
+interface AdminUserRow extends Pick<UserRow, 'id' | 'public_id' | 'full_name' | 'email' | 'phone' | 'role' | 'created_at'> {}
 
-interface AdminSellerRow extends Pick<UserRow, 'id' | 'full_name' | 'email' | 'phone' | 'created_at'> {
+interface AdminSellerRow extends Pick<UserRow, 'id' | 'public_id' | 'full_name' | 'email' | 'phone' | 'created_at'> {
+  publicId: string
   store_name: string | null
   store_description: string | null
   store_logo_url: string | null
@@ -84,6 +88,7 @@ interface AdminSellerRow extends Pick<UserRow, 'id' | 'full_name' | 'email' | 'p
 }
 
 interface AdminEventRow {
+  publicId: string
   id: number
   event_type: 'registered' | 'login'
   created_at: string
@@ -281,6 +286,7 @@ const hashToken = (token: string): string => createHash('sha256').update(token).
 
 const publicUser = (user: UserRow) => ({
   id: user.id,
+  publicId: user.public_id,
   fullName: user.full_name,
   email: user.email,
   phone: user.phone,
@@ -300,6 +306,7 @@ const parseStringArray = (json: string): string[] => {
 
 const publicProduct = (product: ProductRow) => ({
   id: product.id,
+  publicId: product.public_id,
   name: product.name,
   category: product.category,
   price: product.price,
@@ -708,7 +715,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
         await database.prepare(`
           INSERT INTO notifications (user_id, type, title, body, link)
           SELECT id, 'buyer_signup', ?, ?, ? FROM users WHERE role = 'admin'
-        `).run(`New buyer #${user.id}`, `${fullName} (${email}) created a buyer profile.`, `/admin/users/${user.id}`)
+        `).run(`New buyer #${user.public_id}`, `${fullName} (${email}) created a buyer profile.`, `/admin/users/${user.id}`)
       }
       if (sellerProfile) {
         if (logoUpload) await database.prepare('INSERT INTO product_images (id, content_type, image) VALUES (?, ?, ?)').run(logoUpload.id, logoUpload.contentType, logoUpload.image)
@@ -722,7 +729,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
         await database.prepare("INSERT INTO seller_applications(user_id,status,consented_at,submitted_at,ssn_last4) VALUES (?,'pending',?,?,?)").run(user.id, new Date().toISOString(), new Date().toISOString(), ssnLast4)
         await insertApplicationPhotos(database, user.id, uploadedVerification)
         await database.prepare('DELETE FROM seller_email_verifications WHERE email = ?').run(email)
-        await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'seller_signup', ?, ?, ? FROM users WHERE role = 'admin'").run(`New seller #${user.id}`, `${fullName} (${email}) submitted ${sellerProfile.storeName} for verification. Seller access is pending approval.`, `/admin/users/${user.id}`)
+        await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'seller_signup', ?, ?, ? FROM users WHERE role = 'admin'").run(`New seller #${user.public_id}`, `${fullName} (${email}) submitted ${sellerProfile.storeName} for verification. Seller access is pending approval.`, `/admin/users/${user.id}`)
       }
       if (role === 'customer') await database.prepare('DELETE FROM seller_email_verifications WHERE email=?').run(email)
       return user
@@ -869,6 +876,7 @@ app.get('/api/categories', async (_req, res) => {
 app.get('/api/stores', async (_req, res) => {
   const stores = (await getRows<{
     user_id: number
+    publicId: string
     full_name: string
     store_name: string
     store_description: string
@@ -878,7 +886,7 @@ app.get('/api/stores', async (_req, res) => {
     follower_count: number
     visitor_count: number
   }>(`
-    SELECT users.id AS user_id, users.full_name, seller_profiles.store_name,
+    SELECT users.id AS user_id, users.public_id AS publicId, users.full_name, seller_profiles.store_name,
       seller_profiles.store_description, seller_profiles.logo_url,
       (SELECT COUNT(*) FROM products WHERE seller_id = users.id AND is_store_published = 1) AS product_count,
       (SELECT image_url FROM products WHERE seller_id = users.id AND is_store_published = 1
@@ -891,6 +899,7 @@ app.get('/api/stores', async (_req, res) => {
     ORDER BY seller_profiles.created_at DESC, users.id DESC
   `)).map((store) => ({
     id: store.user_id,
+    publicId: store.publicId,
     storeName: store.store_name,
     storeDescription: store.store_description,
     logoUrl: store.logo_url,
@@ -908,6 +917,7 @@ app.get('/api/stores/:sellerId', async (req, res) => {
   if (!Number.isSafeInteger(sellerId)) return res.status(404).json({ error: 'Store not found.' })
   const store = (await getRow<{
     user_id: number
+    publicId: string
     full_name: string
     store_name: string
     store_description: string
@@ -915,7 +925,7 @@ app.get('/api/stores/:sellerId', async (req, res) => {
     follower_count: number
     visitor_count: number
   }>(`
-    SELECT users.id AS user_id, users.full_name, seller_profiles.store_name,
+    SELECT users.id AS user_id, users.public_id AS publicId, users.full_name, seller_profiles.store_name,
       seller_profiles.store_description, seller_profiles.logo_url,
       seller_profiles.follower_count + (SELECT COUNT(*) FROM store_follows WHERE seller_id = users.id) AS follower_count,
       seller_profiles.visitor_count
@@ -925,6 +935,7 @@ app.get('/api/stores/:sellerId', async (req, res) => {
   `, sellerId))
   if (!store) return res.status(404).json({ error: 'Store not found.' })
   await database.prepare('UPDATE seller_profiles SET visitor_count = visitor_count + 1 WHERE user_id = ?').run(sellerId)
+  await database.prepare('INSERT INTO store_daily_visits(seller_id,day,visits) VALUES(?,SUBSTRING(CURRENT_TIMESTAMP,1,10),1) ON CONFLICT(seller_id,day) DO UPDATE SET visits=store_daily_visits.visits+1').run(sellerId)
   store.visitor_count += 1
   const token = req.cookies[cookieName]
   if (token) {
@@ -947,6 +958,7 @@ app.get('/api/stores/:sellerId', async (req, res) => {
   return res.json({
     store: {
       id: store.user_id,
+      publicId: store.publicId,
       storeName: store.store_name,
       storeDescription: store.store_description,
       logoUrl: store.logo_url,
@@ -1249,20 +1261,20 @@ app.get('/api/warehouse', requireAuth, requireRole('seller', 'admin'), async (re
   const params = [search, search, category, category, category]
   const [totalRow, rows, categories, completeRow, importedRow] = await Promise.all([
     getRow<{count:number}>(`SELECT COUNT(*) AS count FROM warehouse_products ${where}`, ...params),
-    getRows<{id:number,product_json:string,created_at:string}>(`SELECT id,(product_json::jsonb - 'sourceDetails')::text AS product_json,created_at FROM warehouse_products ${where} ORDER BY id DESC LIMIT ? OFFSET ?`, ...params,pageSize,(page-1)*pageSize),
+    getRows<{id:number,public_id:string,product_json:string,created_at:string}>(`SELECT id,public_id,(product_json::jsonb - 'sourceDetails')::text AS product_json,created_at FROM warehouse_products ${where} ORDER BY id DESC LIMIT ? OFFSET ?`, ...params,pageSize,(page-1)*pageSize),
     getRows<{category:string,count:number}>(`SELECT category_path AS category,COUNT(*) AS count FROM warehouse_products GROUP BY category_path ORDER BY category`),
     getRow('SELECT 1 FROM schema_migrations WHERE name=?','shopyggful_catalog_2026_11_14_v1'),
     getRow<{count:number}>("SELECT COUNT(*) AS count FROM warehouse_products WHERE source_host='shopyggful.shop'"),
   ])
   const copies = rows.length ? await getRows<{warehouse_id:number,product_id:number}>(`SELECT warehouse_id,product_id FROM seller_warehouse_imports WHERE seller_id=? AND warehouse_id IN (${rows.map(()=>'?').join(',')})`,req.user!.id,...rows.map(row=>row.id)) : []
   const importedIds = new Map(copies.map(copy=>[copy.warehouse_id,copy.product_id]))
-  return res.json({ products: rows.map(row=>({...JSON.parse(row.product_json),id:row.id,createdAt:row.created_at,storeProductId:importedIds.get(row.id)||null})),categories,total:totalRow!.count,page,pageSize,catalogImport:{complete:Boolean(completeRow),imported:importedRow!.count} })
+  return res.json({ products: rows.map(row=>({...JSON.parse(row.product_json),id:row.id,publicId:row.public_id,createdAt:row.created_at,storeProductId:importedIds.get(row.id)||null})),categories,total:totalRow!.count,page,pageSize,catalogImport:{complete:Boolean(completeRow),imported:importedRow!.count} })
 })
 
 app.get('/api/warehouse/:id', requireAuth, requireRole('seller', 'admin'), async (req, res) => {
-  const row = await getRow<{ id: number, product_json: string }>('SELECT id,product_json FROM warehouse_products WHERE id=?', Number(req.params.id))
+  const row = await getRow<{ id: number, public_id: string, product_json: string }>('SELECT id,public_id,product_json FROM warehouse_products WHERE id=?', Number(req.params.id))
   if (!row) return res.status(404).json({ error: 'Warehouse product not found.' })
-  return res.json({ product: { ...JSON.parse(row.product_json), id: row.id } })
+  return res.json({ product: { ...JSON.parse(row.product_json), id: row.id, publicId: row.public_id } })
 })
 
 app.get('/api/warehouse/:id/quote',requireAuth,requireRole('seller','admin'),async(req,res)=>{
@@ -1569,7 +1581,7 @@ const walletRequests = async (userId?: number) => (await Promise.all((await getR
   amountCents: number | null, destination: string, status: string, instructions: string,
   paymentCoin: string, walletAddress: string, network: string, createdAt: string
 }>(`
-  SELECT r.id, r.user_id AS userId, u.full_name AS fullName, u.email, r.kind, r.coin,
+  SELECT r.id, r.user_id AS userId, u.public_id AS publicId, u.full_name AS fullName, u.email, r.kind, r.coin,
     r.amount_cents AS amountCents, r.destination, r.status, r.instructions,
     r.payment_coin AS paymentCoin, r.wallet_address AS walletAddress, r.network, r.created_at AS createdAt
   FROM buyer_wallet_requests r JOIN users u ON u.id = r.user_id
@@ -1652,7 +1664,7 @@ app.post('/api/buyer/cancellation-request', authLimiter, requireAuth, requireRol
   if ((await getRow("SELECT id FROM cancellation_requests WHERE user_id = ? AND status = 'pending'", req.user!.id))) return res.status(409).json({ error: 'You already have a pending cancellation request.' })
   await database.transaction(async () => {
     await database.prepare('INSERT INTO cancellation_requests (user_id) VALUES (?)').run(req.user!.id)
-    await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'cancellation', ?, ?, ? FROM users WHERE role = 'admin'").run('Account cancellation requested', `${req.user!.full_name} (#${req.user!.id}) requested account cancellation.`, `/admin/users/${req.user!.id}`)
+    await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'cancellation', ?, ?, ? FROM users WHERE role = 'admin'").run('Account cancellation requested', `${req.user!.full_name} (#${req.user!.public_id}) requested account cancellation.`, `/admin/users/${req.user!.id}`)
   })()
   return res.status(201).json({ ok: true })
 })
@@ -1772,7 +1784,7 @@ app.post('/api/buyer/requests', authLimiter, requireAuth, requireRole('customer'
     await database.prepare(`
       INSERT INTO notifications (user_id, type, title, body, link)
       SELECT id, 'buyer_request', ?, ?, ? FROM users WHERE role = 'admin'
-    `).run(`Buyer ${kind} request`, `${req.user!.full_name} (#${req.user!.id}) requested ${coin}.`, `/admin/users/${req.user!.id}#buyer-controls`)
+    `).run(`Buyer ${kind} request`, `${req.user!.full_name} (#${req.user!.public_id}) requested ${coin}.`, `/admin/users/${req.user!.id}#buyer-controls`)
     return result.lastInsertRowid
   })())
   return res.status(201).json({ id })
@@ -1792,7 +1804,7 @@ app.patch('/api/buyer/requests/:id/amount', requireAuth, requireRole('customer')
     await database.prepare(`
       INSERT INTO notifications (user_id, type, title, body, link)
       SELECT id, 'buyer_request', ?, ?, ? FROM users WHERE role = 'admin'
-    `).run(`Deposit amount for request #${id}`, `${req.user!.full_name} (#${req.user!.id}) entered a deposit amount.`, `/admin/users/${req.user!.id}#buyer-controls`)
+    `).run(`Deposit amount for request #${id}`, `${req.user!.full_name} (#${req.user!.public_id}) entered a deposit amount.`, `/admin/users/${req.user!.id}#buyer-controls`)
   })()
   return res.json({ ok: true })
 })
@@ -1817,7 +1829,7 @@ app.post('/api/buyer/requests/:id/receipt', requireAuth, requireRole('customer')
     await database.prepare(`
       INSERT INTO notifications (user_id, type, title, body, link)
       SELECT id, 'buyer_receipt', ?, ?, ? FROM users WHERE role = 'admin'
-    `).run(`Screenshot for request #${request.id}`, `${req.user!.full_name} (#${req.user!.id}) submitted a payment screenshot. Verify independently.`, `/admin/users/${req.user!.id}#buyer-controls`)
+    `).run(`Screenshot for request #${request.id}`, `${req.user!.full_name} (#${req.user!.public_id}) submitted a payment screenshot. Verify independently.`, `/admin/users/${req.user!.id}#buyer-controls`)
   })()
   return res.status(201).json({ ok: true })
 })
@@ -1832,7 +1844,7 @@ app.get('/api/admin/receipts/:id', requireAuth, requireRole('admin'), async (req
 
 app.get('/api/admin/buyers', requireAuth, requireRole('admin'), async (_req, res) => {
   const buyers = (await Promise.all((await getRows<{ id: number, fullName: string, email: string, phone: string | null, createdAt: string, balanceCents: number }>(`
-    SELECT u.id, u.full_name AS fullName, u.email, u.phone, u.created_at AS createdAt, COALESCE(w.balance_units, 0) AS balanceCents
+    SELECT u.id, u.public_id AS publicId, u.full_name AS fullName, u.email, u.phone, u.created_at AS createdAt, COALESCE(w.balance_units, 0) AS balanceCents
     FROM users u LEFT JOIN reward_balances w ON w.user_id = u.id WHERE u.role = 'customer' ORDER BY u.id DESC
   `)).map(async (buyer) => ({ ...buyer, visits: (await buyerVisits(buyer.id)), addresses: (await buyerAddresses(buyer.id)) }))))
   const requests = (await walletRequests())
@@ -1890,10 +1902,11 @@ app.patch('/api/admin/buyer-requests/:id', requireAuth, requireRole('admin'), as
 
 app.get('/api/admin/users', requireAuth, requireRole('admin'), async (_req, res) => {
   const users = (await getRows<AdminUserRow>(`
-    SELECT id, full_name, email, phone, role, created_at
+    SELECT id, public_id, full_name, email, phone, role, created_at
     FROM users ORDER BY id
   `)).map((user) => ({
     id: user.id,
+    publicId: user.public_id,
     fullName: user.full_name,
     email: user.email,
     phone: user.phone,
@@ -1907,7 +1920,7 @@ app.get('/api/admin/users/:id/details', requireAuth, requireRole('admin'), async
   const userId = Number(req.params.id)
   if (!Number.isSafeInteger(userId) || userId < 1) return res.status(404).json({ error: 'User not found.' })
   const user = (await getRow<{ id: number, fullName: string, email: string, phone: string | null, role: UserRole, suspended: number, createdAt: string }>(`
-    SELECT id, full_name AS fullName, email, phone, role, suspended, created_at AS createdAt FROM users WHERE id = ?
+    SELECT id, public_id AS publicId, full_name AS fullName, email, phone, role, suspended, created_at AS createdAt FROM users WHERE id = ?
   `, userId))
   if (!user) return res.status(404).json({ error: 'User not found.' })
   const wallet = (await getRow<{ balanceCents: number }>('SELECT balance_units AS balanceCents FROM reward_balances WHERE user_id = ?', userId)) ?? { balanceCents: 0 }
@@ -1986,7 +1999,7 @@ app.get('/api/admin/products', requireAuth, requireRole('admin'), async (_req, r
 
 app.get('/api/admin/sellers', requireAuth, requireRole('admin'), async (_req, res) => {
   const sellers = (await getRows<AdminSellerRow>(`
-    SELECT users.id, users.full_name, users.email, users.phone, users.created_at,
+    SELECT users.id, users.public_id AS publicId, users.full_name, users.email, users.phone, users.created_at,
       seller_profiles.store_name, seller_profiles.store_description, seller_profiles.logo_url AS store_logo_url, seller_profiles.country,
       seller_profiles.address, seller_profiles.city, seller_profiles.region,
       seller_profiles.postal_code, seller_profiles.verification_status,
@@ -1998,6 +2011,7 @@ app.get('/api/admin/sellers', requireAuth, requireRole('admin'), async (_req, re
     ORDER BY users.id DESC
   `)).map((seller) => ({
     id: seller.id,
+    publicId: seller.publicId,
     fullName: seller.full_name,
     email: seller.email,
     phone: seller.phone,
@@ -2129,7 +2143,7 @@ app.patch('/api/admin/sellers/:id/stats', requireAuth, requireRole('admin'), asy
 app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res) => {
   const events = (await getRows<AdminEventRow>(`
     SELECT auth_events.id, auth_events.event_type, auth_events.created_at,
-      users.id AS user_id, users.full_name, users.email
+      users.id AS user_id, users.public_id AS publicId, users.full_name, users.email
     FROM auth_events
     JOIN users ON users.id = auth_events.user_id
     ORDER BY auth_events.id DESC
@@ -2139,12 +2153,14 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
     type: event.event_type,
     createdAt: event.created_at,
     userId: event.user_id,
+    publicId: event.publicId,
     fullName: event.full_name,
     email: event.email,
   }))
   return res.json({ events })
 })
 
+registerSellerFinance(app, database, requireAuth, requireRole)
 await registerManualOrders(app, database, requireAuth, requireRole)
 await registerMarketing(app, database, requireAuth, requireRole)
 const stopVerificationWorker = await registerSellerVerification(app, database, requireAuth, requireRole)

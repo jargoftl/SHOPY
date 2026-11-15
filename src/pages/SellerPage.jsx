@@ -217,7 +217,7 @@ const SellerPage = () => {
             <p className="mt-1 text-xs text-[#737970]">Seller workspace</p>
           </div>
           <div className="flex items-center gap-4 text-sm">
-            <span className="hidden text-[#666] sm:inline">{user.fullName} · #{user.id}</span>
+            <span className="hidden text-[#666] sm:inline">{user.fullName} · #{user.publicId || '—'}</span>
             {user.role === 'admin' && <Link to="/admin" className="underline underline-offset-4">Admin</Link>}
             <button type="button" onClick={logOut} className="border border-[#d9dbd5] px-4 py-2">Log out</button>
           </div>

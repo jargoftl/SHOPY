@@ -1,3 +1,4 @@
+import SellerFinancePage from './pages/SellerFinancePage.jsx'
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -256,6 +257,9 @@ const AnimatedRoutes = () => {
             <Route path="/admin/users/:userId" element={<AdminUserDetailsPage />} />
             <Route path="/admin/seller-metrics" element={<AdminSellerMetricsPage />} />
             <Route path="/seller" element={<SellerDashboardPage />} />
+            <Route path="/seller/wallet" element={<SellerFinancePage />} />
+            <Route path="/seller/financial-statement" element={<SellerFinancePage view="statement" />} />
+            <Route path="/seller/fund-record" element={<SellerFinancePage view="record" />} />
             <Route path="/seller/orders" element={<SellerOrdersPage />} />
             <Route path="/seller/marketing/upgrade" element={<SellerMarketingPage view="upgrade" />} />
             <Route path="/seller/marketing/history" element={<SellerMarketingPage view="history" />} />

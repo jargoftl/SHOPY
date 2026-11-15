@@ -134,7 +134,7 @@ const ProductDetailPage = () => {
 
           <section>
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8a5a4d]">{product.category}</p>
-            <h1 className="mt-2 text-2xl font-semibold leading-tight sm:text-3xl">{product.name}</h1>
+            <h1 className="mt-2 text-2xl font-semibold leading-tight sm:text-3xl">{product.name}</h1><p className="mt-1 font-mono text-xs opacity-60">#{product.publicId}</p>
             <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#eee] pb-4">
               <div className="flex items-center gap-1" aria-label={`${product.rating.toFixed(1)} out of 5 stars`}>
                 {Array.from({ length: 5 }, (_, index) => <Star key={index} size={15} className={index < Math.round(product.rating) ? 'fill-[#d99b37] text-[#d99b37]' : 'text-[#aaa]'} />)}

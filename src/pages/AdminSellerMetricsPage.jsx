@@ -154,7 +154,7 @@ const AdminSellerMetricsPage = () => {
           <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c8f135]">Seller accounts</p><h1 className="mt-2 text-3xl font-semibold">Dashboard metrics</h1><p className="mt-2 max-w-2xl text-sm text-[#9baa9d]">Set the figures and activity history shown in each seller’s dashboard.</p></div>
           <label className="text-xs text-[#b8c2b9]">Seller
             <select value={selectedSellerId} onChange={(event) => setSelectedSellerId(event.target.value)} className="mt-2 block h-11 min-w-64 border border-[#3b5140] bg-[#101c13] px-3 text-sm text-white">
-              <option value="">Select seller</option>{sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.storeName || seller.fullName} · #{seller.id}</option>)}
+              <option value="">Select seller</option>{sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.storeName || seller.fullName} · #{seller.publicId}</option>)}
             </select>
           </label>
         </div>
@@ -197,7 +197,7 @@ const AdminSellerMetricsPage = () => {
             </div>
           </section>
 
-          <div className="flex flex-wrap items-center justify-between gap-4"><p className="text-xs text-[#9baa9d]">Selected seller: {selectedSeller?.storeName || selectedSeller?.fullName} · #{selectedSellerId}</p><button disabled={isSaving} type="submit" className="min-h-11 bg-[#c8f135] px-6 text-sm font-semibold text-[#112016] disabled:opacity-60">{isSaving ? 'Saving…' : 'Save dashboard values'}</button></div>
+          <div className="flex flex-wrap items-center justify-between gap-4"><p className="text-xs text-[#9baa9d]">Selected seller: {selectedSeller?.storeName || selectedSeller?.fullName} · #{selectedSeller?.publicId}</p><button disabled={isSaving} type="submit" className="min-h-11 bg-[#c8f135] px-6 text-sm font-semibold text-[#112016] disabled:opacity-60">{isSaving ? 'Saving…' : 'Save dashboard values'}</button></div>
         </form>}
         {!selectedSellerId && <p className="border border-dashed border-[#3b5140] px-5 py-12 text-center text-sm text-[#9baa9d]">No seller accounts found. Create a seller account, then return here to set its dashboard data.</p>}
       </main>

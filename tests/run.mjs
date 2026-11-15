@@ -1,3 +1,4 @@
+import {testSellerFinance} from './seller-finance-flow.mjs';
 import { tableNames } from '../dist-server/schema.js';
 import { testBuyerFollowedStores } from './buyer-followed-stores-flow.mjs';
 import { testWarehousePublication } from './warehouse-publication-flow.mjs';
@@ -212,6 +213,7 @@ try{
  }
  await testWarehousePublication({req,check,cookie,seller,buyer,db,sellerId});
  await testBuyerFollowedStores({req,check,db,buyer,buyerId,sellerId});
+ await testSellerFinance({req,check,db,cookie,seller,buyer,sellerId,buyerId});
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.
  const storageFetch=globalThis.fetch;
  Object.assign(process.env,{SUPABASE_URL:'https://storage.example.test',SUPABASE_SERVICE_ROLE_KEY:'test-only-placeholder',SUPABASE_STORAGE_BUCKET:'shop-uploads'});

@@ -232,7 +232,7 @@ const BuyerProfilePage = () => {
         <div className="grid gap-6 lg:grid-cols-[250px_1fr]">
           <aside className="h-fit rounded-2xl border border-[#e1e7df] bg-white p-5 shadow-[0_8px_30px_rgba(27,50,33,0.04)]">
             <div className="flex items-center gap-3 lg:block"><div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[#eaf1e7] text-[#315941]"><UserRound size={27} /></div>
-            <div><h2 className="break-words font-semibold lg:mt-4">{profile.user.fullName}</h2><p className="mt-1 break-all text-xs text-[#737970]">{profile.user.email}</p><p className="mt-2 font-mono text-xs text-[#627267]">Member ID: #{profile.user.id}</p></div></div>
+            <div><h2 className="break-words font-semibold lg:mt-4">{profile.user.fullName}</h2><p className="mt-1 break-all text-xs text-[#737970]">{profile.user.email}</p><p className="mt-2 font-mono text-xs text-[#627267]">Member ID: #{profile.user.publicId}</p></div></div>
             <nav aria-label="Profile navigation" className="mt-5 grid grid-cols-2 gap-1 border-t border-[#edf0eb] pt-4 sm:grid-cols-3 lg:grid-cols-1">{profileLinks.map(({ to, label, Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors ${isActive ? 'bg-[#eaf2e8] font-semibold text-[#214d35]' : 'text-[#637168] hover:bg-[#f5f8f3] hover:text-[#214d35]'}`}><Icon size={18} className="shrink-0" aria-hidden="true" /><span>{label}</span>{to==='/profile/stores'&&<span className="ml-auto rounded-full bg-[#e9f1e3] px-2 py-0.5 text-[10px] font-semibold text-[#62834c]">{profile.follows.length}</span>}</NavLink>)}</nav>
           </aside>
           <div className="min-w-0 space-y-6">

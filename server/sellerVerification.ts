@@ -100,7 +100,7 @@ export async function registerSellerVerification(app: Express, db: Database, aut
   app.get('/api/seller/application-policy',(_req,res)=>res.set('Cache-Control','no-store').json({requiresAdminApproval:true,requiresIdentityPhotos:true,optionalSsnLast4:true}))
   app.get('/api/seller/application',auth,async(req,res)=>res.json(await serialize(req.user!.id)))
   app.get('/api/admin/seller-applications',auth,role('admin'),async(_req,res)=>{
-    const applications = await db.prepare(`SELECT a.user_id AS userId,a.status,a.revision,a.submitted_at AS submittedAt,u.full_name AS fullName,u.email,u.phone,p.store_name AS storeName,
+    const applications = await db.prepare(`SELECT a.user_id AS userId,u.public_id AS publicId,a.status,a.revision,a.submitted_at AS submittedAt,u.full_name AS fullName,u.email,u.phone,p.store_name AS storeName,
       (SELECT COUNT(*) FROM seller_verification_documents d WHERE d.user_id=a.user_id) AS documentCount
       FROM seller_applications a JOIN users u ON u.id=a.user_id JOIN seller_profiles p ON p.user_id=u.id ORDER BY CASE WHEN a.status='pending' THEN 0 ELSE 1 END,a.submitted_at DESC LIMIT 250`).all()
     res.json({applications,emailConfigured:isEmailConfigured()})
