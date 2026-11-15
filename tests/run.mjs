@@ -1,4 +1,5 @@
 import { tableNames } from '../dist-server/schema.js';
+import { testWarehousePublication } from './warehouse-publication-flow.mjs';
 import { testAuthCaptcha } from './auth-captcha-flow.mjs';
 import { testSellerVerification } from './seller-verification-flow.mjs';
 import { testMarketing } from './marketing-flow.mjs';
@@ -208,6 +209,7 @@ try{
  if(product){
   r=await req('/api/seller/products/'+product.id,{method:'PATCH',body:JSON.stringify({...product,imageUploads:warehouseForm.imageUploads})},seller);check('seller edit accepts main and gallery uploads',r.status===200&&r.data.product.imageUrls.length===2&&r.data.product.imageUrls[0]===r.data.product.imageUrl,r);
  }
+ await testWarehousePublication({req,check,cookie,seller,buyer,db,sellerId});
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.
  const storageFetch=globalThis.fetch;
  Object.assign(process.env,{SUPABASE_URL:'https://storage.example.test',SUPABASE_SERVICE_ROLE_KEY:'test-only-placeholder',SUPABASE_STORAGE_BUCKET:'shop-uploads'});

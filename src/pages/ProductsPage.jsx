@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronRight, Menu, Search, X } from 'lucide-react'
+import { CATALOG_UPDATED } from '../lib/catalogEvents.js'
 import { apiRequest } from '../lib/api.js'
 import { catalogTaxonomy } from '../data/catalogTaxonomy.js'
 import ProductCard from '../components/store/ProductCard.jsx'
@@ -21,20 +22,21 @@ const ProductsPage = () => {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    let isCurrent = true
-    Promise.all([apiRequest('/api/products'), apiRequest('/api/categories')])
-      .then(([productData, categoryData]) => {
-        if (!isCurrent) return
-        setProducts(productData.products)
-        setApiCategories(categoryData.categories)
-      })
-      .catch((error) => {
-        if (isCurrent) setLoadError(error.message)
-      })
-      .finally(() => {
-        if (isCurrent) setIsLoading(false)
-      })
-    return () => { isCurrent = false }
+    let active=true,loaded=false,request=0,lastStarted=0
+    const load=async()=>{
+      const sequence=++request;lastStarted=Date.now()
+      try{
+        const [productData,categoryData]=await Promise.all([apiRequest('/api/products',{background:true}),apiRequest('/api/categories',{background:true})])
+        if(!active||sequence!==request)return
+        setProducts(productData.products);setApiCategories(categoryData.categories);setLoadError('');loaded=true
+      }catch(error){if(active&&!loaded)setLoadError(error.message)}
+      finally{if(active)setIsLoading(false)}
+    }
+    const changed=event=>{if(event.type==='storage'&&event.key!==CATALOG_UPDATED)return;void load()}
+    const focus=()=>{if(Date.now()-lastStarted>10000)void load()}
+    void load()
+    window.addEventListener(CATALOG_UPDATED,changed);window.addEventListener('storage',changed);window.addEventListener('focus',focus)
+    return()=>{active=false;window.removeEventListener(CATALOG_UPDATED,changed);window.removeEventListener('storage',changed);window.removeEventListener('focus',focus)}
   }, [])
 
   const allCategories = useMemo(() => {

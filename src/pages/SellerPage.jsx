@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../lib/api.js'
 import { catalogTaxonomy } from '../data/catalogTaxonomy.js'
+import { CATALOG_UPDATED, notifyCatalogUpdated } from '../lib/catalogEvents.js'
+import { publishWarehouseProduct } from '../lib/warehousePublish.js'
+import SellerProductTabs from '../components/SellerProductTabs.jsx'
 import WarehouseBrowser from '../components/WarehouseBrowser.jsx'
 import SiteName from '../components/SiteName.jsx'
 import ProductImageFields, { productImagePayload } from '../components/ProductImageFields.jsx'
@@ -20,12 +23,12 @@ const taxonomyCategoryGroups = catalogTaxonomy.map((category) => ({
 const SellerPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const catalogVersion=useRef(0)
   const [user, setUser] = useState(null)
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [editingProduct, setEditingProduct] = useState(null)
-  const [warehouseSelection, setWarehouseSelection] = useState(null)
-  const [showWarehouse, setShowWarehouse] = useState(true)
+  const [showWarehouse, setShowWarehouse] = useState(false)
   const [newCategory, setNewCategory] = useState('')
   const [productForm, setProductForm] = useState({ name: '', category: '', price: '', compareAtPrice: '', imageUrl: '', imageUrls: [], description: '', isPublished: true })
   const [message, setMessage] = useState(location.state?.welcome || 'Loading your seller workspace…')
@@ -75,6 +78,16 @@ const SellerPage = () => {
     return () => { isCurrent = false }
   }, [navigate, location.state?.welcome])
 
+  useEffect(()=>{
+    if(!user)return
+    let active=true,lastStarted=0
+    const refresh=async()=>{lastStarted=Date.now();const version=catalogVersion.current;try{const data=await apiRequest('/api/seller/products',{background:true});if(active&&version===catalogVersion.current)setProducts(data.products)}catch{/* Keep the current catalog available on a transient refresh failure. */}}
+    const storage=event=>{if(event.key===CATALOG_UPDATED)void refresh()}
+    const focus=()=>{if(Date.now()-lastStarted>10000)void refresh()}
+    window.addEventListener('storage',storage);window.addEventListener('focus',focus)
+    return()=>{active=false;window.removeEventListener('storage',storage);window.removeEventListener('focus',focus)}
+  },[user])
+
   const saveProduct = async (event) => {
     event.preventDefault()
     const form = event.currentTarget
@@ -84,9 +97,11 @@ const SellerPage = () => {
 
     try {
       const payload = { ...productForm, ...productImagePayload(productForm, imageUploads), price: Number(productForm.price), compareAtPrice: productForm.compareAtPrice ? Number(productForm.compareAtPrice) : null }
-      const { product } = await apiRequest(editingProduct ? `/api/seller/products/${editingProduct.id}` : warehouseSelection ? `/api/seller/warehouse/${warehouseSelection}/import` : '/api/seller/products', {
-        method: editingProduct ? 'PATCH' : 'POST', body: JSON.stringify(warehouseSelection && !editingProduct ? { overrides: payload } : payload),
+      const { product } = await apiRequest(editingProduct ? `/api/seller/products/${editingProduct.id}` : '/api/seller/products', {
+        method: editingProduct ? 'PATCH' : 'POST', body: JSON.stringify(payload),
       })
+      catalogVersion.current+=1
+      notifyCatalogUpdated()
       setProducts((currentProducts) => editingProduct
         ? currentProducts.map((item) => item.id === product.id ? product : item)
         : [product, ...currentProducts])
@@ -96,7 +111,6 @@ const SellerPage = () => {
       }
       setMessage(editingProduct ? `Product “${product.name}” was updated.` : `Product “${product.name}” was added.`)
       setEditingProduct(null)
-      setWarehouseSelection(null)
       setImageFormVersion((version) => version + 1)
       setImageUploads({ primary: null, gallery: [] })
       setIsReadingImages(false)
@@ -110,7 +124,6 @@ const SellerPage = () => {
   }
 
   const editProduct = (product) => {
-    setWarehouseSelection(null)
     setEditingProduct(product)
     setImageFormVersion((version) => version + 1)
     setImageUploads({ primary: null, gallery: [] })
@@ -156,7 +169,6 @@ const SellerPage = () => {
   }
 
   const cancelEdit = () => {
-    setWarehouseSelection(null)
     setEditingProduct(null)
     setImageFormVersion((version) => version + 1)
     setImageUploads({ primary: null, gallery: [] })
@@ -167,7 +179,9 @@ const SellerPage = () => {
   const deleteProduct = async (productId) => {
     try {
       await apiRequest(`/api/seller/products/${productId}`, { method: 'DELETE' })
+      catalogVersion.current+=1
       setProducts((currentProducts) => currentProducts.filter((product) => product.id !== productId))
+      notifyCatalogUpdated()
       setMessage('Product removed from the catalog.')
     } catch (error) {
       setMessage(error.message)
@@ -210,16 +224,17 @@ const SellerPage = () => {
         </div>
       </header>
 
+      <div className="mx-auto max-w-[1440px] px-5 pt-6 md:px-10"><SellerProductTabs/></div>
       <section className="mx-auto max-w-[1440px] px-5 pt-8 md:px-10">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-widest text-[#799079]">Ready-to-add catalog</p><h2 className="mt-2 text-2xl font-semibold">Choose from your warehouse</h2><p className="mt-2 text-sm text-[#737970]">Browse a category and use a product. Its details and category path fill in automatically; review them, then select Add product.</p></div><button onClick={() => setShowWarehouse((value) => !value)} className="rounded-full border border-[#cbd7cc] bg-white px-5 py-3 text-sm">{showWarehouse ? 'Hide warehouse' : 'Browse warehouse'}</button></div>
-        {showWarehouse && <WarehouseBrowser onSelect={async (selected) => {
-          const { product } = await apiRequest(`/api/warehouse/${selected.id}`)
-          setEditingProduct(null); setWarehouseSelection(product.id); setImageFormVersion((value) => value + 1); setImageUploads({ primary: null, gallery: [] })
-          const { sourceDetails: _sourceDetails, source: _source, ...fields } = product
-          setProductForm({ ...fields, imageUrls: (fields.imageUrls || []).filter((url) => url !== fields.imageUrl), price: String(fields.price), compareAtPrice: fields.compareAtPrice ? String(fields.compareAtPrice) : '' })
-          setMessage('Warehouse product selected. Category and details are filled in below.'); setShowWarehouse(false)
-          setTimeout(() => document.getElementById('seller-product-form')?.scrollIntoView({ behavior: 'smooth' }), 50)
-        }} />}
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-widest text-[#799079]">Ready-to-add catalog</p><h2 className="mt-2 text-2xl font-semibold">Choose from your warehouse</h2><p className="mt-2 text-sm text-[#737970]">Choose a product, review its retail and wholesale prices, then confirm to publish. Its category and details are copied automatically.</p></div><button onClick={() => setShowWarehouse((value) => !value)} className="rounded-full border border-[#cbd7cc] bg-white px-5 py-3 text-sm">{showWarehouse ? 'Hide warehouse' : 'Browse warehouse'}</button></div>
+        {showWarehouse && <WarehouseBrowser onPublished={product=>{setShowWarehouse(false);requestAnimationFrame(()=>document.getElementById(`seller-product-${product.id}`)?.scrollIntoView({behavior:'smooth',block:'center'}))}} onAdd={async(selected,pricing)=>{
+          const product=await publishWarehouseProduct(selected,pricing)
+          catalogVersion.current+=1
+          setProducts(current=>[product,...current.filter(item=>item.id!==product.id)])
+          setCategories(current=>current.some(item=>item.name===product.category)?current:[...current,{id:product.category,name:product.category}])
+          setMessage(`Product “${product.name}” is published in your store and on the marketplace homepage.`)
+          return product
+        }}/>}
       </section>
       <main className="mx-auto grid max-w-[1440px] gap-8 px-5 py-9 md:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] md:px-10 md:py-12">
         <section className="min-w-0">
@@ -227,7 +242,6 @@ const SellerPage = () => {
           <h1 className="mt-2 text-3xl font-semibold">{editingProduct ? 'Edit product' : 'Add a product'}</h1>
           <p className="mt-2 text-sm text-[#737970]">Published items become visible on the storefront.</p>
 
-          {warehouseSelection && <p className="mt-4 rounded-lg bg-[#e8f2e3] p-3 text-sm text-[#285735]">Warehouse selection ready. <button type="button" onClick={cancelEdit} className="ml-2 underline">Clear selection</button></p>}
           <form id="seller-product-form" key={editingProduct?.id || 'new-product'} className="mt-6 space-y-4 bg-white p-5 sm:p-6" onSubmit={saveProduct}>
             <label className="block text-sm font-medium">Product name
               <input name="name" value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} maxLength={500} required className="mt-2 h-11 w-full border border-[#d9dbd5] px-3 text-sm outline-none focus:border-black" placeholder="Example: Mira Everyday Tote" />
@@ -283,17 +297,17 @@ const SellerPage = () => {
           </details>
         </section>
 
-        <section className="min-w-0">
+        <section id="seller-catalog" className="min-w-0">
           <div className="mb-5 flex items-end justify-between gap-4">
             <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a5a4d]">Your catalog</p><h2 className="mt-2 text-2xl font-semibold">Products <span className="text-base font-normal text-[#777]">({products.length})</span></h2></div>
-            <Link to="/" className="text-xs underline underline-offset-4">View storefront</Link>
+            <div className="flex flex-wrap gap-4 text-xs">{user.role==='seller'&&<Link to={`/stores/${user.id}`} className="underline underline-offset-4">View my store</Link>}<Link to="/" className="underline underline-offset-4">View homepage</Link></div>
           </div>
 
           {message && <p role="status" className="mb-4 border border-[#e1e2dc] bg-white px-4 py-3 text-sm">{message}</p>}
 
           <div className="divide-y divide-[#eee] bg-white">
             {products.map((product) => (
-              <article key={product.id} className="flex items-center gap-3 p-4 sm:gap-4 sm:p-5">
+              <article id={`seller-product-${product.id}`} key={product.id} className="flex items-center gap-3 p-4 sm:gap-4 sm:p-5">
                 <img src={product.imageUrl} alt="" className="size-16 shrink-0 bg-[#f2f2ef] object-cover" />
                 <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{product.name}</h3><p className="mt-1 text-xs text-[#737970]">{product.category} · ${product.price.toFixed(2)}{product.compareAtPrice ? ` · Was $${product.compareAtPrice.toFixed(2)}` : ''}</p><p className="mt-1 text-[10px] uppercase tracking-wide text-[#777]">{product.isPublished ? 'Published' : 'Draft'}</p></div>
                 <div className="flex shrink-0 gap-2">

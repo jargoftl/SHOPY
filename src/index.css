@@ -22,51 +22,6 @@ body {
   margin: 0;
 }
 
-.app-loading {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  width: 100%;
-  max-width: none;
-  height: 100%;
-  max-height: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: #080808;
-  color: #fff;
-}
-
-.app-loading-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  height: 100%;
-}
-
-.app-loading-name {
-  max-width: 90vw;
-  overflow-wrap: anywhere;
-  text-align: center;
-  font-size: clamp(2rem, 7vw, 3.125rem);
-  font-style: italic;
-  font-weight: 600;
-  animation: app-loading-cut 2s infinite;
-}
-
-
-@keyframes app-loading-cut {
-  0%, 75%, 100% { clip-path: inset(0); }
-  25% { clip-path: inset(100% 0 0); }
-  50% { clip-path: inset(0 0 100%); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-loading-name { animation: none; }
-}
-
 button,
 input {
   font: inherit;

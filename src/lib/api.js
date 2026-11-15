@@ -1,16 +1,7 @@
-let activeRequests = 0
-const reportActivity = () => window.dispatchEvent(new CustomEvent('app:request-activity', { detail: activeRequests }))
-export const getActiveRequests = () => activeRequests
+// Retain the background option for callers; requests never block the whole page.
+export const trackedFetch = (path, options = {}) => fetch(path, options)
 
-const track = async (operation, background) => {
-  if (!background) { activeRequests += 1; reportActivity() }
-  try { return await operation() }
-  finally { if (!background) { activeRequests -= 1; reportActivity() } }
-}
-
-export const trackedFetch = (path, options = {}, background = false) => track(() => fetch(path, options), background)
-
-export const apiRequest = (path, { background = false, ...options } = {}) => track(async () => {
+export const apiRequest = async (path, { background: _background, ...options } = {}) => {
   const headers = {
     ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     ...options.headers,
@@ -31,8 +22,9 @@ export const apiRequest = (path, { background = false, ...options } = {}) => tra
     const error = new Error(data.error || 'The server is unavailable. Please try again later.')
     error.status = response.status
     error.captchaRequired = Boolean(data.captchaRequired)
+    error.priceChanged = Boolean(data.priceChanged)
     throw error
   }
 
   return data
-}, background)
+}

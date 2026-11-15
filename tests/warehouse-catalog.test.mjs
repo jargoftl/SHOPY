@@ -42,3 +42,10 @@ test('direct import saves pages atomically, resumes failures and deduplicates re
   const before=calls;await seedImportedWarehouse(adapter);assert.equal(calls,before)
  }finally{globalThis.fetch=originalFetch;await db.close()}
 })
+
+test('warehouse confirmation pricing uses the selected 15 percent margin and conserves cents',async()=>{
+ const {warehousePricing}=await import('../dist-server/warehousePricing.js')
+ assert.deepEqual(warehousePricing(386),{retailCents:38600,wholesaleCents:32810,profitCents:5790,marginPercent:15,currency:'USD',version:'warehouse-15-v1'})
+ for(const price of [0,.01,.05,.99,1.005,25,1000000]){const quote=warehousePricing(price);assert.equal(quote.wholesaleCents+quote.profitCents,quote.retailCents);assert.equal(quote.profitCents,Math.round(quote.retailCents*.15))}
+ for(const price of [-1,NaN,Infinity,'386',null,1000001])assert.equal(warehousePricing(price),null)
+})

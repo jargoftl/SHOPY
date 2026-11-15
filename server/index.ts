@@ -11,6 +11,7 @@ import { resolve } from 'node:path'
 import { isSellerEmailVerificationRequired, isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
 import { prepareVerificationPhotos, optionalSsnLast4, verificationPhone, uploadVerificationPhotos, insertApplicationPhotos, queuePhotoCleanup, registerSellerVerification, type StoredVerificationPhoto } from './sellerVerification.ts'
 import { registerAuthCaptcha, captchaBinding, captchaEnabled } from './authCaptcha.ts'
+import { warehousePricing } from './warehousePricing.ts'
 import { registerMarketing } from './marketing.ts'
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
@@ -1103,9 +1104,9 @@ app.get('/api/products', async (req, res) => {
   const category = typeof req.query.category === 'string' ? req.query.category.trim() : ''
   const products = (await getRows<ProductRow>(`
     SELECT * FROM products
-    WHERE is_published = 1 AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0 AND u.role IN (\'seller\',\'admin\')) AND name LIKE ? AND (? = '' OR category = ?)
+    WHERE is_published = 1 AND seller_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = products.seller_id AND u.suspended = 0 AND u.role IN (\'seller\',\'admin\')) AND name LIKE ? AND (? = '' OR category = ? OR position(? || ' / ' in category) = 1)
     ORDER BY created_at DESC, id DESC
-  `, search, category, category)).map(publicProduct)
+  `, search, category, category, category)).map(publicProduct)
   return res.json({ products })
 })
 
@@ -1255,20 +1256,32 @@ app.get('/api/warehouse', requireAuth, requireRole('seller', 'admin'), async (re
   const where = `WHERE (? = '' OR position(lower(?) in lower(product_name || ' ' || category_path)) > 0)
     AND (? = '' OR category_path = ? OR position(? || ' / ' in category_path) = 1)`
   const params = [search, search, category, category, category]
-  const total = (await getRow<{ count: number }>(`SELECT COUNT(*) AS count FROM warehouse_products ${where}`, ...params))!.count
-  const rows = await getRows<{ id: number, product_json: string, created_at: string }>(`
-    SELECT id, (product_json::jsonb - 'sourceDetails')::text AS product_json, created_at FROM warehouse_products ${where}
-    ORDER BY id DESC LIMIT ? OFFSET ?`, ...params, pageSize, Math.min(page - 1, 100000) * pageSize)
-  const categories = await getRows<{ category: string, count: number }>(`SELECT category_path AS category, COUNT(*) AS count FROM warehouse_products GROUP BY category_path ORDER BY category`)
-  const importComplete = Boolean(await getRow('SELECT 1 FROM schema_migrations WHERE name=?', 'shopyggful_catalog_2026_11_14_v1'))
-  const imported = (await getRow<{ count: number }>("SELECT COUNT(*) AS count FROM warehouse_products WHERE source_host='shopyggful.shop'"))!.count
-  return res.json({ products: rows.map((row) => ({ ...JSON.parse(row.product_json), id: row.id, createdAt: row.created_at })), categories, total, page, pageSize, catalogImport: { complete: importComplete, imported } })
+  const [totalRow, rows, categories, completeRow, importedRow] = await Promise.all([
+    getRow<{count:number}>(`SELECT COUNT(*) AS count FROM warehouse_products ${where}`, ...params),
+    getRows<{id:number,product_json:string,created_at:string}>(`SELECT id,(product_json::jsonb - 'sourceDetails')::text AS product_json,created_at FROM warehouse_products ${where} ORDER BY id DESC LIMIT ? OFFSET ?`, ...params,pageSize,(page-1)*pageSize),
+    getRows<{category:string,count:number}>(`SELECT category_path AS category,COUNT(*) AS count FROM warehouse_products GROUP BY category_path ORDER BY category`),
+    getRow('SELECT 1 FROM schema_migrations WHERE name=?','shopyggful_catalog_2026_11_14_v1'),
+    getRow<{count:number}>("SELECT COUNT(*) AS count FROM warehouse_products WHERE source_host='shopyggful.shop'"),
+  ])
+  const copies = rows.length ? await getRows<{warehouse_id:number,product_id:number}>(`SELECT warehouse_id,product_id FROM seller_warehouse_imports WHERE seller_id=? AND warehouse_id IN (${rows.map(()=>'?').join(',')})`,req.user!.id,...rows.map(row=>row.id)) : []
+  const importedIds = new Map(copies.map(copy=>[copy.warehouse_id,copy.product_id]))
+  return res.json({ products: rows.map(row=>({...JSON.parse(row.product_json),id:row.id,createdAt:row.created_at,storeProductId:importedIds.get(row.id)||null})),categories,total:totalRow!.count,page,pageSize,catalogImport:{complete:Boolean(completeRow),imported:importedRow!.count} })
 })
 
 app.get('/api/warehouse/:id', requireAuth, requireRole('seller', 'admin'), async (req, res) => {
   const row = await getRow<{ id: number, product_json: string }>('SELECT id,product_json FROM warehouse_products WHERE id=?', Number(req.params.id))
   if (!row) return res.status(404).json({ error: 'Warehouse product not found.' })
   return res.json({ product: { ...JSON.parse(row.product_json), id: row.id } })
+})
+
+app.get('/api/warehouse/:id/quote',requireAuth,requireRole('seller','admin'),async(req,res)=>{
+  res.set('Cache-Control','private, no-store')
+  const row=await getRow<{product_json:string}>("SELECT (product_json::jsonb - 'sourceDetails')::text AS product_json FROM warehouse_products WHERE id=?",Number(req.params.id))
+  if(!row)return res.status(404).json({error:'Warehouse product not found.'})
+  const product=JSON.parse(row.product_json),pricing=warehousePricing(product.price)
+  if(!pricing)return res.status(400).json({error:'This warehouse product needs a valid retail price before publishing.'})
+  const copy=await getRow<{product_id:number}>('SELECT product_id FROM seller_warehouse_imports WHERE seller_id=? AND warehouse_id=?',req.user!.id,Number(req.params.id))
+  return res.json({product:{id:Number(req.params.id),name:product.name,category:product.category,imageUrl:product.imageUrl},pricing,storeProductId:copy?.product_id||null})
 })
 
 app.post('/api/admin/warehouse', requireAuth, requireRole('admin'), async (req, res) => {
@@ -1311,13 +1324,22 @@ app.post('/api/seller/warehouse/:id/import', requireAuth, requireRole('seller', 
   const row = (await getRow<{ product_json: string }>('SELECT product_json FROM warehouse_products WHERE id=?', Number(req.params.id)))
   if (!row) return res.status(404).json({ error: 'Warehouse product not found.' })
   if ((await getRow('SELECT 1 FROM seller_warehouse_imports WHERE seller_id=? AND warehouse_id=?', req.user!.id, Number(req.params.id)))) return res.status(409).json({ error: 'You already added this warehouse product. Edit it in Store products.' })
-  const overrides = req.body?.overrides && typeof req.body.overrides === 'object' ? req.body.overrides : {}
-  const prepared = prepareProductImages({ ...JSON.parse(row.product_json), ...overrides })
+  const source = JSON.parse(row.product_json),publish=req.body?.publish===true,pricing=warehousePricing(source.price)
+  if(publish&&(!pricing||!Number.isSafeInteger(req.body.expectedRetailCents)||req.body.pricingVersion!==pricing.version))return res.status(400).json({error:'Review a current price quote before publishing this product.'})
+  if(publish&&req.body.expectedRetailCents!==pricing!.retailCents)return res.status(409).json({error:'The warehouse price changed. Refresh the price and confirm again.',priceChanged:true})
+  const overrides = publish ? {price:pricing!.retailCents/100,compareAtPrice:source.compareAtPrice>pricing!.retailCents/100?source.compareAtPrice:null,isPublished:true,isStorePublished:true} : req.body?.overrides && typeof req.body.overrides === 'object' ? req.body.overrides : {}
+  const prepared = prepareProductImages({ ...source, ...overrides })
   if ('error' in prepared) return res.status(400).json({ error: prepared.error })
   const validation = (await validateProduct(prepared.body, new Set(prepared.uploads.map((image) => image.id))))
   if ('error' in validation) return res.status(400).json({ error: validation.error })
   const { name, category, price, compareAtPrice, description, imageUrl, imageUrls, colors, sizes, rating, isPublished, isStorePublished } = validation.product
+  let duplicate=false,priceChanged=false
   const productId = (await database.transaction(async () => {
+    if(await getRow('SELECT 1 FROM seller_warehouse_imports WHERE seller_id=? AND warehouse_id=?',req.user!.id,Number(req.params.id))){duplicate=true;return 0}
+    if(publish){
+      const current=await getRow<{product_json:string}>('SELECT product_json FROM warehouse_products WHERE id=?',Number(req.params.id))
+      if(!current||warehousePricing(JSON.parse(current.product_json).price)?.retailCents!==req.body.expectedRetailCents){priceChanged=true;return 0}
+    }
     for (const image of prepared.uploads) await database.prepare('INSERT INTO product_images(id,content_type,image) VALUES (?,?,?)').run(image.id, image.contentType, image.image)
     const result = (await database.prepare(`
       INSERT INTO products (name, category, price, compare_at_price, description, image_url, image_urls_json, colors_json, sizes_json, rating, seller_id, is_published, is_store_published)
@@ -1327,7 +1349,9 @@ app.post('/api/seller/warehouse/:id/import', requireAuth, requireRole('seller', 
     await insertCategory.run(category)
     return result.lastInsertRowid
   })())
-  return res.status(201).json({ product: publicProduct((await getRow<ProductRow>('SELECT * FROM products WHERE id=?', productId))!) })
+  if(duplicate)return res.status(409).json({error:'You already added this warehouse product. Edit it in Store products.'})
+  if(priceChanged)return res.status(409).json({error:'The warehouse price changed. Refresh the price and confirm again.',priceChanged:true})
+  return res.status(201).json({ pricing:publish?pricing:undefined,product: publicProduct((await getRow<ProductRow>('SELECT * FROM products WHERE id=?', productId))!) })
 })
 
 app.get('/api/seller/stock', requireAuth, requireRole('seller', 'admin'), async (req, res) => {

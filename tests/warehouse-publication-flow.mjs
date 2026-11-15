@@ -1,0 +1,28 @@
+export async function testWarehousePublication({req,check,cookie,seller,buyer,db,sellerId}){
+ const create=async(name,price=386)=>{const r=await req('/api/admin/warehouse',{method:'POST',body:JSON.stringify({name,category:'Home / Chairs',price,imageUrl:'https://example.test/chair.jpg',description:'A synthetic warehouse fixture',isPublished:false,isStorePublished:false})},cookie);return r.data.product}
+ const publish=(product,extras={})=>req(`/api/seller/warehouse/${product.id}/import`,{method:'POST',body:JSON.stringify({publish:true,expectedRetailCents:Math.round(product.price*100),pricingVersion:'warehouse-15-v1',...extras})},seller)
+ let item=await create('Confirmed publish fixture')
+ let r=await req(`/api/warehouse/${item.id}/quote`,{},seller)
+ check('private publish quote uses retail, 85 percent wholesale and 15 percent estimated profit',r.status===200&&r.data.pricing.retailCents===38600&&r.data.pricing.wholesaleCents===32810&&r.data.pricing.profitCents===5790)
+ check('publish quote excludes the heavy source variants payload',!r.data.product.sourceDetails&&r.data.product.category==='Home / Chairs'&&!r.data.storeProductId)
+ r=await req(`/api/warehouse/${item.id}/quote`,{},buyer);check('buyer cannot view private warehouse pricing',r.status===403)
+ r=await req(`/api/warehouse/${item.id}/quote`);check('anonymous client cannot view warehouse quote',r.status===401)
+ r=await publish(item,{expectedRetailCents:1});check('stale price confirmation never publishes',r.status===409&&r.data.priceChanged)
+ r=await publish(item,{pricingVersion:'unknown'});check('unknown pricing version is rejected',r.status===400)
+ const balances=JSON.stringify((await db.query('SELECT * FROM shop.buyer_wallets ORDER BY user_id')).rows),rewards=JSON.stringify((await db.query('SELECT * FROM shop.reward_balances ORDER BY user_id')).rows)
+ r=await publish(item,{overrides:{price:1,isPublished:false,isStorePublished:false}});const product=r.data.product
+ check('confirm publishes actual warehouse price to both store and marketplace',r.status===201&&product.price===386&&product.isPublished&&product.isStorePublished&&product.sellerId===sellerId)
+ r=await req('/api/seller/products',{},seller);check('published item is present in Store products',r.status===200&&r.data.products.some(p=>p.id===product.id))
+ r=await req('/api/products');check('published item is returned first in homepage catalog',r.status===200&&r.data.products[0].id===product.id)
+ r=await req('/api/products?category=Home');check('parent category includes imported subcategory',r.status===200&&r.data.products.some(p=>p.id===product.id))
+ r=await req('/api/products?category=Hom');check('partial category names do not include subcategories',r.status===200&&!r.data.products.some(p=>p.id===product.id))
+ r=await req(`/api/stores/${sellerId}`);check('published product is in its owner public store',r.status===200&&r.data.products.some(p=>p.id===product.id))
+ r=await req(`/api/warehouse?q=Confirmed%20publish%20fixture`,{},seller);check('warehouse list marks an item already in this seller store',r.status===200&&r.data.products.find(p=>p.id===item.id)?.storeProductId===product.id)
+ r=await req(`/api/warehouse/${item.id}/quote`,{},seller);check('quote recognizes an existing listing',r.data.storeProductId===product.id)
+ r=await publish(item);check('repeated confirmation does not duplicate the product',r.status===409)
+ check('publishing does not charge funds or credit estimated profit',balances===JSON.stringify((await db.query('SELECT * FROM shop.buyer_wallets ORDER BY user_id')).rows)&&rewards===JSON.stringify((await db.query('SELECT * FROM shop.reward_balances ORDER BY user_id')).rows))
+ const next=await create('Concurrent publish fixture',10)
+ const simultaneous=await Promise.all([publish(next),publish(next)])
+ check('concurrent confirmations return one new listing and one conflict',simultaneous.filter(r=>r.status===201).length===1&&simultaneous.filter(r=>r.status===409).length===1)
+ const count=(await db.query('SELECT COUNT(*) AS n FROM shop.products WHERE seller_id=$1 AND name=$2',[sellerId,next.name])).rows[0].n;check('concurrent confirmation leaves no orphan duplicate listing',Number(count)===1)
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { CATALOG_UPDATED } from '../lib/catalogEvents.js'
 import { apiRequest } from '../lib/api.js'
 import { useCart } from '../context/CartContext.jsx'
 import SellerAccessModal from '../components/modals/SellerAccessModal.jsx'
@@ -261,7 +262,7 @@ const LandingPage = () => {
   const activeHero = heroSlides[activeHeroIndex]
   const categoryLabel = (category) => text.categories[category] || categoryTranslations[language]?.[category] || category
   const visibleProducts = products.filter((product) => {
-    const categoryMatches = activeCategory === 'All' || product.category === activeCategory
+    const categoryMatches = activeCategory === 'All' || product.category === activeCategory || product.category.startsWith(`${activeCategory} / `)
     const searchMatches = `${product.name} ${categoryLabel(product.category)}`
       .toLowerCase()
       .includes(search.toLowerCase())
@@ -270,28 +271,21 @@ const LandingPage = () => {
   })
 
   useEffect(() => {
-    let isCurrent = true
-
-    Promise.all([apiRequest('/api/products'), apiRequest('/api/categories')])
-      .then(([productData, categoryData]) => {
-        if (!isCurrent) return
-        if (import.meta.env.DEV) {
-          console.log('Catalog API response:', {
-            products: productData.products,
-            categories: categoryData.categories,
-          })
-        }
-        setProducts(productData.products)
-        setCategories(categoryData.categories)
-      })
-      .catch((error) => {
-        if (isCurrent) setLoadError(error.message)
-      })
-      .finally(() => {
-        if (isCurrent) setIsLoading(false)
-      })
-
-    return () => { isCurrent = false }
+    let active=true,loaded=false,request=0,lastStarted=0
+    const load=async()=>{
+      const sequence=++request;lastStarted=Date.now()
+      try{
+        const [productData,categoryData]=await Promise.all([apiRequest('/api/products',{background:true}),apiRequest('/api/categories',{background:true})])
+        if(!active||sequence!==request)return
+        setProducts(productData.products);setCategories(categoryData.categories);setLoadError('');loaded=true
+      }catch(error){if(active&&!loaded)setLoadError(error.message)}
+      finally{if(active)setIsLoading(false)}
+    }
+    const changed=event=>{if(event.type==='storage'&&event.key!==CATALOG_UPDATED)return;void load()}
+    const focus=()=>{if(Date.now()-lastStarted>10000)void load()}
+    void load()
+    window.addEventListener(CATALOG_UPDATED,changed);window.addEventListener('storage',changed);window.addEventListener('focus',focus)
+    return()=>{active=false;window.removeEventListener(CATALOG_UPDATED,changed);window.removeEventListener('storage',changed);window.removeEventListener('focus',focus)}
   }, [])
 
   useEffect(() => {
