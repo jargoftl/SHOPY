@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check, ShieldCheck, Store, Sparkles, ClipboardCheck } from 'lucide-react'
 import '../../styles/seller-signup.css'
+import OptionalSellerSsn, { sellerSsnSuffix } from '../../components/OptionalSellerSsn.jsx'
 import VerificationPhotoFields from '../../components/VerificationPhotoFields.jsx'
 import { apiRequest } from '../../lib/api.js'
 
@@ -24,6 +25,7 @@ const SellerRegister = () => {
   const [existingAccount, setExistingAccount] = useState(null)
   const [codeSent, setCodeSent] = useState(false)
   const [developmentCode, setDevelopmentCode] = useState('')
+  const [optionalSsn, setOptionalSsn] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [hasStarted, setHasStarted] = useState(isPreviewMode)
   const headingRef = useRef(null)
@@ -100,6 +102,7 @@ const SellerRegister = () => {
   const updateForm = (event) => {
     const { name, value } = event.target
     setForm((current) => ({ ...current, [name]: value }))
+    if (name === 'country') setOptionalSsn('')
     if (name === 'storeLogoUrl') clearLogoUpload()
     if (name === 'email') {
       setCodeSent(false)
@@ -171,6 +174,7 @@ const SellerRegister = () => {
       return
     }
     if (isReadingVerification) return
+    if (form.country === 'United States' && optionalSsn && !sellerSsnSuffix(optionalSsn)) { setMessage('Enter nine digits for the optional SSN, or leave it blank.'); return }
     if (!verificationConsent || Object.values(verificationPhotos).some(value=>!value)) { setMessage('Upload all three verification photos and agree to private review.'); return }
     if (!acceptedTerms) {
       setMessage('Please agree to the seller terms to continue.')
@@ -182,6 +186,7 @@ const SellerRegister = () => {
     try {
       const policy = await apiRequest('/api/seller/application-policy').catch(()=>null)
       if (!policy?.requiresAdminApproval || !policy?.requiresIdentityPhotos) throw new Error('Seller verification is being updated. Please refresh this page and try again shortly.')
+      if (optionalSsn && !policy.optionalSsnLast4) throw new Error('The optional SSN reference is being updated. Refresh shortly, or clear this optional field to continue.')
       const { user } = await apiRequest(existingAccount ? '/api/seller/application' : '/api/auth/register-seller', {
         method: 'POST',
         body: JSON.stringify({
@@ -189,6 +194,7 @@ const SellerRegister = () => {
           email: form.email,
           phone: form.phone,
           verificationPhotos, verificationConsent,
+          ssnLast4: form.country === 'United States' ? sellerSsnSuffix(optionalSsn) : null,
           password: form.password,
           storeName: form.storeName,
           storeDescription: form.storeDescription,
@@ -202,6 +208,7 @@ const SellerRegister = () => {
         }),
       })
 
+      setOptionalSsn('')
       navigate('/seller/application', { replace: true, state: { welcome: `Your application was submitted, ${user.fullName}. Seller access is pending administrator approval.` } })
     } catch (error) {
       setMessage(error.message)
@@ -344,6 +351,7 @@ const SellerRegister = () => {
             <input name="postalCode" value={form.postalCode} onChange={updateForm} maxLength={20} required autoComplete="postal-code" className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" />
           </label>
 
+          {form.country === 'United States' && <OptionalSellerSsn value={optionalSsn} onChange={setOptionalSsn}/>}
           <div className="signup-section-label"><ShieldCheck size={16}/> YOUR PRIVATE VERIFICATION</div>
           <VerificationPhotoFields photos={verificationPhotos} setPhotos={setVerificationPhotos} consent={verificationConsent} setConsent={setVerificationConsent} onError={setMessage} onBusyChange={setIsReadingVerification} />
 

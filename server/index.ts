@@ -9,7 +9,7 @@ import { rateLimit } from 'express-rate-limit'
 import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { resolve } from 'node:path'
 import { isSellerEmailVerificationRequired, isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
-import { prepareVerificationPhotos, verificationPhone, uploadVerificationPhotos, insertApplicationPhotos, queuePhotoCleanup, registerSellerVerification, type StoredVerificationPhoto } from './sellerVerification.ts'
+import { prepareVerificationPhotos, optionalSsnLast4, verificationPhone, uploadVerificationPhotos, insertApplicationPhotos, queuePhotoCleanup, registerSellerVerification, type StoredVerificationPhoto } from './sellerVerification.ts'
 import { registerMarketing } from './marketing.ts'
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
@@ -624,6 +624,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     const email = existingAccount ? req.user!.email : typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
     let phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : ''
     const password = typeof req.body.password === 'string' ? req.body.password : ''
+    let ssnLast4: string | null = null
     let sellerProfile = null
     let logoUpload: ProductImageUpload | undefined
     let verificationPhotos: ReturnType<typeof prepareVerificationPhotos> | undefined
@@ -669,6 +670,9 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
       phone = normalizedPhone
       verificationPhotos = prepareVerificationPhotos(req.body)
       if ('error' in verificationPhotos) return res.status(400).json({ error: verificationPhotos.error })
+      const ssn = optionalSsnLast4(req.body.ssnLast4, profile.country)
+      if ('error' in ssn) return res.status(400).json({error:ssn.error})
+      ssnLast4 = ssn.value
       sellerProfile = profile
     }
 
@@ -707,7 +711,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
             country=excluded.country,address=excluded.address,city=excluded.city,region=excluded.region,postal_code=excluded.postal_code
         `).run(user.id, sellerProfile.storeName, sellerProfile.storeDescription, sellerProfile.storeLogoUrl, sellerProfile.country, sellerProfile.address, sellerProfile.city, sellerProfile.region, sellerProfile.postalCode)
         await database.prepare("UPDATE seller_profiles SET verification_status='pending' WHERE user_id=?").run(user.id)
-        await database.prepare("INSERT INTO seller_applications(user_id,status,consented_at,submitted_at) VALUES (?,'pending',?,?)").run(user.id, new Date().toISOString(), new Date().toISOString())
+        await database.prepare("INSERT INTO seller_applications(user_id,status,consented_at,submitted_at,ssn_last4) VALUES (?,'pending',?,?,?)").run(user.id, new Date().toISOString(), new Date().toISOString(), ssnLast4)
         await insertApplicationPhotos(database, user.id, uploadedVerification)
         await database.prepare('DELETE FROM seller_email_verifications WHERE email = ?').run(email)
         await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'seller_signup', ?, ?, ? FROM users WHERE role = 'admin'").run(`New seller #${user.id}`, `${fullName} (${email}) submitted ${sellerProfile.storeName} for verification. Seller access is pending approval.`, `/admin/users/${user.id}`)

@@ -338,6 +338,7 @@ CREATE TABLE IF NOT EXISTS seller_applications (
  status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','needs_changes')), revision INTEGER NOT NULL DEFAULT 1,
  consented_at TEXT NOT NULL, submitted_at TEXT NOT NULL, reviewed_at TEXT, reviewed_by BIGINT REFERENCES users(id), review_note TEXT NOT NULL DEFAULT ''
 );
+ALTER TABLE seller_applications ADD COLUMN IF NOT EXISTS ssn_last4 TEXT CHECK(ssn_last4 IS NULL OR ssn_last4 ~ '^[0-9]{4}$');
 CREATE TABLE IF NOT EXISTS seller_verification_documents (
  id TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  kind TEXT NOT NULL CHECK(kind IN ('selfie','id_front','id_back')), content_type TEXT NOT NULL,
