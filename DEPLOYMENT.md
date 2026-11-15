@@ -121,3 +121,7 @@ Unread notifications are red and read notifications green, with text labels. Acc
 Password and transaction-PIN inputs offer accessible show/hide controls and remain masked initially. Seller-created products now require a price-summary confirmation before POST; cancel makes no changes. Wholesale and gross profit remain estimates at 85% and 15% of retail.
 
 The buyer tracking panel displays a timed three-day estimate (preparation during day one, expected transit from day two, estimated arrival window after 72 hours). Estimates do not change order status, confirm delivery, or release funds. Actual seller/admin progress changes generate success toasts, and buyer tracking refreshes announce changed statuses. Carrier integration is required for automatic verified delivery.
+
+### Bulk warehouse publishing
+
+Seller warehouse cards have selection checkboxes. Select all on this page affects the visible page; Select all matching products reads all pages for the current search/category. Already-listed products are excluded. Selection persists while browsing pages. The bulk confirmation shows combined estimated prices and publishes through the existing authorized quote/import flow, checking each current price. Imports run sequentially to limit load. Successful items update the seller catalog immediately; failed items remain retryable without repeating successful imports. Keep the page open while publishing.
