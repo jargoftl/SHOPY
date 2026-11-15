@@ -1,11 +1,14 @@
 import SiteName from '../../components/SiteName.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import AuthLayout from '../../components/AuthLayout.jsx'
+import { ArrowLeft, ArrowRight, Check, ShieldCheck, Store, Sparkles, ClipboardCheck } from 'lucide-react'
+import '../../styles/seller-signup.css'
 import VerificationPhotoFields from '../../components/VerificationPhotoFields.jsx'
 import { apiRequest } from '../../lib/api.js'
 
-const steps = ['Account', 'Workspace', 'Profile']
+const steps = ['Welcome', 'Your account', 'Your store', 'Verification']
+const titles = ['Let’s build something yours.', 'First, a little about you.', 'Give your store its own identity.', 'One last step. Make it official.']
+const descriptions = ['Your next chapter starts with a store. Here’s what to expect before you apply.', 'Add your contact details and create a secure account to manage your store.', 'Introduce your business with a name, a logo and a little of your story.', 'Share your location and identity photos so our administrators can review your application.']
 const initialForm = {
   fullName: '', email: '', phone: '', password: '', confirmPassword: '', verificationCode: '',
   storeName: '', storeDescription: '', storeLogoUrl: '', country: '', address: '', city: '', region: '', postalCode: '',
@@ -22,6 +25,14 @@ const SellerRegister = () => {
   const [codeSent, setCodeSent] = useState(false)
   const [developmentCode, setDevelopmentCode] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [hasStarted, setHasStarted] = useState(isPreviewMode)
+  const headingRef = useRef(null)
+  const visibleStep = hasStarted ? step + 1 : 0
+
+  useEffect(() => {
+    headingRef.current?.focus({ preventScroll: true })
+    if (hasStarted) headingRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' })
+  }, [step, hasStarted])
   const [verificationPhotos, setVerificationPhotos] = useState({selfie:null,id_front:null,id_back:null})
   const [verificationConsent, setVerificationConsent] = useState(false)
   const [isReadingVerification, setIsReadingVerification] = useState(false)
@@ -200,21 +211,42 @@ const SellerRegister = () => {
   }
 
   return (
-    <AuthLayout>
-      <div className="mb-5">
-        <p className="mb-2 text-xs font-bold tracking-[0.14em] text-[#c87800]"><SiteName /> SELLER CENTER</p>
-        <h1 className="text-3xl font-bold tracking-tight">Set up your seller account</h1>
-        <p className="mt-2 text-sm text-[#686868]">Create an account, set up your workspace, then add your profile.</p>
-      </div>
-
-      <ol className="mb-6 grid grid-cols-3 gap-2" aria-label="Seller signup progress">
-        {steps.map((label, index) => (
-          <li key={label} aria-current={step === index ? 'step' : undefined} className={`border px-2 py-3 text-center text-[10px] font-medium sm:text-xs ${step === index ? 'border-black bg-black text-white' : step > index ? 'border-[#aaa] text-[#333]' : 'border-[#ddd] text-[#777]'}`}>
-            <span className="block text-[9px] uppercase tracking-[0.12em]">{`0${index + 1}`}</span>{label}
-          </li>
-        ))}
-      </ol>
-
+    <div className="seller-signup">
+      <header className="signup-header">
+        <Link to="/" className="signup-brand"><SiteName /><span aria-hidden="true">✳</span></Link>
+        <Link to="/seller/login" className="signup-login">Already a seller? <strong>Log in <ArrowRight size={15}/></strong></Link>
+      </header>
+      <main className="signup-layout">
+        <aside className="signup-story">
+          <span className="signup-eyebrow"><span/> THE SELLER COLLECTIVE</span>
+          <h2>A little ambition. <br/>A store of <em>your own.</em></h2>
+          <p>Bring your products, your perspective and your story. We’ll give them a place to call home.</p>
+          <div className="signup-store-art" aria-hidden="true">
+            <div className="signup-art-orbit"/>
+            <span className="signup-art-spark">✳</span>
+            <div className="signup-mini-store"><div className="signup-awning">{Array.from({length:6},(_,i)=><i key={i}/>)}</div><div className="signup-store-window"><Store size={38} strokeWidth={1.2}/><span>YOUR NEXT CHAPTER</span><strong>Your store.</strong></div><div className="signup-store-door"/></div>
+            <div className="signup-art-label"><ShieldCheck size={20}/><span>Real people.<strong>Thoughtfully reviewed stores.</strong></span></div>
+          </div>
+          <div className="signup-story-bottom"><ShieldCheck size={20}/><p>Your identity photos stay private.<br/><strong>Only you and administrators can view them.</strong></p></div>
+        </aside>
+        <section className="signup-panel" aria-labelledby="signup-title">
+          <ol className="signup-progress" aria-label="Seller signup progress">
+            {steps.map((label,index)=><li key={label} aria-current={visibleStep===index?'step':undefined} className={visibleStep===index?'current':visibleStep>index?'complete':''}><span>{visibleStep>index?<Check size={14}/>:index+1}</span><small>{label}</small></li>)}
+          </ol>
+          <div className="signup-heading">
+            <span className="signup-eyebrow">STEP {String(visibleStep+1).padStart(2,'0')} / 04</span>
+            <h1 id="signup-title" ref={headingRef} tabIndex={-1}>{titles[visibleStep]}</h1>
+            <p>{descriptions[visibleStep]}</p>
+          </div>
+          {!hasStarted && <div className="signup-welcome">
+            <div className="signup-welcome-note"><Sparkles size={20}/><span>A considered start for your business</span></div>
+            <div className="signup-checklist">
+              {[[Store,'Make it yours','Create your account and tell us about your store.'],[ShieldCheck,'Verify your identity','Have your phone number, a selfie and the front and back of your government-issued ID ready.'],[ClipboardCheck,'Leave the review to us','Submit your application. Seller access opens after an administrator approves it.']].map(([Icon,title,copy])=><div key={title}><span className="signup-check-icon"><Icon size={21} strokeWidth={1.6}/></span><section><h3>{title}</h3><p>{copy}</p></section></div>)}
+            </div>
+            <label className="signup-agreement"><input type="checkbox" checked={acceptedTerms} onChange={event=>setAcceptedTerms(event.target.checked)}/><span>I agree to provide accurate information belonging to me and submit my application for administrator review. I understand I can start selling only after approval.</span></label>
+            <button type="button" className="signup-primary" disabled={!acceptedTerms} onClick={()=>{setHasStarted(true);setMessage('')}}>Agree & start my application <ArrowRight size={18}/></button>
+            <p className="signup-private-note"><ShieldCheck size={14}/> Your application is reviewed before your store goes live.</p>
+          </div>}
       {import.meta.env.DEV && (
         <nav className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[#eee] pb-4 text-xs" aria-label="Seller form previews">
           <span className="font-semibold text-[#666]">Preview:</span>
@@ -224,11 +256,11 @@ const SellerRegister = () => {
         </nav>
       )}
 
-      {step === 0 && (
+      {hasStarted && step === 0 && (
         <form className="space-y-4" onSubmit={continueFromAccount}>
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-sm font-medium">Full name
-              <input name="fullName" value={form.fullName} onChange={updateForm} autoComplete="name" maxLength={100} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Your name" />
+              <input name="fullName" value={form.fullName} onChange={updateForm} autoComplete="name" maxLength={100} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="Your legal full name" />
             </label>
             <label className="block text-sm font-medium">Phone
               <input name="phone" value={form.phone} onChange={updateForm} type="tel" autoComplete="tel" maxLength={30} required className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" placeholder="+234 801 234 5678" />
@@ -261,7 +293,7 @@ const SellerRegister = () => {
         </form>
       )}
 
-      {step === 1 && (
+      {hasStarted && step === 1 && (
         <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (isReadingLogo) return; setMessage(''); setStep(2) }}>
           <p className="text-sm leading-6 text-[#666]">Set the public details for your seller workspace. You can edit these later.</p>
           <label className="block text-sm font-medium">Store or workspace name
@@ -285,11 +317,11 @@ const SellerRegister = () => {
             <textarea name="storeDescription" value={form.storeDescription} onChange={updateForm} maxLength={500} rows={4} className="mt-2 w-full border border-[#d9dce2] px-3 py-2 outline-none focus:border-black" placeholder="What will you sell?" />
           </label>
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
-          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(0)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isReadingLogo} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">Continue to profile</button></div>
+          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(0)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isReadingLogo} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">Continue to verification</button></div>
         </form>
       )}
 
-      {step === 2 && (
+      {hasStarted && step === 2 && (
         <form className="space-y-4" onSubmit={finishRegistration}>
           <p className="text-sm leading-6 text-[#666]">Add your contact location and verification photos. Your administrator must approve your application before seller access is enabled.</p>
           <label className="block text-sm font-medium">Country
@@ -312,19 +344,24 @@ const SellerRegister = () => {
             <input name="postalCode" value={form.postalCode} onChange={updateForm} maxLength={20} required autoComplete="postal-code" className="mt-2 h-11 w-full border border-[#d9dce2] px-3 outline-none focus:border-black" />
           </label>
 
+          <div className="signup-section-label"><ShieldCheck size={16}/> YOUR PRIVATE VERIFICATION</div>
           <VerificationPhotoFields photos={verificationPhotos} setPhotos={setVerificationPhotos} consent={verificationConsent} setConsent={setVerificationConsent} onError={setMessage} onBusyChange={setIsReadingVerification} />
 
           <label className="flex items-start gap-2 text-xs leading-5 text-[#555]">
             <input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} className="mt-1 accent-black" />
-            I agree to the seller terms and confirm these details belong to me. I understand seller access begins only after administrator approval.
+            I confirm all information and photos in this application belong to me and are accurate. I understand seller access begins only after administrator approval.
           </label>
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
-          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isSubmitting || isReadingLogo || isReadingVerification} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">{isSubmitting ? 'Submitting…' : 'Submit seller profile'}</button></div>
+          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isSubmitting || isReadingLogo || isReadingVerification} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">{isSubmitting ? 'Submitting…' : 'Submit for admin review'}</button></div>
         </form>
       )}
 
+      {hasStarted && step===0 && <button type="button" className="signup-return" disabled={isSubmitting || isSendingCode} onClick={()=>{setMessage('');if(step===0)setHasStarted(false);else setStep(step-1)}}><ArrowLeft size={14}/> {step===0?'Back to introduction':'Previous step'}</button>}
       <p className="mt-5 text-center text-sm text-[#666]">Already have a seller account? <Link to="/seller/login" className="font-semibold text-black underline underline-offset-2">Log in</Link></p>
-    </AuthLayout>
+        </section>
+      </main>
+      <footer className="signup-footer">A place for independent stores. A thoughtful start for yours.</footer>
+    </div>
   )
 }
 
