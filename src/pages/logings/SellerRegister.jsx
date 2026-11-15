@@ -1,3 +1,4 @@
+import {readReferralCode,clearReferralCode} from '../../lib/referralCode.js'
 import PasswordInput from '../../components/PasswordInput.jsx'
 import SiteName from '../../components/SiteName.jsx'
 import { useEffect, useRef, useState } from 'react'
@@ -14,7 +15,7 @@ const titles = ['Let’s build something yours.', 'First, a little about you.', 
 const descriptions = ['Your next chapter starts with a store. Here’s what to expect before you apply.', 'Add your contact details and create a secure account to manage your store.', 'Introduce your business with a name, a logo and a little of your story.', 'Share your location and identity photos so our administrators can review your application.']
 const initialForm = {
   fullName: '', email: '', phone: '', password: '', confirmPassword: '', verificationCode: '',
-  storeName: '', storeDescription: '', storeLogoUrl: '', country: '', address: '', city: '', region: '', postalCode: '',
+  storeName: '', storeDescription: '', storeLogoUrl: '', country: 'United States', address: '', city: '', region: '', postalCode: '',
 }
 
 const SellerRegister = () => {
@@ -27,7 +28,7 @@ const SellerRegister = () => {
   const [existingAccount, setExistingAccount] = useState(null)
   const [codeSent, setCodeSent] = useState(false)
   const [developmentCode, setDevelopmentCode] = useState('')
-  const [transactionPin,setTransactionPin]=useState(''),[confirmTransactionPin,setConfirmTransactionPin]=useState(''),[loginPassword,setLoginPassword]=useState('')
+  const [referralCode,setReferralCode]=useState(readReferralCode)
   const [optionalSsn, setOptionalSsn] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [hasStarted, setHasStarted] = useState(isPreviewMode)
@@ -117,7 +118,6 @@ const SellerRegister = () => {
   const continueFromAccount = async (event) => {
     event.preventDefault()
     setMessage('')
-    if(!/^\d{4}$/.test(transactionPin)||transactionPin!==confirmTransactionPin){setMessage('Create and confirm the same four-digit transaction PIN.');return}
     if (!/^\+?[1-9]\d{6,14}$/.test(form.phone.replace(/[\s()-]/g, ''))) { setMessage('Enter a valid phone number with country code (7–15 digits).'); return }
     if (!existingAccount && form.password !== form.confirmPassword) {
       setMessage('Those passwords do not match.')
@@ -180,7 +180,7 @@ const SellerRegister = () => {
       return
     }
     if (isReadingVerification) return
-    if (form.country === 'United States' && optionalSsn && !sellerSsnSuffix(optionalSsn)) { setMessage('Enter nine digits for the optional SSN, or leave it blank.'); return }
+    if (form.country === 'United States' && optionalSsn && !sellerSsnSuffix(optionalSsn)) { setMessage('Enter only the last four digits for the optional SSN reference, or leave it blank.'); return }
     if (!verificationConsent || Object.values(verificationPhotos).some(value=>!value)) { setMessage('Upload all three verification photos and agree to private review.'); return }
     if (!acceptedTerms) {
       setMessage('Please agree to the seller terms to continue.')
@@ -196,7 +196,7 @@ const SellerRegister = () => {
       const { user } = await apiRequest(existingAccount ? '/api/seller/application' : '/api/auth/register-seller', {
         method: 'POST',
         body: JSON.stringify({
-          transactionPin,confirmTransactionPin,loginPassword,
+          referralCode,
           fullName: form.fullName,
           email: form.email,
           phone: form.phone,
@@ -216,6 +216,7 @@ const SellerRegister = () => {
       })
 
       setOptionalSsn('')
+      clearReferralCode()
       navigate('/seller/application', { replace: true, state: { welcome: `Your application was submitted, ${user.fullName}. Seller access is pending administrator approval.` } })
     } catch (error) {
 
@@ -267,7 +268,7 @@ const SellerRegister = () => {
               <input name="fullName" value={form.fullName} onChange={updateForm} autoComplete="name" maxLength={100} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Your legal full name" />
             </label>
             <label className="block text-sm font-medium">Phone
-              <input name="phone" value={form.phone} onChange={updateForm} type="tel" autoComplete="tel" maxLength={30} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="+234 801 234 5678" />
+              <input name="phone" value={form.phone} onChange={updateForm} type="tel" autoComplete="tel" maxLength={30} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="+1 (202) 555-0123" />
             </label>
           </div>
           <label className="block text-sm font-medium">Email address
@@ -284,7 +285,8 @@ const SellerRegister = () => {
           </div>
           </>}
 
-          <fieldset className="rounded-xl border border-gray-200 p-4"><legend className="px-1 text-sm font-semibold">Wallet security</legend><p className="mb-3 text-xs text-gray-500">Create a four-digit PIN for deposits and withdrawals. Keep it separate from your login password.</p><div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Four-digit PIN<PasswordInput value={transactionPin} onChange={e=>setTransactionPin(e.target.value.replace(/\D/g,'').slice(0,4))} inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} required autoComplete="off" className="mt-2 h-11 w-full rounded border px-3"/></label><label className="text-sm">Confirm PIN<PasswordInput value={confirmTransactionPin} onChange={e=>setConfirmTransactionPin(e.target.value.replace(/\D/g,'').slice(0,4))} inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} required autoComplete="off" className="mt-2 h-11 w-full rounded border px-3"/></label></div>{existingAccount&&<label className="mt-3 block text-sm">Current login password<PasswordInput value={loginPassword} onChange={e=>setLoginPassword(e.target.value)} autoComplete="current-password" required className="mt-2 h-11 w-full rounded border px-3"/></label>}</fieldset>
+          {!existingAccount&&<label className="block text-sm font-medium">Referral code (optional)<input value={referralCode} onChange={e=>setReferralCode(e.target.value.trim().toUpperCase())} maxLength={16} autoComplete="off" className="mt-2 h-11 w-full rounded-lg border px-3 font-mono" placeholder="Seller referral code"/></label>}
+          <p className="text-xs text-gray-500">You’ll set your wallet PIN when you are ready to make a deposit or withdrawal.</p>
           {codeSent && <label className="block text-sm font-medium">Email verification code
             <input name="verificationCode" value={form.verificationCode} onChange={updateForm} type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="6-digit email code" />
           </label>}

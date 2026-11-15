@@ -74,3 +74,5 @@ Passwords are hashed with bcrypt and are never shown in the admin UI or returned
 # SHOPY
 
 Administrators have a separate Seller funding tab for authorized wallet credits with reasons and audit history. Notifications distinguish unread (red) and read (green). Concurrent account requests are shared per tab without caching completed wallet balances.
+
+Sellers can share buyer and seller registration links under **Referrals & rewards**. Admins review each attributed signup and choose its reward amount; approved credits appear once in the seller wallet and fund history. Wallet PINs are requested for deposits/withdrawals, with setup available at the first transaction; signup does not require a PIN.

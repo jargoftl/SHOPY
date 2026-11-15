@@ -1,3 +1,4 @@
+import {readReferralCode,clearReferralCode} from '../../lib/referralCode.js'
 import PasswordInput from '../../components/PasswordInput.jsx'
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -6,6 +7,7 @@ import { apiRequest } from '../../lib/api.js'
 
 const Register = () => {
   const navigate = useNavigate()
+  const [referralCode,setReferralCode]=useState(readReferralCode)
   const [codeSent,setCodeSent]=useState(false)
   const [verificationCode,setVerificationCode]=useState('')
   const formRef=useRef(null)
@@ -34,12 +36,14 @@ const Register = () => {
       const { emailNotifications } = await apiRequest('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify({
+          referralCode,
           fullName: formData.get('fullName'),
           email: formData.get('email'),
           phone: formData.get('phone'),
           password: formData.get('password'),
         }),
       })
+      clearReferralCode()
       navigate('/profile', { replace: true, state: { signupNotice: emailNotifications?.userEmailSent ? 'Account created. A confirmation email was sent.' : 'Your account is ready. Welcome!' } })
     } catch (error) {
 
@@ -64,7 +68,7 @@ const Register = () => {
           <input className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="email" name="email" readOnly={codeSent} autoComplete="email" maxLength={254} required placeholder="Enter your email address" />
         </label>
         <label className="block text-sm font-medium">Phone number <span className="font-normal text-[#777]">(optional)</span>
-          <input className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="tel" name="phone" autoComplete="tel" maxLength={30} placeholder="Enter your phone number" />
+          <input className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="tel" name="phone" autoComplete="tel" maxLength={30} placeholder="+1 (202) 555-0123" />
         </label>
         <label className="block text-sm font-medium">Password
           <PasswordInput className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black"  name="password" autoComplete="new-password" minLength={8} required placeholder="Create a password" />
@@ -73,6 +77,7 @@ const Register = () => {
           <PasswordInput className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black"  name="confirmPassword" autoComplete="new-password" minLength={8} required placeholder="Enter your password again" />
         </label>
 
+        <label className="block text-sm font-medium">Referral code (optional)<input value={referralCode} onChange={e=>setReferralCode(e.target.value.trim().toUpperCase())} maxLength={16} autoComplete="off" className="mt-2 h-11 w-full rounded border px-3 font-mono" placeholder="Seller referral code"/></label>
         {codeSent&&<div className="auth-email-code"><p>Check your inbox for your six-digit verification code. It expires in 10 minutes.</p><label>Email verification code<input name="verificationCode" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required value={verificationCode} onChange={event=>setVerificationCode(event.target.value.replace(/[^0-9]/g,''))} className="mt-2 h-12 w-full border px-3"/></label><div className="mt-3 flex gap-4"><button type="button" disabled={isSubmitting} className="text-xs underline" onClick={async()=>{setIsSubmitting(true);setMessage('');try{await apiRequest('/api/auth/registration-verification-code',{method:'POST',body:JSON.stringify({email:new FormData(formRef.current).get('email'),fullName:new FormData(formRef.current).get('fullName')})});setMessage('A new code was sent.')}catch(error){setMessage(error.message)}finally{setIsSubmitting(false)}}}>Resend code</button><button type="button" className="text-xs underline" onClick={()=>{setCodeSent(false);setVerificationCode('');setMessage('')}}>Change email</button></div></div>}
         <button disabled={isSubmitting} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-60" type="submit">{isSubmitting ? 'Please wait…' : codeSent ? 'Verify email & create account' : 'Create account'}</button>
       </form>

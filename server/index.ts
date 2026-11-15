@@ -1,3 +1,4 @@
+import {ensureReferralCode,referralOwner,recordReferral,registerReferrals} from './referrals.ts'
 import {registerReviews} from './reviews.ts'
 import 'dotenv/config'
 import express, { type NextFunction, type Request, type Response, type RequestHandler } from 'express'
@@ -16,7 +17,7 @@ import { warehousePricing } from './warehousePricing.ts'
 import { registerMarketing } from './marketing.ts'
 import {registerSellerAdminFunding} from './sellerAdminFunding.ts'
 import {registerSellerDisplayStats} from './sellerDisplayStats.ts'
-import { registerTransactionPin, checkTransactionPin, validPin } from './transactionPin.ts'
+import { registerTransactionPin, checkTransactionPin } from './transactionPin.ts'
 import { registerSellerFinance } from './sellerFinance.ts'
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
@@ -648,7 +649,6 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     const email = existingAccount ? req.user!.email : typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
     let phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : ''
     const password = typeof req.body.password === 'string' ? req.body.password : ''
-    let pinHash:string|null=null
     let ssnLast4: string | null = null
     let sellerProfile = null
     let logoUpload: ProductImageUpload | undefined
@@ -666,9 +666,6 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
       }
     }
     if (role === 'seller') {
-      if(!validPin(req.body.transactionPin)||req.body.transactionPin!==req.body.confirmTransactionPin)return res.status(400).json({error:'Create and confirm a four-digit transaction PIN.'})
-      if(existingAccount&&(typeof req.body.loginPassword!=='string'||!await bcrypt.compare(req.body.loginPassword,req.user!.password_hash)))return res.status(403).json({error:'Confirm your current login password to set the transaction PIN.'})
-      pinHash=await bcrypt.hash(req.body.transactionPin,12)
       const profile = {
         storeName: typeof req.body.storeName === 'string' ? req.body.storeName.trim() : '',
         storeDescription: typeof req.body.storeDescription === 'string' ? req.body.storeDescription.trim() : '',
@@ -707,6 +704,8 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
 
     if (existingAccount && (req.user!.role !== 'customer' || req.user!.seller_status !== 'none')) return res.status(409).json({error:'This account already has seller access or an application. Open your seller application status.'})
     if (!existingAccount && await getRow('SELECT 1 FROM users WHERE email=?', email)) return res.status(409).json({ error: 'An account with that email already exists.' })
+    let referredBy:Awaited<ReturnType<typeof referralOwner>>=null
+    if(!existingAccount){try{referredBy=await referralOwner(database,req.body.referralCode)}catch(error){return res.status(400).json({error:(error as Error).message})}}
     if (verificationPhotos && 'photos' in verificationPhotos) uploadedVerification = await uploadVerificationPhotos(database, verificationPhotos.photos)
     const passwordHash = existingAccount ? null : await bcrypt.hash(password, 12)
     const user = await database.transaction(async () => {
@@ -723,7 +722,6 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
       `).run(fullName, email, phone || null, passwordHash, role === 'seller' ? 'customer' : role, role === 'seller' ? 'pending' : 'none'))
       user = (await getRow<UserRow>('SELECT * FROM users WHERE id = ?', result.lastInsertRowid))!
       }
-      if(pinHash)await database.prepare('INSERT INTO transaction_security(user_id,pin_hash) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET pin_hash=excluded.pin_hash,failed_attempts=0,locked_until=NULL').run(user.id,pinHash)
       if (role === 'seller') await database.prepare('INSERT OR IGNORE INTO buyer_wallets (user_id, balance_cents) VALUES (?, 0)').run(user.id)
       if (role === 'customer') {
         await database.prepare('INSERT INTO buyer_wallets (user_id, balance_cents) VALUES (?, 0)').run(user.id)
@@ -743,10 +741,12 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
         await database.prepare("UPDATE seller_profiles SET verification_status='pending' WHERE user_id=?").run(user.id)
         await database.prepare("INSERT INTO seller_applications(user_id,status,consented_at,submitted_at,ssn_last4) VALUES (?,'pending',?,?,?)").run(user.id, new Date().toISOString(), new Date().toISOString(), ssnLast4)
         await insertApplicationPhotos(database, user.id, uploadedVerification)
+        await ensureReferralCode(database,user.id)
         await database.prepare('DELETE FROM seller_email_verifications WHERE email = ?').run(email)
         await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'seller_signup', ?, ?, ? FROM users WHERE role = 'admin'").run(`New seller #${user.public_id}`, `${fullName} (${email}) submitted ${sellerProfile.storeName} for verification. Seller access is pending approval.`, `/admin/users/${user.id}`)
       }
       if (role === 'customer') await database.prepare('DELETE FROM seller_email_verifications WHERE email=?').run(email)
+      if(referredBy&&!existingAccount)await recordReferral(database,referredBy,user.id,role==='seller'?'seller':'buyer')
       return user
     })()
     registrationCommitted = true
@@ -2196,6 +2196,7 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
   return res.json({ events })
 })
 
+registerReferrals(app,database,requireAuth,requireRole)
 registerReviews(app,database,requireAuth)
 registerSellerAdminFunding(app,database,requireAuth,requireRole)
 registerSellerDisplayStats(app,database,requireAuth,requireRole)

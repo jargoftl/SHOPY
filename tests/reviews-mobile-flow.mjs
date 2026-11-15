@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs'
 export async function testReviewsMobile({req,check,db,cookie,buyer,seller,sellerId,sellerForm}){
  const post=(path,body,who=buyer,method='POST')=>req(path,{method,body:JSON.stringify(body)},who)
  const product=(await db.query('SELECT id FROM shop.products WHERE seller_id=$1 AND is_published=1 AND is_store_published=1 LIMIT 1',[sellerId])).rows[0]
@@ -16,10 +15,10 @@ export async function testReviewsMobile({req,check,db,cookie,buyer,seller,seller
  r=await req('/api/admin/reviews/'+review.id,{method:'DELETE'},cookie);check('administrator can delete review',r.status===200)
  r=await req(path);check('deleted review is hidden and score recalculated',!r.data.reviews.some(v=>v.id===review.id)&&Number(r.data.summary.count)===0)
  check('deleted review keeps moderator audit',(await db.query('SELECT deleted_by,deleted_at FROM shop.marketplace_reviews WHERE id=$1',[review.id])).rows[0].deleted_at!==null)
- r=await post('/api/auth/register-seller',{...sellerForm,email:'pin-required@example.test',transactionPin:undefined,confirmTransactionPin:undefined},null);check('seller signup requires transaction PIN',r.status===400)
+ r=await post('/api/auth/register-seller',{...sellerForm,email:'pin-required@example.test',transactionPin:undefined,confirmTransactionPin:undefined},null);check('seller signup does not require transaction PIN',r.status===201)
  const applicant=(await db.query('SELECT id FROM shop.users WHERE email=$1',[sellerForm.email])).rows[0]
  const security=(await db.query('SELECT pin_hash FROM shop.transaction_security WHERE user_id=$1',[applicant.id])).rows[0]
- check('seller signup stores hashed PIN in wallet security',security&&security.pin_hash!==sellerForm.transactionPin&&await bcrypt.compare(sellerForm.transactionPin,security.pin_hash))
+ check('seller signup does not create or expose a wallet PIN',!security)
  const list='/api/warehouse?available=1&seed=stable-fixture'
  r=await req(list,{},seller);check('available warehouse omits already imported products',r.status===200&&r.data.products.every(p=>!p.storeProductId),r)
  const ids=r.data.products.map(p=>p.id);const again=await req(list,{},seller);check('seeded warehouse pages are stable during selection',JSON.stringify(ids)===JSON.stringify(again.data.products.map(p=>p.id)))

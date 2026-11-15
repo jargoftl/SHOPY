@@ -267,6 +267,7 @@ const AnimatedRoutes = () => {
             <Route path="/seller/products" element={<SellerPage />} />
             <Route path="/seller/warehouse" element={<SellerManagementPage view="warehouse" />} />
             <Route path="/seller/refunds" element={<SellerManagementPage view="refunds" />} />
+            <Route path="/seller/referrals" element={<SellerManagementPage view="referrals" />} />
             <Route path="/seller/reviews" element={<SellerManagementPage view="reviews" />} />
             <Route path="/seller/register" element={<SellerRegister />} />
             <Route path="/previous-storefront" element={<Storefront />} />

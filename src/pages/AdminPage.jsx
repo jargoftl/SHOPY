@@ -1,3 +1,4 @@
+import AdminReferrals from '../components/AdminReferrals.jsx'
 import AdminSellerFunding from '../components/AdminSellerFunding.jsx'
 import SellerNotificationBell from '../components/SellerNotificationBell.jsx'
 import CoinWalletSettings from '../components/CoinWalletSettings.jsx'
@@ -15,7 +16,7 @@ import AdminWarehouse from '../components/AdminWarehouse.jsx'
 import AdminMarketing from '../components/AdminMarketing.jsx'
 import AdminDisplayStats from '../components/AdminDisplayStats.jsx'
 import RefundList from '../components/RefundList.jsx'
-const tabs=[['overview','Overview',LayoutDashboard],['accounts','People & stores',Users],['applications','Seller approval',ClipboardCheck],['orders','Orders & tracking',ShoppingBag],['buyer-wallet','Buyer funding',Wallet],['seller-funding','Seller funding',Wallet],['seller-wallet','Seller finance',Wallet],['warehouse','Warehouse',Warehouse],['marketing','Marketing requests',Megaphone],['statistics','Display statistics',ChartNoAxesCombined],['activity','Account activity',History],['settings','Site settings',Settings]]
+const tabs=[['overview','Overview',LayoutDashboard],['accounts','People & stores',Users],['applications','Seller approval',ClipboardCheck],['orders','Orders & tracking',ShoppingBag],['buyer-wallet','Buyer funding',Wallet],['seller-funding','Seller funding',Wallet],['seller-wallet','Seller finance',Wallet],['warehouse','Warehouse',Warehouse],['marketing','Marketing requests',Megaphone],['referrals','Referrals & rewards',Users],['statistics','Display statistics',ChartNoAxesCombined],['activity','Account activity',History],['settings','Site settings',Settings]]
 function activeTab(hash,order){if(order)return 'orders';const key=hash.replace('#','');return ({'seller-finance':'seller-wallet','purchase-orders':'orders','refunds':'orders','marketing-requests':'marketing','seller-applications':'applications'})[key]||tabs.find(t=>t[0]===key)?.[0]||'overview'}
 export default function AdminPage(){
  const location=useLocation(),navigate=useNavigate(),[params]=useSearchParams(),tab=activeTab(location.hash,params.get('order'))
@@ -36,6 +37,7 @@ export default function AdminPage(){
  {tab==='seller-funding'&&<AdminSellerFunding/>}
  {tab==='seller-wallet'&&<AdminSellerFinance/>}
  {tab==='warehouse'&&<AdminWarehouse/>}
+ {tab==='referrals'&&<AdminReferrals/>}
  {tab==='marketing'&&<AdminMarketing/>}
  {tab==='statistics'&&<AdminDisplayStats sellers={data.sellers.filter(s=>data.users.some(u=>u.id===s.id&&u.role==='seller'))}/>}
  {tab==='activity'&&<section className="border bg-white p-5"><h2 className="font-semibold">Recent account sign-ins and registrations</h2>{data.events.map(e=><div key={e.id} className="mt-4 flex flex-wrap justify-between gap-3 border-b pb-4 text-sm"><Link to={`/admin/users/${e.userId}`} className="underline">{e.fullName} · #{e.publicId}</Link><span>{e.type}</span><time className="text-xs text-gray-500">{e.createdAt} UTC</time></div>)}</section>}
