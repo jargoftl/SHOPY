@@ -38,7 +38,7 @@ export async function testBalanceMarketplace({req,check,db,cookie,seller,sellerI
  check('confirmation recorded in fund ledger',finance.records.some(r=>r.kind==='sale_release'&&r.delta_cents===1000))
  r=await call(`/api/admin/purchase-sellers/${orderId}/${sellerId}/tracking`,{trackingNumber:'TEST-TRACK-123',carrier:'Fixture carrier'},seller,'PUT');check('seller cannot assign admin tracking number',r.status===403)
  r=await call(`/api/admin/purchase-sellers/${orderId}/${sellerId}/tracking`,{trackingNumber:'TEST-TRACK-123',carrier:'Fixture carrier'},cookie,'PUT');check('admin assigns tracking to seller order',r.status===200,r)
- r=await req('/api/purchases/'+orderId,{},buyer);check('buyer can see assigned tracking number',r.data.order.sellers[0].trackingNumber==='TEST-TRACK-123')
+ r=await req('/api/purchases/'+orderId,{},buyer);check('buyer can see assigned tracking number',r.data.order.sellers[0].carrierTrackingNumber==='TEST-TRACK-123'&&/^[1-9]\d{10}$/.test(r.data.order.sellers[0].trackingNumber))
  r=await call(`/api/purchase-sellers/${orderId}/${sellerId}`,{status:'on_the_way'},seller,'PATCH');check('seller updates fulfillment after receiving tracking',r.status===200)
  r=await call('/api/buyer/requests',{kind:'withdrawal',coin:'USDT',amountCents:3500,destination:'Fixture receiving wallet',transactionPin:'0123'},buyer);check('withdrawal holds available buyer funds',r.status===201);const withdrawalId=r.data.id
  const balance=(await req('/api/rewards',{},buyer)).data;check('held funds excluded from spending',balance.balanceUnits===3970&&balance.reservedUnits===3500&&balance.availableUnits===470)

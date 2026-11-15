@@ -92,7 +92,7 @@ New balance-paid orders carry `account_balance_payment=1`. They appear in the st
 
 Sellers can shop from their existing signed-in account. Checkout uses any admin-credited purchase balance first, then available merchant wallet funds; held funds are excluded. Merchant-wallet spending creates a fund-record debit. No second buyer email is required to browse or buy.
 
-Admins assign tracking numbers and carriers under **Orders & tracking**. The store owner can read that assignment and update fulfillment status. Buyers see the tracking number and fulfillment status in their order. Tracking assignments and sale confirmations also appear in the store activity history. Seller wallets show confirmed-sale history and the actor who recorded each financial movement.
+Each store order automatically receives a unique random 11-digit tracking code. Admins can add an optional carrier reference and carrier under **Orders & tracking**. The store owner can read that assignment and update fulfillment status. Buyers see the tracking number and fulfillment status in their order. Tracking assignments and sale confirmations also appear in the store activity history. Seller wallets show confirmed-sale history and the actor who recorded each financial movement.
 
 ### Separate accounts in browser tabs
 
@@ -107,3 +107,11 @@ The admin centre now has focused sections for accounts, seller approval, orders/
 **Display statistics** lets an admin override displayed product/order totals, sales/profit, follower and visitor figures, and daily/weekly/monthly counters, with a required audit reason. The seller dashboard labels these as **admin-adjusted**, alongside actual figures. Adjustments never write real purchase orders, visitor events or wallet money. Before/after values and the administering account are retained in `seller_stat_audit`. Clearing an override restores the actual figure. Charts and transaction histories continue to show recorded activity.
 
 The site uses a black, white and neutral gray brand palette, retaining semantic sale/error/status colors and coin brand icons. Existing product images and the site’s own name remain in place.
+
+### Shipment tracking, seller funding and loading
+
+Buyers can search their own shipments by the 11-digit code from their dashboard. Sellers and administrators can update delivery progress; the history records the actor role and time. The animated dispatch icon represents manually entered progress, not live GPS tracking. Existing carrier references are preserved.
+
+**Seller funding** is a separate administrator tab. Credits require an amount, reason and explicit authorization, use an idempotency key, and record the administrator and before/after balance in fund history. No external coin transfer is performed by this action.
+
+Unread notifications are red and read notifications green, with text labels. Account reads share only concurrent requests within the same tab; completed balances are not cached. The admin overview uses counts, wallet receipts load in batches, and indexed account/order lookups reduce database work. Hosting cold starts remain outside these improvements.

@@ -1,10 +1,11 @@
+import BuyerTracking from '../components/BuyerTracking.jsx'
 import BuyerProfileSkeleton from '../components/BuyerProfileSkeleton.jsx'
 import FollowedStores from '../components/FollowedStores.jsx'
 import { BUYER_STORES_UPDATED } from '../lib/buyerEvents.js'
 import SiteName from '../components/SiteName.jsx'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { ArrowDownLeft, ArrowUpRight, Bell, Heart, History, MapPin, MessageCircle, Package, Settings, Store, UserRound } from 'lucide-react'
+import { ArrowDownLeft, ArrowUpRight, Bell, Heart, History, MapPin, MessageCircle, Package, Settings, Store, Truck, UserRound } from 'lucide-react'
 import { AiOutlineDashboard } from 'react-icons/ai'
 import { FaWallet } from 'react-icons/fa'
 import { IoCopyOutline } from 'react-icons/io5'
@@ -22,6 +23,7 @@ const profileLinks = [
   { to: '/profile', label: 'Overview', Icon: AiOutlineDashboard, end: true },
   { to: '/profile/wallet', label: 'My wallet', Icon: FaWallet },
   { to: '/profile/orders', label: 'My Orders', Icon: Package },
+  {to:'/profile/tracking',label:'Track order',Icon:Truck},
   { to: '/profile/favorites', label: 'Favorite products', Icon: Heart },
   { to: '/profile/stores', label: 'Followed stores', Icon: Store },
   { to: '/profile/visits', label: 'Visited stores', Icon: History },
@@ -60,7 +62,7 @@ const BuyerProfilePage = () => {
   const alive=useRef(true)
   useEffect(() => {
     const oldSection = location.hash.slice(1)
-    if (!section && ['wallet', 'orders', 'favorites', 'stores', 'visits', 'setup', 'addresses', 'notifications'].includes(oldSection)) {
+    if (!section && ['wallet', 'orders', 'favorites', 'stores', 'visits', 'setup', 'addresses', 'notifications','tracking'].includes(oldSection)) {
       navigate(`/profile/${oldSection}`, { replace: true, state: location.state })
     }
   }, [location.hash, location.state, navigate, section])
@@ -216,7 +218,7 @@ const BuyerProfilePage = () => {
     try { await apiRequest('/api/auth/logout', { method: 'POST' }); navigate('/') } catch (err) { setError(err.message) }
   }
   if (!profile) return error?<main className="mx-auto max-w-xl px-5 py-20"><h1 className="text-2xl font-semibold">Your account</h1><p role="alert" className="mt-4 text-sm text-[#555555]">{error}</p><div className="mt-4 flex gap-5 text-sm"><button type="button" className="underline" onClick={()=>window.location.reload()}>Try again</button><Link className="underline" to="/login">Go to login</Link></div></main>:<BuyerProfileSkeleton/>
-  if (section && !['wallet', 'orders', 'favorites', 'stores', 'visits', 'setup', 'addresses', 'notifications'].includes(section)) return <Navigate to="/profile" replace />
+  if (section && !['wallet', 'orders', 'favorites', 'stores', 'visits', 'setup', 'addresses', 'notifications','tracking'].includes(section)) return <Navigate to="/profile" replace />
   const activeRequest = activeDeposit && (profile.requests.find((request) => request.id === activeDeposit.id) || activeDeposit)
   const modalRequest = profile.requests.find((request) => request.id === modalRequestId && request.status === 'pending' && request.walletAddress)
 
@@ -281,6 +283,7 @@ const BuyerProfilePage = () => {
               </div>)}</div> : <p className="mt-3 text-sm text-[#555555]">No requests yet.</p>}
             </section>
             </>}
+            {(!section||section==='tracking')&&<BuyerTracking/>}
             {['orders', 'favorites', 'setup'].includes(section) && <BuyerExtras profile={profile} onRefresh={load} section={section} />}
             {section === 'stores' && <FollowedStores stores={profile.follows}/>}
             {section === 'visits' && <section className="rounded-2xl border border-[#e5e5e5] bg-white p-5 sm:p-6">

@@ -82,7 +82,7 @@ const BuyerOrders = ({ includeTestOrders = true }) => {
         </div>)}</div>
         <div className="border-t border-[#f7f7f7] pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
           <p className="text-xs text-[#555555]">{order.shippingCents == null || order.taxCents == null ? 'Subtotal' : 'Order total'}</p><p className="mt-1 text-lg font-semibold text-[#111111]">{formatMoney(order.subtotalCents + (order.shippingCents ?? 0) + (order.taxCents ?? 0))}</p>
-          <div className="mt-4 space-y-3">{order.sellers.map((seller) => <div key={seller.sellerId}><p className="mb-1.5 break-words text-xs font-medium text-[#111111]">{seller.storeName}</p><StatusBadge status={seller.status} label={fulfillmentLabel(seller.status)} />{seller.trackingNumber&&<p className="mt-2 break-all text-xs">Tracking: {seller.trackingNumber} · {seller.carrier}</p>}</div>)}</div>
+          <div className="mt-4 space-y-3">{order.sellers.map((seller) => <div key={seller.sellerId}><p className="mb-1.5 break-words text-xs font-medium text-[#111111]">{seller.storeName}</p><StatusBadge status={seller.status} label={fulfillmentLabel(seller.status)} />{seller.trackingNumber&&<p className="mt-2 break-all text-xs">Tracking: {seller.trackingNumber} · {seller.carrier}<Link to={`/orders?tracking=${seller.trackingNumber}`} className="ml-2 underline">Track shipment</Link></p>}</div>)}</div>
           <Link className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-[#111111] underline-offset-4 hover:underline" to={`/purchase/${order.id}`}>View payment and order <ArrowUpRight size={15} aria-hidden="true" /></Link>
         </div>
       </div>

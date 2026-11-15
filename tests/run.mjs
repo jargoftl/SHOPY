@@ -1,3 +1,4 @@
+import {testTrackingFunding} from './tracking-funding-flow.mjs';
 import {testBalanceMarketplace} from './balance-marketplace-flow.mjs';
 import {testTabSessions} from './tab-sessions-flow.mjs';
 import {testTransactionPin} from './transaction-pin-flow.mjs';
@@ -226,6 +227,7 @@ try{
  await testTransactionPin({req,check,db,buyer,seller,buyerId,sellerId});
  await testBalanceMarketplace({req,check,db,cookie,seller,sellerId});
  await testTabSessions({req,check,db});
+ await testTrackingFunding({req,check,db,cookie,buyer,buyerId,seller,sellerId});
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.
  const storageFetch=globalThis.fetch;
  Object.assign(process.env,{SUPABASE_URL:'https://storage.example.test',SUPABASE_SERVICE_ROLE_KEY:'test-only-placeholder',SUPABASE_STORAGE_BUCKET:'shop-uploads'});

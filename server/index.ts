@@ -13,6 +13,7 @@ import { prepareVerificationPhotos, optionalSsnLast4, verificationPhone, uploadV
 import { registerAuthBrowser, authBrowserBinding } from './authBrowser.ts'
 import { warehousePricing } from './warehousePricing.ts'
 import { registerMarketing } from './marketing.ts'
+import {registerSellerAdminFunding} from './sellerAdminFunding.ts'
 import {registerSellerDisplayStats} from './sellerDisplayStats.ts'
 import { registerTransactionPin, checkTransactionPin } from './transactionPin.ts'
 import { registerSellerFinance } from './sellerFinance.ts'
@@ -1442,6 +1443,14 @@ app.patch('/api/admin/users/:id/rewards', requireAuth, requireRole('admin'), asy
   return res.json({ balanceUnits })
 })
 
+app.get('/api/notifications/summary',requireAuth,async(req,res)=>{
+ const count=(await getRow<{count:number}>('SELECT COUNT(*) AS count FROM notifications WHERE user_id=? AND read_at IS NULL',req.user!.id))?.count||0
+ res.set('Cache-Control','no-store').json({unreadCount:count})
+})
+app.get('/api/admin/overview',requireAuth,requireRole('admin'),async(req,res)=>{
+ const counts=await getRow(`SELECT (SELECT COUNT(*)::integer FROM users) AS accounts,(SELECT COUNT(*)::integer FROM seller_profiles) AS stores,(SELECT COUNT(*)::integer FROM products) AS products,(SELECT COUNT(*)::integer FROM seller_applications WHERE status='pending') AS pending`)
+ res.set('Cache-Control','no-store').json({user:publicUser(req.user!),counts})
+})
 app.get('/api/notifications', requireAuth, async (req, res) => {
   const notifications = (await getRows<{
     id: number
@@ -1583,22 +1592,15 @@ const buyerVisits = async (userId: number) => (await getRows<{ sellerId: number,
   WHERE v.user_id = ? ORDER BY v.last_visited_at DESC
 `, userId))
 
-const requestReceipts = async (requestId: number) => (await getRows<{ id: number, coin: string, network: string, walletAddress: string, createdAt: string }>(`
-  SELECT id, coin, network, wallet_address AS walletAddress, created_at AS createdAt
-  FROM buyer_request_receipts WHERE request_id = ? ORDER BY id DESC
-`, requestId))
-
-const walletRequests = async (userId?: number) => (await Promise.all((await getRows<{
-  id: number, userId: number, fullName: string, email: string, kind: string, coin: string,
-  amountCents: number | null, destination: string, status: string, instructions: string,
-  paymentCoin: string, walletAddress: string, network: string, createdAt: string
-}>(`
-  SELECT r.id, r.user_id AS userId, u.public_id AS publicId, u.full_name AS fullName, u.email, r.kind, r.coin,
-    r.amount_cents AS amountCents, r.destination, r.status, r.instructions,
-    r.payment_coin AS paymentCoin, r.wallet_address AS walletAddress, r.network, r.created_at AS createdAt
-  FROM buyer_wallet_requests r JOIN users u ON u.id = r.user_id
-  WHERE (? IS NULL OR r.user_id = ?) ORDER BY r.id DESC
-`, userId ?? null, userId ?? null)).map(async (request) => ({ ...request, receipts: (await requestReceipts(request.id)) }))))
+const walletRequests=async(userId?:number)=>{
+ const [requests,receipts]=await Promise.all([
+  getRows<{id:number,userId:number,publicId:string,fullName:string,email:string,kind:string,coin:string,amountCents:number|null,destination:string,status:string,instructions:string,paymentCoin:string,network:string,walletAddress:string,createdAt:string}>(`SELECT r.id,r.user_id AS userId,u.public_id AS publicId,u.full_name AS fullName,u.email,r.kind,r.coin,r.amount_cents AS amountCents,r.destination,r.status,r.instructions,r.payment_coin AS paymentCoin,r.wallet_address AS walletAddress,r.network,r.created_at AS createdAt FROM buyer_wallet_requests r JOIN users u ON u.id=r.user_id WHERE (? IS NULL OR r.user_id=?) ORDER BY r.id DESC`,userId??null,userId??null),
+  getRows<{requestId:number,id:number,coin:string,network:string,walletAddress:string,createdAt:string}>(`SELECT p.request_id AS requestId,p.id,p.coin,p.network,p.wallet_address AS walletAddress,p.created_at AS createdAt FROM buyer_request_receipts p JOIN buyer_wallet_requests r ON r.id=p.request_id WHERE (? IS NULL OR r.user_id=?) ORDER BY p.id DESC`,userId??null,userId??null)
+ ])
+ const grouped=new Map<number,unknown[]>()
+ for(const {requestId,...receipt} of receipts){const items=grouped.get(requestId)||[];items.push(receipt);grouped.set(requestId,items)}
+ return requests.map(request=>({...request,receipts:grouped.get(request.id)||[]}))
+}
 
 app.get('/api/buyer/profile', requireAuth, requireRole('customer'), async (req, res) => {
   res.set('Cache-Control','private, no-store')
@@ -2186,6 +2188,7 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
   return res.json({ events })
 })
 
+registerSellerAdminFunding(app,database,requireAuth,requireRole)
 registerSellerDisplayStats(app,database,requireAuth,requireRole)
 registerTransactionPin(app, database, requireAuth, requireRole)
 registerSellerFinance(app, database, requireAuth, requireRole)

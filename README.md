@@ -20,7 +20,7 @@ New checkout uses **account balance only**. Buyers can receive admin-credited fu
 
 Balance-paid orders appear immediately in the store’s dashboard and orders. Either the store owner or an admin can confirm the paid sale, crediting the full product subtotal once to the seller wallet and recording the confirming account, role and time. Seller funds can be spent on purchases or requested for withdrawal; external transfers still require admin review. New checkout does not request a coin, payment screenshot or external wallet address. Historical external-payment and test orders remain distinguishable and retain their original review rules.
 
-Admins assign carrier/tracking numbers to store orders. Sellers can read those assignments and update fulfillment, and buyers can see the tracking and status in their purchases. Status updates are manually entered, not carrier-webhook events. Refunds are reviewed manually; balance-order refunds currently require contacting the administrator.
+Store orders receive unique random 11-digit tracking codes. Buyers can search their own shipments from the dashboard; admins can add optional carrier references. Sellers and admins can update fulfillment with an audited progress timeline, and buyers can see the tracking and status in their purchases. Status updates are manually entered, not carrier-webhook events. Refunds are reviewed manually; balance-order refunds currently require contacting the administrator.
 
 The seller dashboard uses actual orders, sales, recorded visits and wallet history. Admins may set **labeled display adjustments** for counters and sales/profit displays, with audited before/after values and reasons. These adjustments never create real orders, visits or wallet money; actual values and charts remain available alongside the adjusted display.
 
@@ -72,3 +72,5 @@ For hosts that block common SMTP ports, an optional HTTPS transport uses `BREVO_
 
 Passwords are hashed with bcrypt and are never shown in the admin UI or returned by the API. Admins can view account IDs, names, email addresses, phone numbers, roles, and recent sign-in/registration activity. This is a local learning setup, not production-hardened; do not expose it publicly without additional security review.
 # SHOPY
+
+Administrators have a separate Seller funding tab for authorized wallet credits with reasons and audit history. Notifications distinguish unread (red) and read (green). Concurrent account requests are shared per tab without caching completed wallet balances.

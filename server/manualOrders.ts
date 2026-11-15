@@ -1,5 +1,6 @@
 import type { Express, RequestHandler } from 'express'
 import express from 'express'
+import {recordShipmentEvent,registerShipmentTracking} from './shipmentTracking.ts'
 import { postSellerFunds, reverseSellerRelease } from './sellerFinance.ts'
 import type { Database } from './database.ts'
 import { allocateOrderNumber, initializeOrderNumbers } from './orderNumbers.ts'
@@ -10,6 +11,7 @@ const text = (value: unknown, max: number): string =>
 
 export async function registerManualOrders(app: Express, db: Database, auth: RequestHandler, role: (...roles: ('customer' | 'seller' | 'admin')[]) => RequestHandler) {
   await initializeOrderNumbers(db)
+  registerShipmentTracking(app,db,auth)
   const validRate = (rate: string) => /^(?:0|[1-9]\d{0,11})(?:\.\d{1,8})?$/.test(rate) && /[1-9]/.test(rate)
   const coinAmount = (cents: number, rate: string) => {
     const [whole, fraction = ''] = rate.split('.')
@@ -33,7 +35,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
   const serialize = async (order: Order, sellerId?: number) => {
     const items = ((await db.prepare('SELECT * FROM purchase_items WHERE order_id = ? AND (? IS NULL OR seller_id = ?) ORDER BY id').all(order.id, sellerId ?? null, sellerId ?? null)) as Item[])
       .map((item) => ({ id: item.id, sellerId: item.seller_id, productId: item.product_id, name: item.name, imageUrl: item.image_url, priceCents: item.price_cents, quantity: item.quantity, color: item.color, size: item.size }))
-    const sellers = (await db.prepare('SELECT s.seller_id AS sellerId, s.status,s.tracking_number AS trackingNumber,s.carrier,s.tracking_assigned_at AS trackingAssignedAt,(SELECT status FROM seller_sale_releases r WHERE r.order_id=s.order_id AND r.seller_id=s.seller_id) AS releaseStatus, COALESCE(p.store_name,u.full_name) AS storeName FROM purchase_sellers s JOIN users u ON u.id=s.seller_id LEFT JOIN seller_profiles p ON p.user_id=s.seller_id WHERE s.order_id=? AND (? IS NULL OR s.seller_id=?)').all(order.id, sellerId ?? null, sellerId ?? null))
+    const sellers = (await db.prepare('SELECT s.seller_id AS sellerId, s.status,s.tracking_code AS trackingNumber,s.tracking_number AS carrierTrackingNumber,s.carrier,s.tracking_assigned_at AS trackingAssignedAt,(SELECT status FROM seller_sale_releases r WHERE r.order_id=s.order_id AND r.seller_id=s.seller_id) AS releaseStatus, COALESCE(p.store_name,u.full_name) AS storeName FROM purchase_sellers s JOIN users u ON u.id=s.seller_id LEFT JOIN seller_profiles p ON p.user_id=s.seller_id WHERE s.order_id=? AND (? IS NULL OR s.seller_id=?)').all(order.id, sellerId ?? null, sellerId ?? null))
     const billing = JSON.parse(order.billing_json) as Record<string, string>
     return {
       id: order.id, orderNumber: (await orderNumber(order.id)), buyerId: order.buyer_id, buyerName: billing.fullName, ...(sellerId === undefined ? { billing } : {}),
@@ -169,6 +171,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       const seller = db.prepare('INSERT OR IGNORE INTO purchase_sellers (order_id,seller_id) VALUES (?,?)')
       for (const item of snapshots) { await insert.run(orderId, item.product.seller_id, item.product.id, item.product.name, item.product.image_url, Math.round(item.product.price * 100), item.quantity, item.color, item.size); await seller.run(orderId, item.product.seller_id) }
       for (const sellerId of new Set(snapshots.map((item) => item.product.seller_id))) {
+        await recordShipmentEvent(db,orderId,sellerId,'pending',req.user!.id,req.user!.role,'Order placed')
         await notify.run(sellerId, 'purchase', `New order #${number}`, useBalance ? 'Paid from the buyer’s account balance. Confirm the order to begin fulfillment.' : 'Payment is pending confirmation. Do not fulfill until the administrator confirms payment.', `/seller/orders?order=${number}`)
       }
       await db.prepare("INSERT INTO notifications (user_id,type,title,body,link) SELECT id,'purchase',?,?,? FROM users WHERE role='admin'").run(`Order #${number} created`, useBalance ? `${req.user!.full_name} paid from their account balance. The store owner or administrator can confirm fulfillment.` : `${req.user!.full_name} selected ${coin}.`, `/admin?order=${number}#purchase-orders`)
@@ -247,11 +250,12 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     return res.json({ orders: (await Promise.all(orders.map(async (order) => (await serialize(order, req.user!.id))))) })
   })
   app.put('/api/admin/purchase-sellers/:orderId/:sellerId/tracking',auth,role('admin'),async(req,res)=>{
-    const orderId=validId(req.params.orderId),sellerId=validId(req.params.sellerId),tracking=text(req.body?.trackingNumber,150),carrier=text(req.body?.carrier,100)
-    if(!tracking||/[\r\n]/.test(tracking+carrier))return res.status(400).json({error:'Enter a valid tracking number and carrier.'})
+    const orderId=validId(req.params.orderId),sellerId=validId(req.params.sellerId),tracking=text(req.body?.carrierTrackingNumber??req.body?.trackingNumber,150),carrier=text(req.body?.carrier,100)
+    if(/[\r\n]/.test(tracking+carrier))return res.status(400).json({error:'Enter a valid tracking number and carrier.'})
     await db.transaction(async()=>{
-      const shipment=await db.prepare('SELECT 1 FROM purchase_sellers WHERE order_id=? AND seller_id=?').get(orderId,sellerId)
+      const shipment=await db.prepare('SELECT status,tracking_code FROM purchase_sellers WHERE order_id=? AND seller_id=?').get(orderId,sellerId) as {status:string,tracking_code:string}|undefined
       if(!shipment)return
+      await recordShipmentEvent(db,orderId,sellerId,shipment.status,req.user!.id,'admin',`Tracking details updated; tracking ${shipment.tracking_code}`)
       await db.prepare('UPDATE purchase_sellers SET tracking_number=?,carrier=?,tracking_assigned_by=?,tracking_assigned_at=CURRENT_TIMESTAMP WHERE order_id=? AND seller_id=?').run(tracking,carrier,req.user!.id,orderId,sellerId)
       await db.prepare("INSERT INTO seller_store_activity(seller_id,kind,details) VALUES(?,'tracking_assigned',?)").run(sellerId,`Admin assigned tracking ${tracking}${carrier?' · '+carrier:''} to order #${await orderNumber(orderId)}`)
       await notify.run(sellerId,'purchase','Tracking number assigned',`${carrier} ${tracking}`.trim(),'/seller/orders')
@@ -271,6 +275,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     if (!['pending','confirmed','about_to_send','sent','on_the_way','hold','stalled','delivered'].includes(req.body?.status)) return res.status(400).json({ error: 'Invalid status.' })
     if (existing.status !== req.body.status) await db.transaction(async () => {
       await db.prepare('UPDATE purchase_sellers SET status=? WHERE order_id=? AND seller_id=?').run(req.body.status, orderId, sellerId)
+      await recordShipmentEvent(db,orderId,sellerId,String(req.body.status),req.user!.id,req.user!.role,text(req.body.note,500))
       const progressMessages: Record<string, string> = {
         pending: 'Your order is pending fulfillment.',
         confirmed: 'Your order has been confirmed for fulfillment.',

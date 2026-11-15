@@ -2,7 +2,7 @@ import {tabScope,newScope,setTabScope} from './tabSession.js'
 // Retain the background option for callers; requests never block the whole page.
 export const trackedFetch = (path, options = {}) => fetch(path, {...options,headers:{'X-Session-Scope':tabScope(),...options.headers}})
 
-export const apiRequest = async (path, { background: _background, ...options } = {}) => {
+const performRequest = async (path, { background: _background, ...options } = {}) => {
   const freshScope=options.method==='POST'&&['/api/auth/login','/api/auth/register','/api/auth/register-seller'].includes(path)?newScope():null
   const headers = {
     'X-Session-Scope':freshScope||tabScope(),
@@ -29,7 +29,20 @@ export const apiRequest = async (path, { background: _background, ...options } =
     throw error
   }
 
+  if((options.method||'GET').toUpperCase()!=='GET')inFlight.clear()
   if(freshScope)setTabScope(freshScope)
   if(path==='/api/auth/logout')window.dispatchEvent(new Event('account-session-changed'))
   return data
+}
+
+// Share concurrent reads only within this tab/account. Completed financial data is never cached.
+const inFlight=new Map()
+export const apiRequest=(path,options={})=>{
+ if((options.method||'GET').toUpperCase()!=='GET'||options.signal||options.headers)return performRequest(path,options)
+ const key=tabScope()+':'+path
+ if(inFlight.has(key))return inFlight.get(key)
+ const promise=performRequest(path,options)
+ inFlight.set(key,promise)
+ promise.then(()=>{if(inFlight.get(key)===promise)inFlight.delete(key)},()=>{if(inFlight.get(key)===promise)inFlight.delete(key)})
+ return promise
 }

@@ -165,9 +165,9 @@ const MessageCenterPage = () => {
             <div className={`divide-y ${isAdmin ? 'divide-[#111111]' : 'divide-[#eee]'}`}>
               {notifications.map((notification) => (
                 <article key={notification.id} className={`flex items-start gap-3 px-5 py-4 ${isAdmin && notification.isRead ? 'bg-white text-[#111111]' : isAdmin ? 'bg-[#111111]' : ''}`}>
-                  <span className={`mt-1.5 size-2 shrink-0 rounded-full ${user?.role === 'seller' ? (notification.isRead ? 'bg-[#555555]' : 'bg-[#d84250]') : notification.isRead ? 'bg-transparent' : isAdmin ? 'bg-[#cccccc]' : 'bg-[#111111]'}`} />
+                  <span className={`mt-1.5 size-2 shrink-0 rounded-full ${notification.isRead?'bg-green-600':'bg-red-600'}`} />
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-semibold">{notification.title}{user?.role === 'seller' && <span className="sr-only"> · {notification.isRead ? 'Read' : 'Unread'}</span>}</h3>
+                    <h3 className="text-sm font-semibold">{notification.title}<span className={`ml-2 rounded px-2 py-0.5 text-[10px] ${notification.isRead?'bg-green-50 text-green-700':'bg-red-50 text-red-700'}`}>{notification.isRead?'Read':'Unread'}</span>{user?.role === 'seller' && <span className="sr-only"> · {notification.isRead ? 'Read' : 'Unread'}</span>}</h3>
                     <p className={`mt-1 text-sm ${isAdmin && !notification.isRead ? 'text-[#cccccc]' : 'text-[#666]'}`}>{notification.body}</p>
                     {notification.link && <Link to={notification.link} onClick={async (event) => { if (!notification.isRead) { event.preventDefault(); if (await markNotificationRead(notification.id)) navigate(notification.link) } }} className="mt-2 inline-block text-xs underline underline-offset-4">View details</Link>}
                     <time className={`mt-2 block text-[10px] ${isAdmin && !notification.isRead ? 'text-[#777777]' : 'text-[#777]'}`}>{new Date(`${notification.createdAt.replace(' ', 'T')}Z`).toLocaleString()}</time>

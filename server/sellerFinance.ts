@@ -1,3 +1,4 @@
+import {recordShipmentEvent} from './shipmentTracking.ts'
 import express, { type Express, type RequestHandler } from 'express'
 import { checkTransactionPin } from './transactionPin.ts'
 import { rateLimit } from 'express-rate-limit'
@@ -18,7 +19,7 @@ type Wallet = { balance_cents: number, reserved_cents: number }
 type WalletRequest = { id: number, public_id: string, seller_id: number, kind: string, status: string, amount_cents: number, coin: string, network: string, address: string, usd_rate: string, coin_amount: string, request_key: string }
 
 // Called only within the caller's serialized database transaction.
-export async function postSellerFunds(db: Database, seller: number, kind: string, reference: string, delta: number, reserve: number, actor: number) {
+export async function postSellerFunds(db: Database, seller: number, kind: string, reference: string, delta: number, reserve: number, actor: number, note='') {
  if (await db.prepare('SELECT id FROM seller_fund_records WHERE kind=? AND reference=?').get(kind,reference)) return
  await db.prepare('INSERT INTO seller_wallets(seller_id) VALUES(?) ON CONFLICT DO NOTHING').run(seller)
  const before=await db.prepare('SELECT * FROM seller_wallets WHERE seller_id=?').get(seller) as Wallet
@@ -26,7 +27,7 @@ export async function postSellerFunds(db: Database, seller: number, kind: string
  if (!Number.isSafeInteger(balance)||!Number.isSafeInteger(reserved)||reserved<0) fail('Invalid wallet movement.')
  if (reserve>0 && before.balance_cents-before.reserved_cents<reserve) fail('Insufficient available funds.')
  await db.prepare('UPDATE seller_wallets SET balance_cents=?,reserved_cents=? WHERE seller_id=?').run(balance,reserved,seller)
- await db.prepare('INSERT INTO seller_fund_records(seller_id,kind,reference,delta_cents,before_cents,after_cents,reserved_before,reserved_after,actor_id) VALUES(?,?,?,?,?,?,?,?,?)').run(seller,kind,reference,delta,before.balance_cents,balance,before.reserved_cents,reserved,actor)
+ await db.prepare('INSERT INTO seller_fund_records(seller_id,kind,reference,delta_cents,before_cents,after_cents,reserved_before,reserved_after,actor_id,note) VALUES(?,?,?,?,?,?,?,?,?,?)').run(seller,kind,reference,delta,before.balance_cents,balance,before.reserved_cents,reserved,actor,note)
 }
 export async function reverseSellerRelease(db: Database, order: number, seller: number, actor: number) {
  const release=await db.prepare("SELECT amount_cents FROM seller_sale_releases WHERE order_id=? AND seller_id=? AND status='released'").get(order,seller) as {amount_cents:number}|undefined
@@ -151,6 +152,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  if(await db.prepare('SELECT 1 FROM seller_sale_releases WHERE order_id=? AND seller_id=?').get(order,seller)) fail('This sale has already been released.')
  await db.prepare("INSERT INTO seller_sale_releases(order_id,seller_id,amount_cents,status,admin_id,confirmed_role) VALUES(?,?,?,'released',?,?)").run(order,seller,eligible.amount,req.user!.id,req.user!.role)
  await postSellerFunds(db,seller,'sale_release',`${order}:${seller}`,eligible.amount,0,req.user!.id)
+ if(eligible.fulfillment==='pending')await recordShipmentEvent(db,order,seller,'confirmed',req.user!.id,req.user!.role,'Paid sale confirmed')
  await db.prepare("UPDATE purchase_sellers SET status='confirmed' WHERE order_id=? AND seller_id=? AND status='pending'").run(order,seller)
  await db.prepare("INSERT INTO seller_store_activity(seller_id,kind,details) VALUES(?,'sale_confirmed',?)").run(seller,`${req.user!.role==='admin'?'Administrator':'Store owner'} ${req.user!.full_name} confirmed ${eligible.amount} cents of paid sale proceeds.`)
  await notify(seller,'Sale funds released','The full product-sale amount has been credited to your seller wallet.')

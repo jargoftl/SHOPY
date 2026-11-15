@@ -1,3 +1,4 @@
+import DeliveryProgress from '../components/DeliveryProgress.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { IoCopyOutline } from 'react-icons/io5'
@@ -74,7 +75,7 @@ const PurchasePage = () => {
           {order.status === 'awaiting_receipt' && <form onSubmit={upload} className="mt-6 border-t border-[#e5e5e5] pt-5"><label className="block text-sm font-medium">Upload payment screenshot<input name="receipt" type="file" accept="image/png,image/jpeg" required className="mt-2 block w-full text-sm" /></label><button disabled={busy} className="mt-4 rounded bg-[#111111] px-4 py-2 text-sm text-white disabled:opacity-60">{busy ? 'Uploading…' : 'Send receipt'}</button><p className="mt-3 text-xs text-[#555555]">The administrator must independently verify the transfer before confirming payment.</p></form>}
           {order.status === 'awaiting_review' && <p className="mt-5 text-sm">Your screenshot is awaiting administrator review. It is not proof of payment.</p>}
           {order.status === 'rejected' && <p className="mt-5 text-sm">Payment was not confirmed. Contact the administrator through messages.</p>}
-          <div className="mt-5 space-y-3">{order.sellers.map(s=><div key={s.sellerId} className="border p-4 text-sm"><strong>{s.storeName}</strong><p className="mt-2">Order status: {s.status.replaceAll('_',' ')}</p>{s.trackingNumber&&<p className="mt-2 break-all">Tracking: {s.trackingNumber} · {s.carrier}</p>}</div>)}</div><div className="mt-6 flex gap-5 text-sm"><Link className="underline" to="/orders">My orders</Link><Link className="underline" to="/messages">Message admin</Link></div>
+          <div className="mt-5 space-y-3">{order.sellers.map(s=><div key={s.sellerId} className="border p-4 text-sm"><strong>{s.storeName}</strong><div className="mt-3"><DeliveryProgress status={s.status}/></div>{s.trackingNumber&&<p className="mt-2 break-all">Tracking: {s.trackingNumber} · {s.carrier}</p>}</div>)}</div><div className="mt-6 flex gap-5 text-sm"><Link className="underline" to="/orders">My orders</Link><Link className="underline" to="/messages">Message admin</Link></div>
         </>}
       </div>
     </div>
