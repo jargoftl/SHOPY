@@ -1,3 +1,4 @@
+import { notifyFollowedStoresUpdated } from '../lib/buyerEvents.js'
 import SiteName from '../components/SiteName.jsx'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -9,7 +10,9 @@ const PartnerStorePage = () => {
   const { sellerId } = useParams()
   const [store, setStore] = useState(null)
   const [products, setProducts] = useState([])
-  const [activeTab, setActiveTab] = useState('top')
+  const [activeTab, setActiveTab] = useState('all')
+  const [page,setPage]=useState(1)
+  const [followBusy,setFollowBusy]=useState(false)
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState('All products')
   const [sortBy, setSortBy] = useState('newest')
@@ -60,21 +63,25 @@ const PartnerStorePage = () => {
     if (sortBy === 'price-high') return second.price - first.price
     return new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime()
   })
+  const pageSize=24
   const visibleProducts = activeTab === 'top'
     ? [...filteredProducts].sort((first, second) => second.rating - first.rating).slice(0, 4)
-    : sortedProducts
+    : sortedProducts.slice((page-1)*pageSize,page*pageSize)
+  useEffect(()=>{setPage(1)},[sellerId,activeTab,activeCategory,search,sortBy])
   const heroImage = products[0]?.imageUrl
 
   const toggleFollow = async () => {
-    if (!store) return
+    if (!store||followBusy) return
+    setFollowBusy(true)
     setFollowMessage('')
     try {
       const result = await apiRequest(`/api/stores/${store.id}/follow`, { method: 'POST' })
       setIsFollowing(result.isFollowing)
+      notifyFollowedStoresUpdated()
       setStore((current) => current ? { ...current, followerCount: result.followerCount } : current)
     } catch (requestError) {
       setFollowMessage(requestError.message.includes('log in') ? 'Sign in to follow this store.' : requestError.message)
-    }
+    }finally{setFollowBusy(false)}
   }
 
   if (isLoading) {
@@ -97,7 +104,7 @@ const PartnerStorePage = () => {
       <header className="border-b border-[#e1e8df] bg-white">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 sm:px-8">
           <Link to="/" className="text-[29px] font-black leading-none tracking-[-0.08em]"><SiteName /><span className="ml-1 text-[19px]">▰</span></Link>
-          <Link to="/" className="text-xs font-semibold uppercase tracking-wide underline underline-offset-4">All stores</Link>
+          <nav className="flex items-center gap-5 text-xs font-semibold"><Link to="/profile/stores" className="underline underline-offset-4">My followed stores</Link><Link to="/cart" className="underline underline-offset-4">My cart</Link></nav>
         </div>
       </header>
 
@@ -116,9 +123,9 @@ const PartnerStorePage = () => {
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs text-white/80">
             <span>Curated by {store.ownerName}</span>
             <span>{products.length} products</span>
-            <span>{Number(store.followerCount || 0).toLocaleString()} followers</span>
+            <span>{Number(store.followerCount || 0).toLocaleString()} {Number(store.followerCount)===1?'follower':'followers'}</span>
             <span>{Number(store.visitorCount || 0).toLocaleString()} visits</span>
-            <button type="button" onClick={toggleFollow} aria-pressed={isFollowing} className={`inline-flex min-h-9 items-center gap-2 border px-3 text-xs font-semibold ${isFollowing ? 'border-[#d3fa4b] bg-[#d3fa4b] text-[#142217]' : 'border-white/60 text-white hover:bg-white hover:text-[#142217]'}`}><Heart size={14} className={isFollowing ? 'fill-current' : ''} />{isFollowing ? 'Following · Unfollow' : 'Follow store'}</button>
+            <button type="button" disabled={followBusy} onClick={toggleFollow} aria-pressed={isFollowing} className={`inline-flex min-h-9 items-center gap-2 border px-3 text-xs font-semibold ${isFollowing ? 'border-[#d3fa4b] bg-[#d3fa4b] text-[#142217]' : 'border-white/60 text-white hover:bg-white hover:text-[#142217]'}`}><Heart size={14} className={isFollowing ? 'fill-current' : ''} />{followBusy?'Updating…':isFollowing ? 'Following · Unfollow' : 'Follow store'}</button>
           </div>
           {followMessage && <p role="status" className="mt-2 text-xs text-white">{followMessage} {followMessage.includes('Sign in') && <Link to="/login" className="underline">Log in</Link>}</p>}
         </div>
@@ -158,7 +165,7 @@ const PartnerStorePage = () => {
           </aside>}
           <div className="min-w-0">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-[#737970]">{visibleProducts.length} {visibleProducts.length === 1 ? 'product' : 'products'}{activeTab === 'top' ? ' · top rated' : ''}</p>
+              <p className="text-xs text-[#737970]">{activeTab==='all'?`${sortedProducts.length ? (page-1)*pageSize+1 : 0}–${Math.min(page*pageSize,sortedProducts.length)} of ${sortedProducts.length}`:visibleProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'}{activeTab === 'top' ? ' · top rated' : ''}</p>
               {activeTab === 'all' && <label className="flex items-center gap-2 text-xs text-[#666]">Sort
                 <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort store products" className="border border-[#ddd] bg-white px-2 py-2 text-xs text-[#222]">
                   <option value="newest">Newest</option><option value="rating">Top rated</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option>
@@ -172,6 +179,7 @@ const PartnerStorePage = () => {
             ) : (
               <p className="py-16 text-center text-sm text-[#737970]">{products.length ? 'No products match this selection.' : 'This partner store is getting its first products ready.'}</p>
             )}
+            {activeTab==='all'&&sortedProducts.length>pageSize&&<nav aria-label="Store product pages" className="mt-8 flex items-center justify-center gap-4 text-xs"><button type="button" disabled={page===1} onClick={()=>setPage(value=>value-1)} className="min-h-10 rounded-full border border-[#cedac6] px-4 text-[#567348] disabled:opacity-40">Previous</button><span className="text-[#859578]">Page {page} of {Math.ceil(sortedProducts.length/pageSize)}</span><button type="button" disabled={page*pageSize>=sortedProducts.length} onClick={()=>setPage(value=>value+1)} className="min-h-10 rounded-full border border-[#cedac6] px-4 text-[#567348] disabled:opacity-40">Next</button></nav>}
           </div>
         </div>
       </section>

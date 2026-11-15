@@ -223,6 +223,7 @@ function Storefront() {
 
 const AnimatedRoutes = () => {
   const location = useLocation()
+  const routeKey = /^\/profile(?:\/|$)/.test(location.pathname) ? '/profile' : location.pathname
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' })
@@ -231,7 +232,7 @@ const AnimatedRoutes = () => {
   return (
     <>
       <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.18 }}>
+        <motion.div key={routeKey} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.18 }}>
           <Routes location={location}>
             <Route path="/" element={<LandingPage />} />
             <Route path="/products" element={<ProductsPage />} />
@@ -248,8 +249,7 @@ const AnimatedRoutes = () => {
             <Route path="/register" element={<Register />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/profile" element={<BuyerProfilePage />} />
-            <Route path="/profile/:section" element={<BuyerProfilePage />} />
+            <Route path="/profile/:section?" element={<BuyerProfilePage />} />
             <Route path="/seller/application" element={<SellerApplicationPage />} />
             <Route path="/seller/login" element={<SellerLogin />} />
             <Route path="/admin" element={<AdminPage />} />

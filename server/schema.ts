@@ -301,6 +301,8 @@ CREATE TABLE IF NOT EXISTS seller_warehouse_imports (
 CREATE UNIQUE INDEX IF NOT EXISTS cancellation_pending_idx ON cancellation_requests(user_id) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS products_category_idx ON products(category);
+CREATE INDEX IF NOT EXISTS products_store_owner_idx ON products(seller_id,is_store_published);
+CREATE INDEX IF NOT EXISTS store_follows_seller_idx ON store_follows(seller_id);
 CREATE INDEX IF NOT EXISTS notifications_user_id_idx ON notifications(user_id, id DESC);
 CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages(conversation_seller_id, id);
 CREATE INDEX IF NOT EXISTS messages_recipient_unread_idx ON messages(recipient_id, read_at);

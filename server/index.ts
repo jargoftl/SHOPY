@@ -554,7 +554,7 @@ app.get('/api/product-images/:id', async (req, res) => {
 
 const authCaptcha=registerAuthCaptcha(app,database)
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+app.get('/api/health', (_req, res) => res.json({ status: 'ok', version: process.env.RENDER_GIT_COMMIT?.slice(0,7) || null }))
 
 app.post(['/api/auth/seller-verification-code','/api/auth/registration-verification-code'], authLimiter, authCaptcha.guard('signup'), async (req, res, next) => {
   try {
@@ -983,24 +983,15 @@ app.post('/api/stores/:sellerId/follow', requireAuth, async (req, res) => {
   const store = (await getRow<{ user_id: number }>("SELECT p.user_id FROM seller_profiles p JOIN users u ON u.id = p.user_id WHERE p.user_id = ? AND u.role = 'seller' AND u.suspended = 0", sellerId))
   if (!store) return res.status(404).json({ error: 'Store not found.' })
 
-  const existingFollow = (await getRow<{ user_id: number }>(
-    'SELECT user_id FROM store_follows WHERE user_id = ? AND seller_id = ?',
-    req.user!.id,
-    sellerId,
-  ))
-  const isFollowing = !existingFollow
-  if (isFollowing) {
-    await database.prepare('INSERT INTO store_follows (user_id, seller_id) VALUES (?, ?)').run(req.user!.id, sellerId)
-  } else {
-    await database.prepare('DELETE FROM store_follows WHERE user_id = ? AND seller_id = ?').run(req.user!.id, sellerId)
-  }
-  const followerCount = (await getRow<{ count: number }>(`
-    SELECT seller_profiles.follower_count + COUNT(store_follows.user_id) AS count
-    FROM seller_profiles
-    LEFT JOIN store_follows ON store_follows.seller_id = seller_profiles.user_id
-    WHERE seller_profiles.user_id = ?
-  `, sellerId))?.count ?? 0
-  return res.json({ isFollowing, followerCount })
+  const result=await database.transaction(async()=>{
+    const existingFollow=await getRow('SELECT user_id FROM store_follows WHERE user_id=? AND seller_id=?',req.user!.id,sellerId)
+    const isFollowing=!existingFollow
+    if(isFollowing)await database.prepare('INSERT INTO store_follows(user_id,seller_id) VALUES (?,?)').run(req.user!.id,sellerId)
+    else await database.prepare('DELETE FROM store_follows WHERE user_id=? AND seller_id=?').run(req.user!.id,sellerId)
+    const total=await getRow<{count:number}>(`SELECT p.follower_count+(SELECT COUNT(*) FROM store_follows f WHERE f.seller_id=p.user_id) AS count FROM seller_profiles p WHERE p.user_id=?`,sellerId)
+    return {isFollowing,followerCount:total?.count||0}
+  })()
+  return res.json(result)
 })
 
 app.get('/api/seller/store', requireAuth, requireRole('seller', 'admin'), async (req, res) => {
@@ -1586,16 +1577,22 @@ const walletRequests = async (userId?: number) => (await Promise.all((await getR
 `, userId ?? null, userId ?? null)).map(async (request) => ({ ...request, receipts: (await requestReceipts(request.id)) }))))
 
 app.get('/api/buyer/profile', requireAuth, requireRole('customer'), async (req, res) => {
-  const userId = req.user!.id
-  const wallet = (await getRow<{ balanceCents: number }>('SELECT balance_units AS balanceCents FROM reward_balances WHERE user_id = ?', userId)) ?? { balanceCents: 0 }
-  const requests = (await walletRequests(userId))
-  const follows = (await getRows<{ sellerId: number, storeName: string }>(`
-    SELECT p.user_id AS sellerId, p.store_name AS storeName FROM store_follows f
-    JOIN seller_profiles p ON p.user_id = f.seller_id JOIN users u ON u.id = p.user_id WHERE f.user_id = ? AND u.suspended = 0 AND u.role = 'seller' ORDER BY f.created_at DESC
-  `, userId))
-  const hasTransactionPassword = Boolean((await getRow('SELECT user_id FROM buyer_security WHERE user_id = ?', userId)))
-  const favorites = (await getRows<ProductRow>('SELECT p.* FROM products p JOIN buyer_favorites f ON f.product_id = p.id WHERE f.user_id = ? AND EXISTS (SELECT 1 FROM users u WHERE u.id = p.seller_id AND u.suspended = 0) ORDER BY f.created_at DESC', userId)).map(publicProduct)
-  return res.json({ user: publicUser(req.user!), wallet, addresses: (await buyerAddresses(userId)), visits: (await buyerVisits(userId)), requests, follows, coins: buyerCoins, favorites, hasTransactionPassword })
+  res.set('Cache-Control','private, no-store')
+  const userId=req.user!.id
+  const [wallet,requests,follows,security,favoriteRows,addresses,visits]=await Promise.all([
+    getRow<{balanceCents:number}>('SELECT balance_units AS balanceCents FROM reward_balances WHERE user_id=?',userId),
+    walletRequests(userId),
+    getRows<{sellerId:number,storeName:string,logoUrl:string,storeDescription:string,productCount:number,followerCount:number}>(`
+      SELECT p.user_id AS sellerId,p.store_name AS storeName,p.logo_url AS logoUrl,p.store_description AS storeDescription,
+        (SELECT COUNT(*) FROM products item WHERE item.seller_id=p.user_id AND item.is_store_published=1) AS productCount,
+        p.follower_count+(SELECT COUNT(*) FROM store_follows follower WHERE follower.seller_id=p.user_id) AS followerCount
+      FROM store_follows f JOIN seller_profiles p ON p.user_id=f.seller_id JOIN users u ON u.id=p.user_id
+      WHERE f.user_id=? AND u.suspended=0 AND u.role='seller' ORDER BY f.created_at DESC,p.user_id DESC`,userId),
+    getRow('SELECT user_id FROM buyer_security WHERE user_id=?',userId),
+    getRows<ProductRow>('SELECT p.* FROM products p JOIN buyer_favorites f ON f.product_id=p.id WHERE f.user_id=? AND EXISTS (SELECT 1 FROM users u WHERE u.id=p.seller_id AND u.suspended=0) ORDER BY f.created_at DESC',userId),
+    buyerAddresses(userId),buyerVisits(userId),
+  ])
+  return res.json({user:publicUser(req.user!),wallet:wallet||{balanceCents:0},addresses,visits,requests,follows,coins:buyerCoins,favorites:favoriteRows.map(publicProduct),hasTransactionPassword:Boolean(security)})
 })
 
 app.get('/api/buyer/favorites/:id', requireAuth, requireRole('customer'), async (req, res) => {

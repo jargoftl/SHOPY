@@ -1,3 +1,6 @@
+import BuyerProfileSkeleton from '../components/BuyerProfileSkeleton.jsx'
+import FollowedStores from '../components/FollowedStores.jsx'
+import { BUYER_STORES_UPDATED } from '../lib/buyerEvents.js'
 import SiteName from '../components/SiteName.jsx'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -30,6 +33,8 @@ const profileLinks = [
 
 const BuyerProfilePage = () => {
   const navigate = useNavigate()
+  const navigateTo=useRef(navigate)
+  useEffect(()=>{navigateTo.current=navigate},[navigate])
   const location = useLocation()
   const { section } = useParams()
   const [profile, setProfile] = useState(null)
@@ -50,6 +55,9 @@ const BuyerProfilePage = () => {
   const seenWallets = useRef(new Set())
   const submittingDeposit = useRef(false)
   const profileLoaded = profile !== null
+  useEffect(()=>{if(section!=='wallet')setTransactionPassword('')},[section])
+  const initialRoute=useRef({section,state:location.state})
+  const alive=useRef(true)
   useEffect(() => {
     const oldSection = location.hash.slice(1)
     if (!section && ['wallet', 'orders', 'favorites', 'stores', 'visits', 'setup', 'addresses', 'notifications'].includes(oldSection)) {
@@ -70,47 +78,41 @@ const BuyerProfilePage = () => {
     }
   }, [])
 
-  const load = async () => {
-    const [data, alerts] = await Promise.all([apiRequest('/api/buyer/profile'), apiRequest('/api/notifications')])
-    updateProfile(data)
-    setNotifications(alerts.notifications)
-  }
-  useEffect(() => {
-    let active = true
-    apiRequest('/api/auth/me')
-      .then(({ user }) => {
-        if (user.role !== 'customer') {
-          navigate(section === 'orders' ? '/orders' : user.role === 'admin' ? '/admin' : '/seller', { replace: true, state: location.state })
-          return null
-        }
-        return Promise.all([apiRequest('/api/buyer/profile'), apiRequest('/api/notifications')])
-      })
-      .then((result) => { if (active && result) { updateProfile(result[0]); setNotifications(result[1].notifications) } })
-      .catch((err) => {
-        if (!active) return
-        if (err.status === 401) navigate('/login', { replace: true })
-        else setError(err.message)
-      })
-    return () => { active = false }
-  }, [navigate, section, updateProfile, location.state])
-
-  useEffect(() => {
-    if (!profileLoaded || busy) return
-    let active = true
-    const timer = window.setInterval(async () => {
-      try {
-        const [data, alerts] = await Promise.all([apiRequest('/api/buyer/profile', { background: true }), apiRequest('/api/notifications', { background: true })])
-        if (active) {
-          updateProfile(data)
-          setNotifications(alerts.notifications)
-          setUpdatesError('')
-        }
-      } catch (err) {
-        if (active) setUpdatesError(`Automatic updates unavailable: ${err.message}`)
-      }
-    }, 15000)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [profileLoaded, busy, updateProfile])
+  const load=useCallback(async()=>{
+    const data=await apiRequest('/api/buyer/profile',{background:true})
+    if(alive.current){updateProfile(data);setUpdatesError('')}
+    // Notification delivery does not delay the account details or wallet refresh.
+    void apiRequest('/api/notifications',{background:true}).then(alerts=>{if(alive.current)setNotifications(alerts.notifications)}).catch(()=>{})
+    return data
+  },[updateProfile])
+  useEffect(()=>{
+    alive.current=true;let active=true
+    void load().catch(async err=>{
+      if(!active)return
+      if(err.status===401){setProfile(null);navigateTo.current('/login',{replace:true});return}
+      if(err.status===403){
+        try{const {user}=await apiRequest('/api/auth/me',{background:true});if(active)navigateTo.current(initialRoute.current.section==='orders'?'/orders':user.role==='admin'?'/admin':'/seller',{replace:true,state:initialRoute.current.state})}
+        catch(failure){if(active)setError(failure.message)}
+      }else setError(err.message)
+    })
+    return()=>{active=false;alive.current=false}
+  },[load])
+  useEffect(()=>{
+    if(!profileLoaded||busy)return
+    let active=true,inFlight=false,lastStarted=0
+    const refresh=async()=>{
+      if(inFlight||document.visibilityState==='hidden')return
+      inFlight=true;lastStarted=Date.now()
+      try{await load()}
+      catch(err){if(active){if(err.status===401){setProfile(null);navigateTo.current('/login',{replace:true})}else setUpdatesError(`Automatic updates unavailable: ${err.message}`)}}
+      finally{inFlight=false}
+    }
+    const changed=event=>{if(event.type!=='storage'||event.key===BUYER_STORES_UPDATED)void refresh()}
+    const focus=()=>{if(Date.now()-lastStarted>10000)void refresh()}
+    const timer=window.setInterval(refresh,15000)
+    window.addEventListener(BUYER_STORES_UPDATED,changed);window.addEventListener('storage',changed);window.addEventListener('focus',focus)
+    return()=>{active=false;window.clearInterval(timer);window.removeEventListener(BUYER_STORES_UPDATED,changed);window.removeEventListener('storage',changed);window.removeEventListener('focus',focus)}
+  },[profileLoaded,busy,load])
 
   const selectDepositCoin = async (item) => {
     if (submittingDeposit.current) return
@@ -213,7 +215,7 @@ const BuyerProfilePage = () => {
   const logOut = async () => {
     try { await apiRequest('/api/auth/logout', { method: 'POST' }); navigate('/') } catch (err) { setError(err.message) }
   }
-  if (!profile) return <main className="mx-auto max-w-xl px-5 py-20"><p role={error ? 'alert' : 'status'}>{error || 'Loading your profile…'}</p>{error && <div className="mt-4 flex gap-5"><button type="button" className="underline" onClick={() => window.location.reload()}>Try again</button><Link className="underline" to="/login">Go to login</Link></div>}</main>
+  if (!profile) return error?<main className="mx-auto max-w-xl px-5 py-20"><h1 className="text-2xl font-semibold">Your account</h1><p role="alert" className="mt-4 text-sm text-[#9b6c51]">{error}</p><div className="mt-4 flex gap-5 text-sm"><button type="button" className="underline" onClick={()=>window.location.reload()}>Try again</button><Link className="underline" to="/login">Go to login</Link></div></main>:<BuyerProfileSkeleton/>
   if (section && !['wallet', 'orders', 'favorites', 'stores', 'visits', 'setup', 'addresses', 'notifications'].includes(section)) return <Navigate to="/profile" replace />
   const activeRequest = activeDeposit && (profile.requests.find((request) => request.id === activeDeposit.id) || activeDeposit)
   const modalRequest = profile.requests.find((request) => request.id === modalRequestId && request.status === 'pending' && request.walletAddress)
@@ -231,10 +233,11 @@ const BuyerProfilePage = () => {
           <aside className="h-fit rounded-2xl border border-[#e1e7df] bg-white p-5 shadow-[0_8px_30px_rgba(27,50,33,0.04)]">
             <div className="flex items-center gap-3 lg:block"><div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[#eaf1e7] text-[#315941]"><UserRound size={27} /></div>
             <div><h2 className="break-words font-semibold lg:mt-4">{profile.user.fullName}</h2><p className="mt-1 break-all text-xs text-[#737970]">{profile.user.email}</p><p className="mt-2 font-mono text-xs text-[#627267]">Member ID: #{profile.user.id}</p></div></div>
-            <nav aria-label="Profile navigation" className="mt-5 grid grid-cols-2 gap-1 border-t border-[#edf0eb] pt-4 sm:grid-cols-3 lg:grid-cols-1">{profileLinks.map(({ to, label, Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors ${isActive ? 'bg-[#eaf2e8] font-semibold text-[#214d35]' : 'text-[#637168] hover:bg-[#f5f8f3] hover:text-[#214d35]'}`}><Icon size={18} className="shrink-0" aria-hidden="true" /><span>{label}</span></NavLink>)}</nav>
+            <nav aria-label="Profile navigation" className="mt-5 grid grid-cols-2 gap-1 border-t border-[#edf0eb] pt-4 sm:grid-cols-3 lg:grid-cols-1">{profileLinks.map(({ to, label, Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors ${isActive ? 'bg-[#eaf2e8] font-semibold text-[#214d35]' : 'text-[#637168] hover:bg-[#f5f8f3] hover:text-[#214d35]'}`}><Icon size={18} className="shrink-0" aria-hidden="true" /><span>{label}</span>{to==='/profile/stores'&&<span className="ml-auto rounded-full bg-[#e9f1e3] px-2 py-0.5 text-[10px] font-semibold text-[#62834c]">{profile.follows.length}</span>}</NavLink>)}</nav>
           </aside>
           <div className="min-w-0 space-y-6">
-            {!section && <><section className="overflow-hidden rounded-2xl bg-[#263d35] p-7 text-white sm:p-9"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c5d8c6]">Welcome back</p><h2 className="mt-3 break-words text-2xl font-semibold sm:text-3xl">{profile.user.fullName}</h2><p className="mt-3 max-w-lg text-sm leading-6 text-[#d3e2d3]">Manage your account, follow your favorite stores, and keep track of your orders all in one place.</p><div className="mt-7 flex flex-wrap items-end justify-between gap-4 border-t border-white/15 pt-5"><BalanceDisplay balanceCents={profile.wallet.balanceCents} /><Link to="/profile/wallet" className="inline-flex items-center gap-2 rounded-full bg-[#d7ed9f] px-4 py-2 text-sm font-semibold text-[#1a3423]">View wallet <ArrowUpRight size={16} /></Link></div></section><div className="grid gap-4 sm:grid-cols-2">{[{ to: '/profile/orders', label: 'My Orders', detail: 'View your order history', Icon: Package }, { to: '/profile/favorites', label: 'Favorites', detail: `${profile.favorites.length} saved products`, Icon: Heart }, { to: '/profile/stores', label: 'Followed stores', detail: `${profile.follows.length} stores followed`, Icon: Store }, { to: '/messages', label: 'System messages', detail: 'Chat with the administrator', Icon: MessageCircle }].map(({ to, label, detail, Icon }) => <Link key={to} to={to} className="group flex items-center gap-4 rounded-2xl border border-[#e1e7df] bg-white p-5 transition hover:border-[#adc8ad] hover:shadow-sm"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#edf4eb] text-[#315941]"><Icon size={20} /></span><span className="min-w-0 flex-1"><span className="block font-semibold">{label}</span><span className="mt-1 block text-xs text-[#738075]">{detail}</span></span><ArrowUpRight size={17} className="text-[#829486] transition group-hover:text-[#315941]" /></Link>)}</div></>}
+            {!section && <><section className="overflow-hidden rounded-2xl bg-[#263d35] p-7 text-white sm:p-9"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c5d8c6]">Welcome back</p><h2 className="mt-3 break-words text-2xl font-semibold sm:text-3xl">{profile.user.fullName}</h2><p className="mt-3 max-w-lg text-sm leading-6 text-[#d3e2d3]">Manage your account, follow your favorite stores, and keep track of your orders all in one place.</p><div className="mt-7 flex flex-wrap items-end justify-between gap-4 border-t border-white/15 pt-5"><BalanceDisplay balanceCents={profile.wallet.balanceCents} /><Link to="/profile/wallet" className="inline-flex items-center gap-2 rounded-full bg-[#d7ed9f] px-4 py-2 text-sm font-semibold text-[#1a3423]">View wallet <ArrowUpRight size={16} /></Link></div></section></>}
+            {!section&&<><div className="grid gap-4 sm:grid-cols-2"><Link to="/profile/stores" aria-label={`${profile.follows.length} followed stores`} className="flex items-center justify-between gap-4 rounded-2xl border border-[#dce7d4] bg-[#edf4e6] p-5 text-[#45643a]"><div><p className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#819773]">Your favorite places</p><strong className="mt-2 block text-3xl font-semibold">{profile.follows.length}</strong><p className="mt-1 text-xs">Followed stores</p></div><Store size={31} strokeWidth={1.3}/></Link><Link to="/profile/favorites" aria-label={`${profile.favorites.length} favorite products`} className="flex items-center justify-between gap-4 rounded-2xl border border-[#e4e7da] bg-[#faf9ee] p-5 text-[#7b7650]"><div><p className="text-[10px] font-semibold uppercase tracking-[.15em] text-[#a39f7d]">Saved for another day</p><strong className="mt-2 block text-3xl font-semibold">{profile.favorites.length}</strong><p className="mt-1 text-xs">Favorite products</p></div><Heart size={31} strokeWidth={1.3}/></Link></div><FollowedStores stores={profile.follows} compact/><div className="grid gap-4 sm:grid-cols-2">{[['/profile/orders','My Orders',Package],['/messages','System messages',MessageCircle]].map(([to,label,Icon])=><Link key={to} to={to} className="flex items-center gap-3 rounded-2xl border border-[#e1e7df] bg-white p-5 text-sm font-semibold text-[#5d7951]"><Icon size={19}/>{label}<ArrowUpRight className="ml-auto" size={15}/></Link>)}</div></>}
             {section === 'wallet' && <><section id="wallet" className="grid gap-4 sm:grid-cols-3">
               <div className="rounded bg-[#263d35] p-6 text-white"><BalanceDisplay balanceCents={profile.wallet.balanceCents} size="text-3xl" /></div>
               <button type="button" disabled={busy} onClick={() => { activeRequestRef.current = null; setTransactionPassword(''); setActiveDeposit(null); setCoin(''); setKind('deposit') }} className="flex items-center justify-center gap-3 border border-[#e1e7df] bg-white p-6 text-sm font-semibold hover:border-[#315941] disabled:opacity-60"><ArrowDownLeft size={22} /> Deposit request</button>
@@ -279,9 +282,7 @@ const BuyerProfilePage = () => {
             </section>
             </>}
             {['orders', 'favorites', 'setup'].includes(section) && <BuyerExtras profile={profile} onRefresh={load} section={section} />}
-            {section === 'stores' && <div>
-              <section id="stores" className="border border-[#e1e7df] bg-white p-5"><h2 className="font-semibold">Stores you visited</h2>{profile.visits.length ? <ul className="mt-3 divide-y divide-[#edf0eb]">{profile.visits.map((store) => <li key={store.sellerId} className="py-3 text-sm"><Link className="font-medium underline" to={`/stores/${store.sellerId}`}>{store.storeName}</Link><p className="mt-1 text-xs text-[#737970]">{store.visitCount} visits · Last visit {store.lastVisitedAt} UTC</p></li>)}</ul> : <p className="mt-3 text-sm text-[#737970]">No store visits recorded yet.</p>}<h3 className="mt-5 text-sm font-semibold">Followed stores ({profile.follows.length})</h3>{profile.follows.map((store) => <Link key={store.sellerId} to={`/stores/${store.sellerId}`} className="mt-2 block text-sm underline">{store.storeName}</Link>)}</section>
-            </div>}
+            {section === 'stores' && <FollowedStores stores={profile.follows}/>}
             {section === 'visits' && <section className="rounded-2xl border border-[#e1e7df] bg-white p-5 sm:p-6">
               <h2 className="text-xl font-semibold">Visited store history</h2>
               <p className="mt-2 text-sm text-[#737970]">Stores you visited while signed in, ordered by your most recent visit.</p>
