@@ -1,3 +1,4 @@
+import {archiveBootstrapCatalog} from './productionCatalog.ts'
 import {ensureReferralCode,referralOwner,recordReferral,registerReferrals} from './referrals.ts'
 import {registerReviews} from './reviews.ts'
 import 'dotenv/config'
@@ -185,7 +186,8 @@ const insertStarterProduct = database.prepare(`
 const seedProducts = database.transaction(async (items: typeof starterProducts) => {
   for (const product of items) await insertStarterProduct.run(...product, product[0])
 })
-await seedProducts(starterProducts)
+if(process.env.NODE_ENV!=='production')await seedProducts(starterProducts)
+else await archiveBootstrapCatalog(database,starterProducts)
 
 const insertCategory = database.prepare('INSERT OR IGNORE INTO categories (name) VALUES (?)')
 const defaultCategoryNames = [
@@ -1184,8 +1186,8 @@ app.get('/api/products/:id', async (req, res) => {
 
 app.get('/api/seller/products', requireAuth, requireRole('seller', 'admin'), async (req, res) => {
   const products = req.user!.role === 'admin'
-    ? (await getRows<ProductRow>('SELECT * FROM products ORDER BY created_at DESC, id DESC'))
-    : (await getRows<ProductRow>('SELECT * FROM products WHERE seller_id = ? ORDER BY created_at DESC, id DESC', req.user!.id))
+    ? (await getRows<ProductRow>('SELECT * FROM products WHERE archived=0 ORDER BY created_at DESC, id DESC'))
+    : (await getRows<ProductRow>('SELECT * FROM products WHERE archived=0 AND seller_id = ? ORDER BY created_at DESC, id DESC', req.user!.id))
   return res.json({ products: products.map(publicProduct) })
 })
 
@@ -1264,7 +1266,7 @@ app.delete('/api/seller/products/:id', requireAuth, requireRole('seller', 'admin
 })
 
 
-await seedWarehouseSamples(database)
+if(process.env.NODE_ENV!=='production')await seedWarehouseSamples(database)
 
 app.get('/api/warehouse', requireAuth, requireRole('seller', 'admin'), async (req, res) => {
   const page = Math.max(1, Math.min(100000, Math.floor(Number(req.query.page) || 1)))
@@ -1273,13 +1275,13 @@ app.get('/api/warehouse', requireAuth, requireRole('seller', 'admin'), async (re
   const category = String(req.query.category || '').trim().slice(0, 200)
   const shuffled=req.query.available==='1'
   const seed=String(req.query.seed||'').slice(0,80)
-  const where = `WHERE (? = '' OR position(lower(?) in lower(product_name || ' ' || category_path)) > 0)
+  const where = `WHERE archived=0 AND (? = '' OR position(lower(?) in lower(product_name || ' ' || category_path)) > 0)
     AND (? = '' OR category_path = ? OR position(? || ' / ' in category_path) = 1) ${shuffled?'AND NOT EXISTS (SELECT 1 FROM seller_warehouse_imports copies WHERE copies.warehouse_id=warehouse_products.id AND copies.seller_id=?)':''}`
   const params = shuffled?[search, search, category, category, category,req.user!.id]:[search, search, category, category, category]
   const [totalRow, rows, categories, completeRow, importedRow] = await Promise.all([
     getRow<{count:number}>(`SELECT COUNT(*) AS count FROM warehouse_products ${where}`, ...params),
     getRows<{id:number,public_id:string,product_json:string,created_at:string}>(`SELECT id,public_id,(product_json::jsonb - 'sourceDetails')::text AS product_json,created_at FROM warehouse_products ${where} ORDER BY ${shuffled?"md5(id::text || ?)":'id DESC'} LIMIT ? OFFSET ?`, ...params,...(shuffled?[seed]:[]),pageSize,(page-1)*pageSize),
-    getRows<{category:string,count:number}>(`SELECT category_path AS category,COUNT(*) AS count FROM warehouse_products GROUP BY category_path ORDER BY category`),
+    getRows<{category:string,count:number}>(`SELECT category_path AS category,COUNT(*) AS count FROM warehouse_products WHERE archived=0 GROUP BY category_path ORDER BY category`),
     getRow('SELECT 1 FROM schema_migrations WHERE name=?','shopyggful_catalog_2026_11_14_v1'),
     getRow<{count:number}>("SELECT COUNT(*) AS count FROM warehouse_products WHERE source_host='shopyggful.shop'"),
   ])
@@ -1289,14 +1291,14 @@ app.get('/api/warehouse', requireAuth, requireRole('seller', 'admin'), async (re
 })
 
 app.get('/api/warehouse/:id', requireAuth, requireRole('seller', 'admin'), async (req, res) => {
-  const row = await getRow<{ id: number, public_id: string, product_json: string }>('SELECT id,public_id,product_json FROM warehouse_products WHERE id=?', Number(req.params.id))
+  const row = await getRow<{ id: number, public_id: string, product_json: string }>('SELECT id,public_id,product_json FROM warehouse_products WHERE archived=0 AND id=?', Number(req.params.id))
   if (!row) return res.status(404).json({ error: 'Warehouse product not found.' })
   return res.json({ product: { ...JSON.parse(row.product_json), id: row.id, publicId: row.public_id } })
 })
 
 app.get('/api/warehouse/:id/quote',requireAuth,requireRole('seller','admin'),async(req,res)=>{
   res.set('Cache-Control','private, no-store')
-  const row=await getRow<{product_json:string}>("SELECT (product_json::jsonb - 'sourceDetails')::text AS product_json FROM warehouse_products WHERE id=?",Number(req.params.id))
+  const row=await getRow<{product_json:string}>("SELECT (product_json::jsonb - 'sourceDetails')::text AS product_json FROM warehouse_products WHERE archived=0 AND id=?",Number(req.params.id))
   if(!row)return res.status(404).json({error:'Warehouse product not found.'})
   const product=JSON.parse(row.product_json),pricing=warehousePricing(product.price)
   if(!pricing)return res.status(400).json({error:'This warehouse product needs a valid retail price before publishing.'})
@@ -1317,7 +1319,7 @@ app.post('/api/admin/warehouse', requireAuth, requireRole('admin'), async (req, 
 })
 
 app.put('/api/admin/warehouse/:id', requireAuth, requireRole('admin'), async (req, res) => {
-  const existing = await getRow<{ product_json: string }>('SELECT product_json FROM warehouse_products WHERE id=?', Number(req.params.id))
+  const existing = await getRow<{ product_json: string }>('SELECT product_json FROM warehouse_products WHERE archived=0 AND id=?', Number(req.params.id))
   if (!existing) return res.status(404).json({ error: 'Warehouse product not found.' })
   const saved = JSON.parse(existing.product_json)
   const prepared = prepareProductImages(req.body ?? {})
@@ -1335,13 +1337,13 @@ app.put('/api/admin/warehouse/:id', requireAuth, requireRole('admin'), async (re
 })
 
 app.delete('/api/admin/warehouse/:id', requireAuth, requireRole('admin'), async (req, res) => {
-  const removed = (await database.prepare('DELETE FROM warehouse_products WHERE id=?').run(Number(req.params.id)))
+  const removed = (await database.prepare('DELETE FROM warehouse_products WHERE archived=0 AND id=?').run(Number(req.params.id)))
   if (!removed.changes) return res.status(404).json({ error: 'Warehouse product not found.' })
   return res.json({ ok: true })
 })
 
 app.post('/api/seller/warehouse/:id/import', requireAuth, requireRole('seller', 'admin'), async (req, res) => {
-  const row = (await getRow<{ product_json: string }>('SELECT product_json FROM warehouse_products WHERE id=?', Number(req.params.id)))
+  const row = (await getRow<{ product_json: string }>('SELECT product_json FROM warehouse_products WHERE archived=0 AND id=?', Number(req.params.id)))
   if (!row) return res.status(404).json({ error: 'Warehouse product not found.' })
   if ((await getRow('SELECT 1 FROM seller_warehouse_imports WHERE seller_id=? AND warehouse_id=?', req.user!.id, Number(req.params.id)))) return res.status(409).json({ error: 'You already added this warehouse product. Edit it in Store products.' })
   const source = JSON.parse(row.product_json),publish=req.body?.publish===true,pricing=warehousePricing(source.price)
@@ -1357,7 +1359,7 @@ app.post('/api/seller/warehouse/:id/import', requireAuth, requireRole('seller', 
   const productId = (await database.transaction(async () => {
     if(await getRow('SELECT 1 FROM seller_warehouse_imports WHERE seller_id=? AND warehouse_id=?',req.user!.id,Number(req.params.id))){duplicate=true;return 0}
     if(publish){
-      const current=await getRow<{product_json:string}>('SELECT product_json FROM warehouse_products WHERE id=?',Number(req.params.id))
+      const current=await getRow<{product_json:string}>('SELECT product_json FROM warehouse_products WHERE archived=0 AND id=?',Number(req.params.id))
       if(!current||warehousePricing(JSON.parse(current.product_json).price)?.retailCents!==req.body.expectedRetailCents){priceChanged=true;return 0}
     }
     for (const image of prepared.uploads) await database.prepare('INSERT INTO product_images(id,content_type,image) VALUES (?,?,?)').run(image.id, image.contentType, image.image)
@@ -1694,6 +1696,7 @@ const demoOrders = async (userId: number) => (await Promise.all((await getRows<{
 app.get('/api/buyer/orders', requireAuth, requireRole('customer'), async (req, res) => res.json({ orders: (await demoOrders(req.user!.id)) }))
 
 app.post('/api/buyer/orders', requireAuth, requireRole('customer'), async (req, res) => {
+  if(process.env.NODE_ENV==='production')return res.status(410).json({error:'Use checkout to place an order.'})
   const { items, billing, paymentMethod } = req.body
   const billingFields = ['fullName', 'phone', 'address', 'city', 'region', 'postalCode', 'country']
   if (!Array.isArray(items) || !items.length || items.length > 100 || !billing || typeof billing !== 'object' ||
@@ -1726,6 +1729,7 @@ app.post('/api/buyer/orders', requireAuth, requireRole('customer'), async (req, 
 })
 
 app.patch('/api/admin/demo-orders/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  if(process.env.NODE_ENV==='production')return res.status(410).json({error:'Use Orders & tracking to manage purchases.'})
   const id = Number(req.params.id)
   const status = req.body.status
   if (!Number.isSafeInteger(id) || !['pending', 'on_the_way', 'delivered', 'returned'].includes(status)) return res.status(400).json({ error: 'Invalid test order status.' })
@@ -1975,7 +1979,7 @@ app.get('/api/admin/users/:id/details', requireAuth, requireRole('admin'), async
   const rewards = (await getRow<{ balanceUnits: number }>('SELECT balance_units AS balanceUnits FROM reward_balances WHERE user_id = ?', userId)) ?? { balanceUnits: 0 }
   const rewardHistory = (await getRows('SELECT h.id, h.adjustment_units AS adjustmentUnits, h.balance_units AS balanceUnits, h.reason, h.created_at AS createdAt, u.full_name AS adminName FROM reward_history h JOIN users u ON u.id = h.admin_id WHERE h.user_id = ? ORDER BY h.id DESC LIMIT 200', userId))
   const balancePurchases = (await getRows("SELECT h.order_id AS orderId, n.number AS orderNumber, h.amount_cents AS amountCents, h.balance_after_cents AS balanceCents, h.created_at AS createdAt FROM balance_purchase_history h JOIN order_numbers n ON n.kind = 'purchase' AND n.order_id = h.order_id WHERE h.user_id = ? ORDER BY h.order_id DESC LIMIT 200", userId))
-  const products = (await getRows<ProductRow>('SELECT * FROM products WHERE seller_id = ? ORDER BY id DESC', userId)).map(publicProduct)
+  const products = (await getRows<ProductRow>('SELECT * FROM products WHERE archived=0 AND seller_id = ? ORDER BY id DESC', userId)).map(publicProduct)
   const cancellationRequests = (await getRows('SELECT id, status, created_at AS createdAt FROM cancellation_requests WHERE user_id = ? ORDER BY id DESC', userId))
   const favorites = (await getRows<ProductRow>('SELECT p.* FROM products p JOIN buyer_favorites f ON f.product_id = p.id WHERE f.user_id = ? ORDER BY f.created_at DESC', userId)).map(publicProduct)
   const follows = (await getRows('SELECT p.user_id AS sellerId, p.store_name AS storeName FROM store_follows f JOIN seller_profiles p ON p.user_id = f.seller_id WHERE f.user_id = ? ORDER BY f.created_at DESC', userId))
@@ -2029,7 +2033,7 @@ app.patch('/api/admin/users/:id/role', requireAuth, requireRole('admin'), async 
 })
 
 app.get('/api/admin/products', requireAuth, requireRole('admin'), async (_req, res) => {
-  const products = (await getRows<ProductRow>('SELECT * FROM products ORDER BY created_at DESC, id DESC'))
+  const products = (await getRows<ProductRow>('SELECT * FROM products WHERE archived=0 ORDER BY created_at DESC, id DESC'))
   return res.json({ products: products.map(publicProduct) })
 })
 

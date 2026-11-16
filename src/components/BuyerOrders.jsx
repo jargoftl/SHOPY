@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight, Package, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 import { fulfillmentLabel, paymentStatusLabel } from '../lib/fulfillment.js'
 import { formatMoney } from '../lib/money.js'
@@ -16,25 +16,23 @@ const filters = [
 
 const statusLabel = (status) => filters.find(([value]) => value === status)?.[1] || status.replaceAll('_', ' ').replace(/^./, (character) => character.toUpperCase())
 
-const BuyerOrders = ({ includeTestOrders = true }) => {
-  const [orders, setOrders] = useState([])
+const BuyerOrders = () => {
   const [purchases, setPurchases] = useState([])
   const [refunds, setRefunds] = useState([])
   const [reasons, setReasons] = useState({})
   const [refundBusy, setRefundBusy] = useState(false)
-  const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [updatesError, setUpdatesError] = useState('')
 
   useEffect(() => {
     let active = true
-    Promise.all([includeTestOrders ? apiRequest('/api/buyer/orders') : Promise.resolve({ orders: [] }), apiRequest('/api/purchases'), apiRequest('/api/refunds')])
-      .then(([testData, purchaseData, refundData]) => { if (active) { setOrders(testData.orders); setPurchases(purchaseData.orders); setRefunds(refundData.refunds) } })
+    Promise.all([apiRequest('/api/purchases'), apiRequest('/api/refunds')])
+      .then(([purchaseData, refundData]) => { if (active) { setPurchases(purchaseData.orders); setRefunds(refundData.refunds) } })
       .catch((err) => { if (active) setError(err.message) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [includeTestOrders])
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -51,7 +49,7 @@ const BuyerOrders = ({ includeTestOrders = true }) => {
 
   const refresh = async () => {
     setLoading(true); setError('')
-    try { const [testData, purchaseData, refundData] = await Promise.all([includeTestOrders ? apiRequest('/api/buyer/orders') : Promise.resolve({ orders: [] }), apiRequest('/api/purchases'), apiRequest('/api/refunds')]); setOrders(testData.orders); setPurchases(purchaseData.orders); setRefunds(refundData.refunds) }
+    try { const [purchaseData, refundData] = await Promise.all([apiRequest('/api/purchases'), apiRequest('/api/refunds')]); setPurchases(purchaseData.orders); setRefunds(refundData.refunds) }
     catch (err) { setError(err.message) } finally { setLoading(false) }
   }
   const requestRefund = async (event, orderId, sellerId) => {
@@ -63,7 +61,6 @@ const BuyerOrders = ({ includeTestOrders = true }) => {
       setReasons((current) => ({ ...current, [key]: '' }))
     } catch (err) { setError(err.message) } finally { setRefundBusy(false) }
   }
-  const visible = filter === 'all' ? orders : orders.filter((order) => order.status === filter)
 
   return <section id="orders" aria-labelledby="orders-title" className="space-y-5">
     <div className="flex flex-wrap items-end justify-between gap-3">
@@ -95,33 +92,9 @@ const BuyerOrders = ({ includeTestOrders = true }) => {
     </article>)}</div>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {updatesError && <p role="status" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{updatesError}</p>}
-    {!includeTestOrders && !loading && !error && !purchases.length && <p className="text-sm text-[#555555]">You have no purchase orders yet.</p>}
-    {!includeTestOrders && loading && <p role="status" className="text-sm">Loading orders…</p>}
-    {includeTestOrders && <><p className="rounded-xl border border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3 text-xs leading-5 text-[#111111]">Previous test orders are listed below. No payment or actual delivery was processed for them.</p>
-    <div role="group" aria-label="Filter orders by status" className="flex flex-wrap gap-2">
-      {filters.map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`rounded-lg px-4 py-2 text-sm transition-colors ${filter === value ? 'bg-[#111111] font-semibold text-white' : 'bg-white text-[#111111] hover:bg-[#f7f7f7]'}`}>{label}</button>)}
-    </div>
-    {loading ? <p role="status" className="rounded-2xl border border-[#e5e5e5] bg-white p-6 text-sm text-[#555555]">Loading orders…</p> : visible.length ? <div className="space-y-4">{visible.map((order) => {
-      const quantity = order.items.reduce((total, item) => total + item.quantity, 0)
-      return <article key={order.id} className="rounded-2xl border border-[#e5e5e5] bg-white p-5 shadow-[0_8px_30px_rgba(27,50,33,0.03)] sm:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#f7f7f7] pb-4">
-          <div><h3 className="text-sm font-semibold">Order #{order.orderNumber}</h3><p className="mt-1 text-xs text-[#555555]">{order.createdAt} UTC</p></div>
-          <StatusBadge status={order.status} label={statusLabel(order.status)} />
-        </div>
-        <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
-          <div className="flex items-start gap-3"><div className="flex shrink-0 -space-x-2">{order.items.slice(0, 3).map((item, index) => item.imageUrl ? <img key={index} src={item.imageUrl} alt={item.name} loading="lazy" className="size-14 rounded-lg border-2 border-white bg-[#f7f7f7] object-cover" /> : <span key={index} className="grid size-14 place-items-center rounded-lg border-2 border-white bg-[#f7f7f7] text-[#111111]" aria-label={`${item.name}: image unavailable`}><Package size={19} /></span>)}</div><div><p className="text-sm font-medium">{quantity} {quantity === 1 ? 'item' : 'items'}</p><p className="mt-1 text-xs leading-5 text-[#555555]">{order.items.map((item) => item.name).join(', ')}</p></div></div>
-          <div className="sm:text-right"><p className="text-xs text-[#555555]">Order total</p><p className="mt-1 text-lg font-semibold text-[#555555]">{formatMoney(order.totalCents)}</p></div>
-        </div>
-        <details className="group mt-5 border-t border-[#f7f7f7] pt-4">
-          <summary className="w-fit cursor-pointer list-none rounded-full border border-[#cccccc] px-4 py-2 text-sm text-[#111111] hover:border-[#111111]"><span className="group-open:hidden">View order</span><span className="hidden group-open:inline">Hide order</span></summary>
-          <div className="mt-5 grid gap-5 text-sm sm:grid-cols-2">
-            <div><h4 className="font-semibold">Items</h4>{order.items.map((item, index) => <div key={index} className="mt-3 flex items-center gap-3">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} loading="lazy" className="size-14 rounded-lg bg-[#f7f7f7] object-cover" /> : <span className="grid size-14 place-items-center rounded-lg bg-[#f7f7f7] text-[#111111]" aria-label={`${item.name}: image unavailable`}><Package size={19} /></span>}<p className="text-[#111111]">{item.productId ? <Link className="underline" to={`/products/${item.productId}`}>{item.name}</Link> : item.name} × {item.quantity} · {formatMoney(item.priceCents)} each{[item.color, item.size].filter(Boolean).length > 0 && ` · ${[item.color, item.size].filter(Boolean).join(' · ')}`}</p></div>)}</div>
-            <div><h4 className="font-semibold">Billing details</h4><p className="mt-2 leading-6 text-[#111111]">{order.billing.fullName} · {order.billing.phone}<br />{order.billing.address}, {order.billing.city}, {order.billing.region} {order.billing.postalCode}, {order.billing.country}</p>{order.paymentMethod.startsWith('coin:') && <p className="mt-2 text-[#111111]">Selected coin: {order.paymentMethod.slice(5)}</p>}</div>
-            <div className="sm:col-span-2"><h4 className="font-semibold">Status history</h4><ol className="mt-2 space-y-2">{order.history.map((entry, index) => <li key={index} className="text-xs text-[#111111]">{statusLabel(entry.status)} · {entry.createdAt} UTC</li>)}</ol></div>
-          </div>
-        </details>
-      </article>
-    })}</div> : <div className="rounded-2xl border border-[#e5e5e5] bg-white p-10 text-center"><Package size={26} className="mx-auto text-[#777777]" /><p className="mt-3 text-sm font-medium">No orders {filter === 'all' ? 'yet' : 'in this category'}.</p><Link to="/products" className="mt-3 inline-block text-sm text-[#111111] underline">Browse products</Link></div>}</>}
+    {!loading && !error && !purchases.length && <p className="text-sm text-[#555555]">You have no purchase orders yet.</p>}
+    {loading && <p role="status" className="text-sm">Loading orders…</p>}
+
   </section>
 }
 

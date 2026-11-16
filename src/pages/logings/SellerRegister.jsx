@@ -2,7 +2,7 @@ import {readReferralCode,clearReferralCode} from '../../lib/referralCode.js'
 import PasswordInput from '../../components/PasswordInput.jsx'
 import SiteName from '../../components/SiteName.jsx'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check, ShieldCheck, Store, Sparkles, ClipboardCheck } from 'lucide-react'
 import '../../styles/seller-signup.css'
 import SellerAuthStory from '../../components/SellerAuthStory.jsx'
@@ -20,18 +20,14 @@ const initialForm = {
 
 const SellerRegister = () => {
   const navigate = useNavigate()
-  const location = useLocation()
-  const previewStep = new URLSearchParams(location.search).get('preview')
-  const isPreviewMode = import.meta.env.DEV && ['workspace', 'profile'].includes(previewStep)
-  const [step, setStep] = useState(() => previewStep === 'profile' ? 2 : previewStep === 'workspace' ? 1 : 0)
+  const [step, setStep] = useState(0)
   const [form, setForm] = useState(initialForm)
   const [existingAccount, setExistingAccount] = useState(null)
   const [codeSent, setCodeSent] = useState(false)
-  const [developmentCode, setDevelopmentCode] = useState('')
   const [referralCode,setReferralCode]=useState(readReferralCode)
   const [optionalSsn, setOptionalSsn] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
-  const [hasStarted, setHasStarted] = useState(isPreviewMode)
+  const [hasStarted, setHasStarted] = useState(false)
   const headingRef = useRef(null)
   const visibleStep = hasStarted ? step + 1 : 0
 
@@ -51,7 +47,6 @@ const SellerRegister = () => {
   const logoReadVersion = useRef(0)
 
   useEffect(() => {
-    if (isPreviewMode) return
     let active = true
     apiRequest('/api/auth/me', {background:true}).then(({user}) => {
       if (!active) return
@@ -60,7 +55,7 @@ const SellerRegister = () => {
       setExistingAccount(user);setForm(current=>({...current,fullName:user.fullName,email:user.email,phone:user.phone||''}))
     }).catch(()=>{})
     return()=>{active=false}
-  }, [isPreviewMode,navigate])
+  }, [navigate])
 
   const clearLogoUpload = () => {
     logoReadVersion.current += 1
@@ -110,7 +105,6 @@ const SellerRegister = () => {
     if (name === 'storeLogoUrl') clearLogoUpload()
     if (name === 'email') {
       setCodeSent(false)
-      setDevelopmentCode('')
       setForm((current) => ({ ...current, verificationCode: '' }))
     }
   }
@@ -135,14 +129,9 @@ const SellerRegister = () => {
           setStep(1)
           return
         }
+        if(!verification.sent)throw new Error('Email delivery is temporarily unavailable. Please try again later.')
         setCodeSent(true)
-        if (verification.developmentCode) {
-          setDevelopmentCode(verification.developmentCode)
-          setForm((current) => ({ ...current, verificationCode: verification.developmentCode }))
-          setMessage('SMTP is not configured. Use the local development code below to continue.')
-        } else {
-          setMessage('A verification code was sent to your email. Enter it here to continue.')
-        }
+        setMessage('A verification code was sent to your email. Enter it here to continue.')
       } catch (error) {
 
       setMessage(error.message)
@@ -175,10 +164,6 @@ const SellerRegister = () => {
 
   const finishRegistration = async (event) => {
     event.preventDefault()
-    if (isPreviewMode) {
-      setMessage('Preview only. Return to the registration flow to create a seller account.')
-      return
-    }
     if (isReadingVerification) return
     if (form.country === 'United States' && optionalSsn && !sellerSsnSuffix(optionalSsn)) { setMessage('Enter only the last four digits for the optional SSN reference, or leave it blank.'); return }
     if (!verificationConsent || Object.values(verificationPhotos).some(value=>!value)) { setMessage('Upload all three verification photos and agree to private review.'); return }
@@ -252,15 +237,6 @@ const SellerRegister = () => {
             <button type="button" className="signup-primary" disabled={!acceptedTerms} onClick={()=>{setHasStarted(true);setMessage('')}}>Agree & start my application <ArrowRight size={18}/></button>
             <p className="signup-private-note"><ShieldCheck size={14}/> Your application is reviewed before your store goes live.</p>
           </div>}
-      {import.meta.env.DEV && (
-        <nav className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[#eee] pb-4 text-xs" aria-label="Seller form previews">
-          <span className="font-semibold text-[#666]">Preview:</span>
-          <Link to="/seller/register?preview=workspace" onClick={() => { setStep(1); setMessage('') }} className="underline underline-offset-4">02 Workspace</Link>
-          <Link to="/seller/register?preview=profile" onClick={() => { setStep(2); setMessage('') }} className="underline underline-offset-4">03 Profile</Link>
-          {isPreviewMode && <Link to="/seller/register" onClick={() => { setStep(0); setMessage('') }} className="underline underline-offset-4">Exit preview</Link>}
-        </nav>
-      )}
-
       {hasStarted && step === 0 && (
         <form className="space-y-4" onSubmit={continueFromAccount}>
           <div className="grid grid-cols-2 gap-3">
@@ -290,13 +266,7 @@ const SellerRegister = () => {
           {codeSent && <label className="block text-sm font-medium">Email verification code
             <input name="verificationCode" value={form.verificationCode} onChange={updateForm} type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="6-digit email code" />
           </label>}
-          {developmentCode && <div role="status" className="border border-[#e5e5e5] bg-[#f7f7f7] px-4 py-3">
-            <p className="text-xs font-semibold text-[#111111]">Local development code</p>
-            <p className="mt-1 font-mono text-lg tracking-[0.12em] text-[#111111]">{developmentCode}</p>
-            <p className="mt-1 text-[10px] text-[#111111]">Shown only in local development. It expires in 10 minutes.</p>
-          </div>}
-          {codeSent && <p className="text-[11px] leading-5 text-[#777]">Enter the code sent to your email. It expires after 10 minutes.</p>}
-          {codeSent && <button type="button" disabled={isSendingCode} className="text-xs underline underline-offset-4" onClick={async()=>{setIsSendingCode(true);setMessage('');try{const result=await apiRequest('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:form.email.trim(),fullName:form.fullName.trim()})});setForm(current=>({...current,verificationCode:result.developmentCode||''}));setDevelopmentCode(result.developmentCode||'');setMessage(result.sent?'A new verification code was sent.':'Please continue with the current registration settings.')}catch(error){setMessage(error.message)}finally{setIsSendingCode(false)}}}>Resend email code</button>}
+          {codeSent && <button type="button" disabled={isSendingCode} className="text-xs underline underline-offset-4" onClick={async()=>{setIsSendingCode(true);setMessage('');try{const result=await apiRequest('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:form.email.trim(),fullName:form.fullName.trim()})});setForm(current=>({...current,verificationCode:''}));setMessage(result.sent?'A new verification code was sent.':'Please continue with the current registration settings.')}catch(error){setMessage(error.message)}finally{setIsSendingCode(false)}}}>Resend email code</button>}
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
           <button type="submit" disabled={isSendingCode} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-60">{isSendingCode ? 'Please wait…' : codeSent ? 'Verify email & continue' : 'Continue to workspace'}</button>
         </form>

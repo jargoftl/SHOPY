@@ -511,7 +511,6 @@ const LandingPage = () => {
               {heroSlides.map((slide, index) => (
                 <button key={slide.category} type="button" aria-label={`Show ${slide.category} banner`} aria-pressed={activeHeroIndex === index} onClick={() => setActiveHeroIndex(index)} className={`h-1.5 rounded-full transition-all ${activeHeroIndex === index ? 'w-8 bg-[#cccccc]' : 'w-3 bg-white/60 hover:bg-white'}`} />
               ))}
-              <span className="ml-2 text-[10px] text-white/75">Changes every minute</span>
             </div>
           </div>
         </section>

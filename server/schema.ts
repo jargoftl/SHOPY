@@ -603,6 +603,9 @@ ALTER TABLE seller_referral_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE seller_referrals ENABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS seller_referrals_owner ON seller_referrals(referrer_id,id DESC);
 
+ALTER TABLE products ADD COLUMN IF NOT EXISTS archived INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE warehouse_products ADD COLUMN IF NOT EXISTS archived INTEGER NOT NULL DEFAULT 0;
+
 `
 
 // Reference reservations and activity are derived during inserts, so are not copied from legacy SQLite.
