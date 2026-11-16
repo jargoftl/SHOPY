@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import DeliveryProgress from '../components/DeliveryProgress.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -67,7 +68,7 @@ const PurchasePage = () => {
         <p className="text-xs uppercase tracking-widest text-[#555555]">Order #{order?.orderNumber || "…"}</p><h1 className="mt-2 text-3xl font-semibold">Your order</h1>
         {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
         {notice && <p role="status" className="mt-4 text-sm text-[#111111]">{notice}</p>}
-        {!order ? <p className="mt-5 text-sm">Loading order…</p> : <>
+        {!order ? <ContentPlaceholder/> : <>
           <p className="mt-4 text-sm">Status: <strong>{order.status.replaceAll('_', ' ')}</strong> · {order.coin === 'BALANCE' ? 'Account balance' : order.coin}</p>
           <p className="mt-2 text-sm">Items: {order.items.map((item) => `${item.name} × ${item.quantity}`).join(', ')}</p>
           <p className="mt-2 text-sm">Subtotal: {formatMoney(order.subtotalCents)}{order.shippingCents !== null && ` · Shipping: ${formatMoney(order.shippingCents)} · Tax: ${formatMoney(order.taxCents)} · Total: ${formatMoney(order.subtotalCents + order.shippingCents + order.taxCents)}`}</p>

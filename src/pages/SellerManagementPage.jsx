@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import SellerReferrals from '../components/SellerReferrals.jsx'
 import ReviewsPanel from '../components/ReviewsPanel.jsx'
 import { useEffect, useState } from 'react'
@@ -32,7 +33,7 @@ export default function SellerManagementPage({ view }) {
 
   return <main className="min-h-screen bg-[#f7f7f5] px-5 py-8 text-[#111111]"><div className="mx-auto max-w-6xl"><div className="flex items-center justify-between"><Link to="/seller" className="text-sm text-[#111111] underline">← Seller dashboard</Link>{authorized && <SellerNotificationBell />}</div><h1 className="mt-4 text-3xl font-semibold">{view==='referrals'?'Referrals & rewards':'Product management'}</h1><div className="mt-6"><SellerProductTabs /></div>
     {message && <p role="status" className="mt-4 rounded border border-[#e5e5e5] bg-white p-3 text-sm">{message}</p>}
-    {loading ? <p className="mt-5">Loading workspace…</p> : authorized ? <div className="mt-6">
+    {loading ? <ContentPlaceholder/> : authorized ? <div className="mt-6">
       {view === 'warehouse' && <><h2 className="text-xl font-semibold">Product warehouse</h2><p className="mt-2 text-sm text-[#555555]">Browse a category, check the product details, and add it to your store. Its category and subcategory are copied automatically.</p><div className="mt-4 flex gap-5 text-xs text-[#555555]"><Link to="/seller/products" className="underline">Open Store products</Link><Link to="/" className="underline">View marketplace homepage</Link></div><WarehouseBrowser onAdd={add} /></>}
       {view === 'referrals' && <SellerReferrals/>}
       {view === 'refunds' && <RefundList />}

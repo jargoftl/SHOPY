@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import SiteName from '../components/SiteName.jsx'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -116,7 +117,7 @@ const MessageCenterPage = () => {
     navigate('/', { replace: true })
   }
 
-  if (isLoading) return <main className="mx-auto max-w-5xl px-5 py-16 text-sm text-[#666]">Loading message center…</main>
+  if (isLoading) return <main className="mx-auto max-w-5xl px-5 py-16 text-sm text-[#666]"><ContentPlaceholder/></main>
 
   const isAdmin = user?.role === 'admin'
   const unreadMessages = conversations.reduce((total, conversation) => total + conversation.unreadCount, 0)

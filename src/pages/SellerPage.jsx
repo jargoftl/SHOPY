@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import ProductPublishConfirmation from '../components/ProductPublishConfirmation.jsx'
 import {progressToast} from '../components/ProgressToast.jsx'
 import { useEffect, useRef, useState } from 'react'
@@ -34,7 +35,7 @@ const SellerPage = () => {
   const [showWarehouse, setShowWarehouse] = useState(false)
   const [newCategory, setNewCategory] = useState('')
   const [productForm, setProductForm] = useState({ name: '', category: '', price: '', compareAtPrice: '', imageUrl: '', imageUrls: [], description: '', isPublished: true })
-  const [message, setMessage] = useState(location.state?.welcome || 'Loading your seller workspace…')
+  const [message, setMessage] = useState(location.state?.welcome || '')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [imageUploads, setImageUploads] = useState({ primary: null, gallery: [] })
@@ -200,7 +201,7 @@ const SellerPage = () => {
   }
 
   if (isLoading) {
-    return <main className="mx-auto max-w-5xl px-5 py-16 text-sm text-[#666]">{message}</main>
+    return <main className="mx-auto max-w-5xl px-5 py-16"><ContentPlaceholder/></main>
   }
 
   if (!user) {

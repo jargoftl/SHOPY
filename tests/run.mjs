@@ -1,3 +1,4 @@
+import {testAdminBuyerFunding} from './admin-buyer-funding-flow.mjs';
 import {testProductionCleanup} from './production-cleanup-flow.mjs';
 import {testReferrals} from './referrals-flow.mjs';
 import {testReviewsMobile} from './reviews-mobile-flow.mjs';
@@ -234,6 +235,7 @@ try{
  await testReviewsMobile({req,check,db,cookie,buyer,buyerId,seller,sellerId,sellerForm});
  await testReferrals({req,check,db,cookie,seller,sellerId,buyer,sellerForm});
  await testProductionCleanup({req,check,db,cookie,buyer,sellerId});
+ await testAdminBuyerFunding({req,check,db,cookie,buyer,buyerId,seller,sellerId});
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.
  const storageFetch=globalThis.fetch;
  Object.assign(process.env,{SUPABASE_URL:'https://storage.example.test',SUPABASE_SERVICE_ROLE_KEY:'test-only-placeholder',SUPABASE_STORAGE_BUCKET:'shop-uploads'});

@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -173,7 +174,7 @@ const ProductsPage = () => {
             </div>
           </div>
 
-          {isLoading ? <p className="py-16 text-center text-sm text-[#777]">Loading catalog…</p> : loadError ? <p role="alert" className="py-16 text-center text-sm text-[#a33]">{loadError}</p> : visibleProducts.length ? (
+          {isLoading ? <ContentPlaceholder/> : loadError ? <p role="alert" className="py-16 text-center text-sm text-[#a33]">{loadError}</p> : visibleProducts.length ? (
             <motion.div layout className="grid grid-cols-2 gap-x-3 gap-y-7 sm:grid-cols-3 sm:gap-x-5 xl:grid-cols-4">
               <AnimatePresence mode="popLayout">
                 {visibleProducts.map((product) => <ProductCard key={product.id} product={product} />)}

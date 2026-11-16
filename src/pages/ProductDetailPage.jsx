@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import ReviewsPanel from '../components/ReviewsPanel.jsx'
 import SiteName from '../components/SiteName.jsx'
 import { useEffect, useState } from 'react'
@@ -100,7 +101,7 @@ const ProductDetailPage = () => {
     if (addSelectedToCart()) navigate('/billing')
   }
 
-  if (isLoading) return <main className="mx-auto max-w-5xl px-5 py-20 text-sm text-[#666]">Loading product…</main>
+  if (isLoading) return <main className="mx-auto max-w-5xl px-5 py-20 text-sm text-[#666]"><ContentPlaceholder/></main>
   if (loadError || !product) {
     return <main className="mx-auto max-w-xl px-5 py-24 text-center"><h1 className="text-3xl font-semibold">Product unavailable</h1><p className="mt-3 text-sm text-[#555555]">{loadError || 'This product may have been removed.'}</p><Link to="/products" className="mt-7 inline-flex border border-[#cccccc] px-4 py-3 text-sm">Browse products</Link></main>
   }

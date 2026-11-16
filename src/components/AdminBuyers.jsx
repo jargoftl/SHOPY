@@ -1,3 +1,4 @@
+import ContentPlaceholder from './ContentPlaceholder.jsx'
 import {sessionUrl} from '../lib/tabSession.js'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -61,10 +62,10 @@ const AdminBuyers = ({ userId, onUpdated }) => {
   const visibleRequests = userId == null ? requests : requests.filter((request) => request.userId === Number(userId))
   return (
     <section id="buyers" className="mb-8 border border-[#111111] bg-[#111111]">
-      <div className="border-b border-[#111111] px-5 py-4 sm:px-7"><h2 className="text-lg font-semibold">Buyer profiles & manual requests</h2><p className="mt-1 text-xs leading-5 text-[#777777]">Requests are manually reviewed; no transfer or verification is performed. Confirming a request does not change the balance.</p></div>
+      <div className="border-b border-[#111111] px-5 py-4 sm:px-7"><h2 className="text-lg font-semibold">Buyer profiles & manual requests</h2><p className="mt-1 text-xs leading-5 text-[#777777]">Confirm a transfer only after independently verifying it. A verified deposit credits the buyer’s actual spendable balance exactly once.</p></div>
       {message && <p role="status" className="mx-5 mt-4 border border-[#111111] p-3 text-sm text-[#cccccc]">{message}</p>}
       {updatesError && <p role="alert" className="mx-5 mt-4 border border-[#111111] p-3 text-sm text-[#cccccc]">{updatesError}</p>}
-      {loading ? <p className="p-5 text-sm">Loading buyers…</p> : <>
+      {loading ? <ContentPlaceholder/> : <>
         <div className="divide-y divide-[#111111]">{visibleBuyers.map((buyer) => <article key={buyer.id} className="p-5 sm:px-7">
           <div><h3 className="font-semibold"><Link to={`/admin/users/${buyer.id}`} className="underline">{buyer.fullName}</Link> <span className="font-mono text-xs text-[#777777]">#{buyer.publicId}</span></h3><p className="mt-1 break-all text-sm text-[#a3a3a3]">{buyer.email} · {buyer.phone || 'No phone'}</p><p className="mt-3 text-xs text-[#777777]">Addresses: {buyer.addresses.length ? buyer.addresses.map((address) => `${address.address}, ${address.city}, ${address.country}${address.isDefault ? ' (default)' : ''}`).join(' · ') : 'None'}</p><p className="mt-2 text-xs text-[#777777]">Stores visited: {buyer.visits.length ? buyer.visits.map((visit) => `${visit.storeName} (${visit.visitCount})`).join(' · ') : 'None'}</p></div>
         </article>)}{!visibleBuyers.length && <p className="p-5 text-sm text-[#777777]">No buyer profile available.</p>}</div>

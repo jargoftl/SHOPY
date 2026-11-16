@@ -1,3 +1,4 @@
+import ContentPlaceholder from './ContentPlaceholder.jsx'
 import {progressToast} from './ProgressToast.jsx'
 import DeliveryProgress from './DeliveryProgress.jsx'
 import {sessionUrl} from '../lib/tabSession.js'
@@ -62,7 +63,7 @@ const AdminPurchases = ({ selectedNumber, autoOpen=false, showWalletSettings=fal
       <button disabled={busy} className={button}>Save wallet</button>
     </form>
     </>}
-    {loading ? <p className="mt-4 text-sm">Loading orders…</p> : orders.length ? <div className="mt-4 divide-y divide-[#111111]">{orders.map((order) => <details key={order.id} open={selectedNumber === String(order.orderNumber) ? true : undefined} className="py-5 text-sm">
+    {loading ? <ContentPlaceholder/> : orders.length ? <div className="mt-4 divide-y divide-[#111111]">{orders.map((order) => <details key={order.id} open={selectedNumber === String(order.orderNumber) ? true : undefined} className="py-5 text-sm">
       <summary className="cursor-pointer font-semibold"><span>Order #{order.orderNumber} · {order.buyerName} · {order.coin === 'BALANCE' ? 'Account balance' : order.coin}</span><span className="ml-2 inline-block align-middle"><OrderStatusBadge status={order.status} label={paymentStatusLabel(order.status)} /></span></summary>
       {order.coin === 'BALANCE' && <p className="mt-2 text-xs text-[#a3a3a3]">Paid from account balance. Confirm this store’s fulfillment status to process the order.</p>}
       <p className="mt-2 text-xs text-[#a3a3a3]">{order.items.map((item) => `${item.name} × ${item.quantity}`).join(', ')} · Subtotal {formatMoney(order.subtotalCents)}</p>

@@ -1,3 +1,4 @@
+import {registerAdminBuyerFunding} from './adminBuyerFunding.ts'
 import {archiveBootstrapCatalog} from './productionCatalog.ts'
 import {ensureReferralCode,referralOwner,recordReferral,registerReferrals} from './referrals.ts'
 import {registerReviews} from './reviews.ts'
@@ -2202,6 +2203,7 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
 
 registerReferrals(app,database,requireAuth,requireRole)
 registerReviews(app,database,requireAuth)
+registerAdminBuyerFunding(app,database,requireAuth,requireRole)
 registerSellerAdminFunding(app,database,requireAuth,requireRole)
 registerSellerDisplayStats(app,database,requireAuth,requireRole)
 registerTransactionPin(app, database, requireAuth, requireRole)

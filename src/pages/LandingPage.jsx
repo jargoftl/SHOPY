@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import StoreAccountMenu from '../components/StoreAccountMenu.jsx'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -346,7 +347,7 @@ const LandingPage = () => {
             </Link>
           </div>
 
-          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-4 px-3 lg:flex xl:gap-6" aria-label="Main navigation">
+          <nav className="store-main-navigation hidden min-w-0 flex-1 items-center justify-center gap-4 px-3 lg:flex xl:gap-6" aria-label="Main navigation">
             {text.nav.map((label, index) => {
               const keys = ['Home', 'Category', 'Product', 'Discounts', 'Partnership', 'Seller']
               const key = keys[index]
@@ -559,7 +560,7 @@ const LandingPage = () => {
           </div>
 
           {isLoading ? (
-            <p className="py-16 text-center text-sm text-[#666]">Loading products…</p>
+            <ContentPlaceholder/>
           ) : loadError ? (
             <p role="status" className="py-16 text-center text-sm text-[#8a3c2d]">{loadError}</p>
           ) : visibleProducts.length ? (

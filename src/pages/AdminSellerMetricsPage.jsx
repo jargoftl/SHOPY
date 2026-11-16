@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import SiteName from '../components/SiteName.jsx'
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -35,7 +36,7 @@ const AdminSellerMetricsPage = () => {
   const [visitsTrack, setVisitsTrack] = useState('')
   const [topProductVolumes, setTopProductVolumes] = useState({})
   const [adminFollowerCount, setAdminFollowerCount] = useState('0')
-  const [message, setMessage] = useState('Loading seller metrics…')
+  const [message, setMessage] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -137,7 +138,7 @@ const AdminSellerMetricsPage = () => {
     navigate('/', { replace: true })
   }
 
-  if (isLoading) return <main className="mx-auto max-w-5xl px-5 py-16 text-sm text-[#555555]">{message}</main>
+  if (isLoading) return <main className="mx-auto max-w-5xl px-5 py-16"><ContentPlaceholder/></main>
   if (!admin) return <main className="mx-auto max-w-xl px-5 py-20 text-center"><h1 className="text-2xl font-semibold">Admin access required</h1><p className="mt-3 text-sm text-[#666]">{message}</p><Link to="/login" className="mt-5 inline-block underline">Admin login</Link></main>
 
   return (

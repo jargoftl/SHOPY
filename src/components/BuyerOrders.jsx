@@ -1,6 +1,7 @@
+import ContentPlaceholder from './ContentPlaceholder.jsx'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { RefreshCw } from 'lucide-react'
+import {ArrowUpRight,Package,RefreshCw} from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 import { fulfillmentLabel, paymentStatusLabel } from '../lib/fulfillment.js'
 import { formatMoney } from '../lib/money.js'
@@ -93,7 +94,7 @@ const BuyerOrders = () => {
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {updatesError && <p role="status" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{updatesError}</p>}
     {!loading && !error && !purchases.length && <p className="text-sm text-[#555555]">You have no purchase orders yet.</p>}
-    {loading && <p role="status" className="text-sm">Loading orders…</p>}
+    {loading && <ContentPlaceholder/>}
 
   </section>
 }

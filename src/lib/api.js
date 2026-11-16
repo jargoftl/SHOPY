@@ -22,6 +22,7 @@ const performRequest = async (path, { background: _background, ...options } = {}
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
+    if(response.status===401){identityCache.clear();identityEpoch++}
     const error = new Error(data.error || 'The server is unavailable. Please try again later.')
     error.status = response.status
     error.captchaRequired = Boolean(data.captchaRequired)
@@ -29,20 +30,25 @@ const performRequest = async (path, { background: _background, ...options } = {}
     throw error
   }
 
-  if((options.method||'GET').toUpperCase()!=='GET')inFlight.clear()
+  if((options.method||'GET').toUpperCase()!=='GET'){inFlight.clear();identityCache.clear();identityEpoch++}
   if(freshScope)setTabScope(freshScope)
   if(path==='/api/auth/logout')window.dispatchEvent(new Event('account-session-changed'))
   return data
 }
 
-// Share concurrent reads only within this tab/account. Completed financial data is never cached.
-const inFlight=new Map()
+// Share concurrent reads per tab/account. Cache only account identity for 10s; completed financial data is never cached.
+const inFlight=new Map(),identityCache=new Map()
+let identityEpoch=0
+const IDENTITY_TTL=10000
 export const apiRequest=(path,options={})=>{
  if((options.method||'GET').toUpperCase()!=='GET'||options.signal||options.headers)return performRequest(path,options)
  const key=tabScope()+':'+path
+ const identity=path==='/api/auth/me'&&options.cache!=='no-store',epoch=identityEpoch
+ const cached=identity?identityCache.get(key):null
+ if(cached&&Date.now()-cached.time<IDENTITY_TTL)return Promise.resolve(structuredClone(cached.data))
  if(inFlight.has(key))return inFlight.get(key)
  const promise=performRequest(path,options)
  inFlight.set(key,promise)
- promise.then(()=>{if(inFlight.get(key)===promise)inFlight.delete(key)},()=>{if(inFlight.get(key)===promise)inFlight.delete(key)})
+ promise.then(data=>{if(identity&&data.user&&epoch===identityEpoch)identityCache.set(key,{data:structuredClone(data),time:Date.now()});if(inFlight.get(key)===promise)inFlight.delete(key)},()=>{if(inFlight.get(key)===promise)inFlight.delete(key)})
  return promise
 }

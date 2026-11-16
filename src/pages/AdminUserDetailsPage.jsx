@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import ReviewsPanel from '../components/ReviewsPanel.jsx'
 import AdminSellerActuals from '../components/AdminSellerActuals.jsx'
 import { useEffect, useState } from 'react'
@@ -57,7 +58,7 @@ const AdminUserDetailsPage = () => {
       }
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
-  if (!data) return <main className="mx-auto max-w-xl px-5 py-20"><p role={error ? 'alert' : 'status'}>{error || 'Loading account details…'}</p><Link to={error ? '/login' : '/admin'} className="mt-4 inline-block underline">{error ? 'Go to login' : 'Admin dashboard'}</Link></main>
+  if (!data) return <main className="mx-auto max-w-xl px-5 py-20">{error?<p role="alert">{error}</p>:<ContentPlaceholder/>}<Link to={error ? '/login' : '/admin'} className="mt-4 inline-block underline">{error ? 'Go to login' : 'Admin dashboard'}</Link></main>
   const { user, seller, visits, addresses, requests, events, balanceHistory, balanceResets, rewards, rewardHistory, balancePurchases, products, cancellationRequests, favorites, follows, accountHistory } = data
   const confirmedDeposits = requests.filter((request) => request.kind === 'deposit' && request.status === 'confirmed').reduce((sum, request) => sum + request.amountCents, 0)
   return <div className="admin-workspace min-h-screen bg-[#111111] text-[#f7f7f7]">{rewardToast && <div role="status" className="fixed right-4 top-4 z-[80] flex max-w-[calc(100vw-2rem)] items-center gap-4 rounded border border-[#777777] bg-white px-4 py-3 text-sm font-semibold text-[#111111] shadow-lg">{rewardToast}<button type="button" onClick={() => setRewardToast('')} aria-label="Dismiss notification" className="text-lg leading-none">×</button></div>}<header className="border-b border-[#111111] bg-[#111111]"><div className="mx-auto flex max-w-[1300px] justify-between px-5 py-5"><Link to="/admin" className="font-semibold underline">← Admin dashboard</Link><span className="text-sm text-[#777777]">Account details</span></div></header>

@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -31,7 +32,7 @@ const DiscountsPage = () => {
           <h1 className="text-3xl font-semibold sm:text-5xl">Discounts</h1>
           <p className="max-w-md text-sm leading-6 text-[#777]">Products with a sale price set by the store.</p>
         </div>
-        {isLoading ? <p className="py-16 text-center text-sm text-[#777]">Loading offers…</p> : message ? <p role="alert" className="py-16 text-center text-sm text-[#a33]">{message}</p> : products.length ? (
+        {isLoading ? <ContentPlaceholder/> : message ? <p role="alert" className="py-16 text-center text-sm text-[#a33]">{message}</p> : products.length ? (
           <motion.div layout className="mt-8 grid grid-cols-2 gap-x-3 gap-y-7 sm:grid-cols-3 sm:gap-x-5 lg:grid-cols-4">
             {products.map((product) => <ProductCard key={product.id} product={product} />)}
           </motion.div>

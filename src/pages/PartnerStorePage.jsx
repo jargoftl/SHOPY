@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import ReviewsPanel from '../components/ReviewsPanel.jsx'
 import { notifyFollowedStoresUpdated } from '../lib/buyerEvents.js'
 import SiteName from '../components/SiteName.jsx'
@@ -86,7 +87,7 @@ const PartnerStorePage = () => {
   }
 
   if (isLoading) {
-    return <main className="mx-auto max-w-5xl px-5 py-20 text-sm text-[#666]">Loading partner store…</main>
+    return <main className="mx-auto max-w-5xl px-5 py-20 text-sm text-[#666]"><ContentPlaceholder/></main>
   }
 
   if (error || !store) {
