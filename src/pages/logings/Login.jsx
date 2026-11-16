@@ -64,7 +64,6 @@ const Login = () => {
         <button disabled={isSubmitting} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-60" type="submit">{isSubmitting ? 'Signing in…' : 'Log in'}</button>
       </form>
       <p className="mt-7 text-center text-sm text-[#666]">New here? <Link to="/register" className="font-semibold text-black underline underline-offset-2">Create an account</Link></p>
-      <p className="mt-3 text-center text-sm text-[#666]">Selling? <Link to="/seller/login" className="font-semibold text-black underline underline-offset-2">Seller login</Link></p>
       </>}
     </AuthLayout>
   )
