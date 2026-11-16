@@ -1,3 +1,4 @@
+import {queueDeliveryEmail,kickDeliveryEmailWorker} from './deliveryEmails.ts'
 import type { Express, RequestHandler } from 'express'
 import express from 'express'
 import {recordShipmentEvent,registerShipmentTracking} from './shipmentTracking.ts'
@@ -35,7 +36,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
   const serialize = async (order: Order, sellerId?: number) => {
     const items = ((await db.prepare('SELECT * FROM purchase_items WHERE order_id = ? AND (? IS NULL OR seller_id = ?) ORDER BY id').all(order.id, sellerId ?? null, sellerId ?? null)) as Item[])
       .map((item) => ({ id: item.id, sellerId: item.seller_id, productId: item.product_id, name: item.name, imageUrl: item.image_url, priceCents: item.price_cents, quantity: item.quantity, color: item.color, size: item.size }))
-    const sellers = (await db.prepare('SELECT s.seller_id AS sellerId, s.status,s.tracking_code AS trackingNumber,s.tracking_number AS carrierTrackingNumber,s.carrier,s.tracking_assigned_at AS trackingAssignedAt,(SELECT status FROM seller_sale_releases r WHERE r.order_id=s.order_id AND r.seller_id=s.seller_id) AS releaseStatus, COALESCE(p.store_name,u.full_name) AS storeName FROM purchase_sellers s JOIN users u ON u.id=s.seller_id LEFT JOIN seller_profiles p ON p.user_id=s.seller_id WHERE s.order_id=? AND (? IS NULL OR s.seller_id=?)').all(order.id, sellerId ?? null, sellerId ?? null))
+    const sellers = (await db.prepare('SELECT s.seller_id AS sellerId, s.status,s.tracking_code AS trackingNumber,s.tracking_number AS carrierTrackingNumber,s.carrier,e.status AS deliveryEmailStatus,e.sent_at AS deliveryEmailSentAt,s.tracking_assigned_at AS trackingAssignedAt,(SELECT status FROM seller_sale_releases r WHERE r.order_id=s.order_id AND r.seller_id=s.seller_id) AS releaseStatus, COALESCE(p.store_name,u.full_name) AS storeName FROM purchase_sellers s JOIN users u ON u.id=s.seller_id LEFT JOIN seller_profiles p ON p.user_id=s.seller_id LEFT JOIN seller_delivery_emails e ON e.order_id=s.order_id AND e.seller_id=s.seller_id WHERE s.order_id=? AND (? IS NULL OR s.seller_id=?)').all(order.id, sellerId ?? null, sellerId ?? null))
     const billing = JSON.parse(order.billing_json) as Record<string, string>
     return {
       id: order.id, orderNumber: (await orderNumber(order.id)), buyerId: order.buyer_id, buyerName: billing.fullName, ...(sellerId === undefined ? { billing } : {}),
@@ -275,6 +276,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     if (!['pending','confirmed','about_to_send','sent','on_the_way','hold','stalled','delivered'].includes(req.body?.status)) return res.status(400).json({ error: 'Invalid status.' })
     if (existing.status !== req.body.status) await db.transaction(async () => {
       await db.prepare('UPDATE purchase_sellers SET status=? WHERE order_id=? AND seller_id=?').run(req.body.status, orderId, sellerId)
+      if(req.body.status==='delivered')await queueDeliveryEmail(db,orderId,sellerId)
       await recordShipmentEvent(db,orderId,sellerId,String(req.body.status),req.user!.id,req.user!.role,text(req.body.note,500))
       const progressMessages: Record<string, string> = {
         pending: 'Your order is pending fulfillment.',
@@ -289,6 +291,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       await notify.run(order.buyer_id, 'purchase', `Order #${(await orderNumber(orderId))} updated`, progressMessages[String(req.body.status)], `/purchase/${orderId}`)
       await notify.run(sellerId, 'purchase', `Order #${(await orderNumber(orderId))} ${req.body.status === 'delivered' ? 'marked delivered' : 'fulfillment updated'}`, `Fulfillment status: ${String(req.body.status).replaceAll('_', ' ')}.`, `/seller/orders?order=${(await orderNumber(orderId))}`)
     })()
+    if(req.body.status==='delivered')kickDeliveryEmailWorker(db)
     return res.json({ ok: true })
   })
 }

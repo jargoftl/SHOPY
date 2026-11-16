@@ -29,7 +29,7 @@ const Register = () => {
     try {
       if(!codeSent){
         const verification=await apiRequest('/api/auth/registration-verification-code',{method:'POST',body:JSON.stringify({email:formData.get('email'),fullName:formData.get('fullName')})})
-        if(verification.verificationRequired!==false){setCodeSent(true);setMessage('Enter the six-digit code sent to your email.');return}
+        if(verification.verificationRequired!==false){if(!verification.sent)throw new Error('Email delivery is temporarily unavailable. Please try again later.');setCodeSent(true);setMessage('Enter the six-digit code sent to your email.');return}
       }else{
         await apiRequest('/api/auth/verify-registration-email-code',{method:'POST',body:JSON.stringify({email:formData.get('email'),code:verificationCode})})
       }

@@ -4,6 +4,8 @@ type NotificationEvent = 'registered' | 'login'
 
 interface EmailUser {
   id: number
+  public_id?:string
+  seller_status?:string
   full_name: string
   email: string
   phone: string | null
@@ -104,9 +106,10 @@ export const sendAuthNotifications = async (user: EmailUser, event: Notification
 
   const happenedAt = new Date().toLocaleString('en', { timeZone: 'UTC', timeZoneName: 'short' })
   const isRegistration = event === 'registered'
-  const userSubject = isRegistration ? `Welcome to ${siteName}` : `New sign-in to your ${siteName} account`
+  const applicationReceived=isRegistration&&user.seller_status==='pending'
+  const userSubject = applicationReceived?`Your ${siteName} seller application was received`:isRegistration ? `Welcome to ${siteName}` : `New sign-in to your ${siteName} account`
   const userText = isRegistration
-    ? `Hi ${user.full_name},\n\nYour ${siteName} account has been created. Your member ID is #${user.id}.\n\nIf you did not create this account, please contact the store owner.`
+    ? `Hi ${user.full_name},\n\nYour ${siteName} account has been created. Your member ID is #${user.public_id||user.id}.${applicationReceived?'\n\nYour seller application is pending administrator review. We will email you when it is approved.':''}\n\nIf you did not create this account, please contact the store owner.`
     : `Hi ${user.full_name},\n\nYour ${siteName} account was signed in to at ${happenedAt}.\n\nIf this was not you, contact the store owner and change your password.`
   const ownerEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.ADMIN_EMAIL
   const adminSubject = isRegistration ? `New ${siteName} account #${user.id}` : `${siteName} sign-in for account #${user.id}`
@@ -135,4 +138,10 @@ export const sendSellerApprovalEmail = (to: string, name: string, siteName: stri
   let loginUrl = ''
   try { const url = new URL('/seller/login', configured); if (url.protocol === 'https:' || (url.protocol === 'http:' && url.hostname === 'localhost')) loginUrl = url.toString() } catch { /* Email still explains how to sign in. */ }
   return sendEmail({ to, subject: `Your ${siteName} seller application is approved`, text: `Hi ${name},\n\nCongratulations! Your application to become a seller on ${siteName} has been approved by our administrator.\n\nYou can now sign in and manage your store${loginUrl ? `: ${loginUrl}` : '.'}\n\nWelcome aboard!\nThe ${siteName} team` })
+}
+
+export const sendSellerDeliveryEmail = ({to,name,siteName,storeName,orderNumber,trackingNumber}:{to:string,name:string,siteName:string,storeName:string,orderNumber:number,trackingNumber:string}):Promise<boolean> => {
+ let orderUrl=''
+ try{const url=new URL('/seller/orders',process.env.APP_URL||'https://shopystoretech.netlify.app');url.searchParams.set('order',String(orderNumber));if(url.protocol==='https:'||(url.protocol==='http:'&&url.hostname==='localhost'))orderUrl=url.toString()}catch{/* The order reference remains usable without a link. */}
+ return sendEmail({to,subject:`Order #${orderNumber} marked delivered — ${siteName}`,text:`Hi ${name},\n\nOrder #${orderNumber} from ${storeName} has been marked delivered to the buyer by the seller or administrator.\n\nTracking number: ${trackingNumber}${orderUrl?`\nView your order: ${orderUrl}`:''}\n\nThe ${siteName} team`})
 }

@@ -1,3 +1,4 @@
+import {testEmailLifecycle} from './email-lifecycle-flow.mjs';
 import {testAdminBuyerFunding} from './admin-buyer-funding-flow.mjs';
 import {testProductionCleanup} from './production-cleanup-flow.mjs';
 import {testReferrals} from './referrals-flow.mjs';
@@ -36,7 +37,7 @@ pg.Pool.prototype.query=query;
 pg.Pool.prototype.connect=async()=>({query,release(){}});
 pg.Pool.prototype.end=async()=>{};
 // Regression fixtures use isolated accounts, storage and mocked email delivery.
-Object.assign(process.env,{SELLER_VERIFICATION_WORKER:'disabled',SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
+Object.assign(process.env,{SELLER_VERIFICATION_WORKER:'disabled',DELIVERY_EMAIL_WORKER:'disabled',SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
 const { ObjectStorage } = await import('../dist-server/storage.js');
 const realPut=ObjectStorage.prototype.put,realGet=ObjectStorage.prototype.get,realVerify=ObjectStorage.prototype.verifyBucket;
 ObjectStorage.prototype.verifyBucket=async()=>{};
@@ -236,6 +237,7 @@ try{
  await testReferrals({req,check,db,cookie,seller,sellerId,buyer,sellerForm});
  await testProductionCleanup({req,check,db,cookie,buyer,sellerId});
  await testAdminBuyerFunding({req,check,db,cookie,buyer,buyerId,seller,sellerId});
+ await testEmailLifecycle({req,check,db,cookie,seller,sellerId,sellerForm});
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.
  const storageFetch=globalThis.fetch;
  Object.assign(process.env,{SUPABASE_URL:'https://storage.example.test',SUPABASE_SERVICE_ROLE_KEY:'test-only-placeholder',SUPABASE_STORAGE_BUCKET:'shop-uploads'});

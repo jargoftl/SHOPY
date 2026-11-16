@@ -1,3 +1,4 @@
+import {registerDeliveryEmails} from './deliveryEmails.ts'
 import {registerAdminBuyerFunding} from './adminBuyerFunding.ts'
 import {archiveBootstrapCatalog} from './productionCatalog.ts'
 import {ensureReferralCode,referralOwner,recordReferral,registerReferrals} from './referrals.ts'
@@ -745,10 +746,10 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
         await database.prepare("INSERT INTO seller_applications(user_id,status,consented_at,submitted_at,ssn_last4) VALUES (?,'pending',?,?,?)").run(user.id, new Date().toISOString(), new Date().toISOString(), ssnLast4)
         await insertApplicationPhotos(database, user.id, uploadedVerification)
         await ensureReferralCode(database,user.id)
-        await database.prepare('DELETE FROM seller_email_verifications WHERE email = ?').run(email)
         await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'seller_signup', ?, ?, ? FROM users WHERE role = 'admin'").run(`New seller #${user.public_id}`, `${fullName} (${email}) submitted ${sellerProfile.storeName} for verification. Seller access is pending approval.`, `/admin/users/${user.id}`)
       }
       if (role === 'customer') await database.prepare('DELETE FROM seller_email_verifications WHERE email=?').run(email)
+      await database.prepare('DELETE FROM seller_email_verifications WHERE email=?').run(email)
       if(referredBy&&!existingAccount)await recordReferral(database,referredBy,user.id,role==='seller'?'seller':'buyer')
       return user
     })()
@@ -2210,6 +2211,7 @@ registerTransactionPin(app, database, requireAuth, requireRole)
 registerSellerFinance(app, database, requireAuth, requireRole)
 await registerManualOrders(app, database, requireAuth, requireRole)
 await registerMarketing(app, database, requireAuth, requireRole)
+const stopDeliveryEmailWorker=registerDeliveryEmails(app,database,requireAuth,requireRole)
 const stopVerificationWorker = await registerSellerVerification(app, database, requireAuth, requireRole)
 app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found.' }))
 
@@ -2228,6 +2230,7 @@ if (process.env.NODE_ENV === 'production') {
 await seedAdmin()
 export const httpServer = app.listen(port, '0.0.0.0', () => console.log(`GGU API listening on port ${port}`))
 httpServer.on('close', stopVerificationWorker)
+httpServer.on('close',stopDeliveryEmailWorker)
 
 // Import in the background so the free web service can answer requests while catalog pages arrive.
 void seedImportedWarehouse(database).catch(() => console.error('Warehouse source import paused. Completed pages are saved; restarting resumes the import.'))

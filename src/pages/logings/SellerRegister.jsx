@@ -131,7 +131,7 @@ const SellerRegister = () => {
         }
         if(!verification.sent)throw new Error('Email delivery is temporarily unavailable. Please try again later.')
         setCodeSent(true)
-        setMessage('A verification code was sent to your email. Enter it here to continue.')
+        setMessage('Enter the six-digit code sent to your email. After you submit your seller application, the administrator will review it.')
       } catch (error) {
 
       setMessage(error.message)
@@ -264,7 +264,7 @@ const SellerRegister = () => {
           {!existingAccount&&<label className="block text-sm font-medium">Referral code (optional)<input value={referralCode} onChange={e=>setReferralCode(e.target.value.trim().toUpperCase())} maxLength={16} autoComplete="off" className="mt-2 h-11 w-full rounded-lg border px-3 font-mono" placeholder="Seller referral code"/></label>}
           <p className="text-xs text-gray-500">You’ll set your wallet PIN when you are ready to make a deposit or withdrawal.</p>
           {codeSent && <label className="block text-sm font-medium">Email verification code
-            <input name="verificationCode" value={form.verificationCode} onChange={updateForm} type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="6-digit email code" />
+            <input name="verificationCode" value={form.verificationCode} onChange={event=>setForm(current=>({...current,verificationCode:event.target.value.replace(/\D/g,'').slice(0,6)}))} type="text" autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="6-digit email code" />
           </label>}
           {codeSent && <button type="button" disabled={isSendingCode} className="text-xs underline underline-offset-4" onClick={async()=>{setIsSendingCode(true);setMessage('');try{const result=await apiRequest('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:form.email.trim(),fullName:form.fullName.trim()})});setForm(current=>({...current,verificationCode:''}));setMessage(result.sent?'A new verification code was sent.':'Please continue with the current registration settings.')}catch(error){setMessage(error.message)}finally{setIsSendingCode(false)}}}>Resend email code</button>}
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
