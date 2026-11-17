@@ -1,3 +1,4 @@
+import {prepareSellerSsn} from './sellerSsn.ts'
 import {registerDeliveryEmails} from './deliveryEmails.ts'
 import {registerAdminBuyerFunding} from './adminBuyerFunding.ts'
 import {archiveBootstrapCatalog} from './productionCatalog.ts'
@@ -654,6 +655,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     let phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : ''
     const password = typeof req.body.password === 'string' ? req.body.password : ''
     let ssnLast4: string | null = null
+    let ssnEncrypted: string | null = null
     let sellerProfile = null
     let logoUpload: ProductImageUpload | undefined
     let verificationPhotos: ReturnType<typeof prepareVerificationPhotos> | undefined
@@ -702,9 +704,10 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
       phone = normalizedPhone
       verificationPhotos = prepareVerificationPhotos(req.body)
       if ('error' in verificationPhotos) return res.status(400).json({ error: verificationPhotos.error })
-      const ssn = optionalSsnLast4(req.body.ssnLast4, profile.country)
+      const ssn = req.body.ssn != null ? prepareSellerSsn(req.body.ssn, profile.country) : optionalSsnLast4(req.body.ssnLast4, profile.country)
       if ('error' in ssn) return res.status(400).json({error:ssn.error})
-      ssnLast4 = ssn.value
+      ssnLast4 = 'last4' in ssn ? ssn.last4 : ssn.value
+      ssnEncrypted = 'encrypted' in ssn ? ssn.encrypted : null
       sellerProfile = profile
     }
 
@@ -745,7 +748,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
             country=excluded.country,address=excluded.address,city=excluded.city,region=excluded.region,postal_code=excluded.postal_code
         `).run(user.id, sellerProfile.storeName, sellerProfile.storeDescription, sellerProfile.storeLogoUrl, sellerProfile.country, sellerProfile.address, sellerProfile.city, sellerProfile.region, sellerProfile.postalCode)
         await database.prepare("UPDATE seller_profiles SET verification_status='pending' WHERE user_id=?").run(user.id)
-        await database.prepare("INSERT INTO seller_applications(user_id,status,consented_at,submitted_at,ssn_last4) VALUES (?,'pending',?,?,?)").run(user.id, new Date().toISOString(), new Date().toISOString(), ssnLast4)
+        await database.prepare("INSERT INTO seller_applications(user_id,status,consented_at,submitted_at,ssn_last4,ssn_encrypted) VALUES (?,'pending',?,?,?,?)").run(user.id, new Date().toISOString(), new Date().toISOString(), ssnLast4, ssnEncrypted)
         await insertApplicationPhotos(database, user.id, uploadedVerification)
         await ensureReferralCode(database,user.id)
         await database.prepare("INSERT INTO notifications (user_id, type, title, body, link) SELECT id, 'seller_signup', ?, ?, ? FROM users WHERE role = 'admin'").run(`New seller #${user.public_id}`, `${fullName} (${email}) submitted ${sellerProfile.storeName} for verification. Seller access is pending approval.`, `/admin/users/${user.id}`)

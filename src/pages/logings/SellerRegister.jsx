@@ -165,7 +165,7 @@ const SellerRegister = () => {
   const finishRegistration = async (event) => {
     event.preventDefault()
     if (isReadingVerification) return
-    if (form.country === 'United States' && optionalSsn && !sellerSsnSuffix(optionalSsn)) { setMessage('Enter only the last four digits for the optional SSN reference, or leave it blank.'); return }
+    if (form.country === 'United States' && optionalSsn && !sellerSsnSuffix(optionalSsn)) { setMessage('Enter nine SSN digits or leave the field blank.'); return }
     if (!verificationConsent || Object.values(verificationPhotos).some(value=>!value)) { setMessage('Upload all three verification photos and agree to private review.'); return }
     if (!acceptedTerms) {
       setMessage('Please agree to the seller terms to continue.')
@@ -177,7 +177,7 @@ const SellerRegister = () => {
     try {
       const policy = await apiRequest('/api/seller/application-policy').catch(()=>null)
       if (!policy?.requiresAdminApproval || !policy?.requiresIdentityPhotos) throw new Error('Seller verification is being updated. Please refresh this page and try again shortly.')
-      if (optionalSsn && !policy.optionalSsnLast4) throw new Error('The optional SSN reference is being updated. Refresh shortly, or clear this optional field to continue.')
+      if (optionalSsn && !policy.fullSsn) throw new Error('SSN storage is not configured. Leave the SSN field blank to continue.')
       const { user } = await apiRequest(existingAccount ? '/api/seller/application' : '/api/auth/register-seller', {
         method: 'POST',
         body: JSON.stringify({
@@ -186,7 +186,7 @@ const SellerRegister = () => {
           email: form.email,
           phone: form.phone,
           verificationPhotos, verificationConsent,
-          ssnLast4: form.country === 'United States' ? sellerSsnSuffix(optionalSsn) : null,
+          ssn: form.country === 'United States' ? sellerSsnSuffix(optionalSsn) : null,
           password: form.password,
           storeName: form.storeName,
           storeDescription: form.storeDescription,
