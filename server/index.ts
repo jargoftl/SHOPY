@@ -663,8 +663,8 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     if (!fullName || fullName.length > 100) return res.status(400).json({ error: 'Enter your name (up to 100 characters).' })
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ error: 'Enter a valid email address.' })
     const signupPhone = verificationPhone(phone)
-    if (phone.length > 30 || !signupPhone) return res.status(400).json({ error: 'Enter a valid phone number with country code (7–15 digits).' })
-    phone = signupPhone
+    if (phone.length > 30 || ((role === 'seller' || phone !== '') && !signupPhone)) return res.status(400).json({ error: 'Enter a valid phone number with country code (7–15 digits).' })
+    phone = signupPhone || ''
     if (!existingAccount && (Buffer.byteLength(password, 'utf8') < 8 || Buffer.byteLength(password, 'utf8') > 72)) return res.status(400).json({ error: 'Password must be between 8 and 72 bytes.' })
 
     if (role === 'seller' || role === 'customer') {
