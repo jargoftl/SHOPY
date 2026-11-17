@@ -96,7 +96,7 @@ const PartnerStorePage = () => {
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#111111]">Partner stores</p>
         <h1 className="mt-3 text-3xl font-semibold">Store unavailable</h1>
         <p className="mt-3 text-sm text-[#555555]">{error || 'This store may have been removed.'}</p>
-        <Link to="/" className="mt-7 inline-flex border border-[#cccccc] px-4 py-3 text-sm font-medium">Back to <SiteName /></Link>
+        <Link to="/" className="mt-7 inline-flex border border-[#cccccc] px-4 py-3 text-sm font-medium">Back to <SiteName logo /></Link>
     </main>
     )
   }
@@ -105,7 +105,7 @@ const PartnerStorePage = () => {
     <main className="min-h-screen bg-[#f7f7f7] text-[#111111]">
       <header className="border-b border-[#e5e5e5] bg-white">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 sm:px-8">
-          <Link to="/" className="text-[29px] font-black leading-none tracking-[-0.08em]"><SiteName /><span className="ml-1 text-[19px]">▰</span></Link>
+          <Link to="/" className="text-[29px] font-black leading-none tracking-[-0.08em]"><SiteName logo /></Link>
           <nav className="flex items-center gap-5 text-xs font-semibold"><Link to="/profile/stores" className="underline underline-offset-4">My followed stores</Link><Link to="/cart" className="underline underline-offset-4">My cart</Link></nav>
         </div>
       </header>

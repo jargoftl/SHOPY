@@ -1,12 +1,12 @@
 import SiteName from '../components/SiteName.jsx'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Check, ChevronRight, CreditCard, Headphones, Heart, Minus, PackageCheck, Plus, Search, ShoppingBag, ShoppingCart, UserRound, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronRight, CreditCard, Headphones, Heart, Minus, PackageCheck, Plus, Search, ShoppingCart, UserRound, X } from 'lucide-react'
 import { useCart } from '../context/CartContext.jsx'
 import { calculateOrderTotals } from '../lib/orderTotals.js'
 import '../styles/cart.css'
 
 const money = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
-const Brand = ({ footer = false }) => <Link to="/" className={`cart-brand${footer ? ' cart-brand-footer' : ''}`}><span className="cart-brand-mark"><ShoppingBag size={21} strokeWidth={1.8} /></span><span><SiteName /><span className="cart-brand-dot">.</span></span></Link>
+const Brand = ({ footer = false }) => <Link to="/" className={`cart-brand${footer ? ' cart-brand-footer' : ''}`}><span><SiteName logo /><span className="cart-brand-dot">.</span></span></Link>
 
 export default function CartPage() {
   const { items, itemCount, setQuantity, removeItem, clearCart, subtotal } = useCart()

@@ -145,7 +145,7 @@ const AdminSellerMetricsPage = () => {
     <div className="min-h-screen bg-[#111111] text-[#f7f7f7]">
       <header className="border-b border-[#111111] bg-[#111111]">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-5 py-5 md:px-10">
-          <div><Link to="/admin" className="text-2xl font-black tracking-[-0.07em]"><SiteName /><span className="ml-1 text-sm text-[#cccccc]">▰</span></Link><p className="mt-1 text-xs text-[#777777]">Admin seller controls</p></div>
+          <div><Link to="/admin" className="text-2xl font-black tracking-[-0.07em]"><SiteName logo /></Link><p className="mt-1 text-xs text-[#777777]">Admin seller controls</p></div>
           <nav className="flex items-center gap-4 text-xs"><Link to="/admin" className="underline underline-offset-4">Admin dashboard</Link><Link to="/seller/register" className="underline underline-offset-4">Create seller</Link><button type="button" onClick={logOut} className="border border-[#111111] px-3 py-2">Log out</button></nav>
         </div>
       </header>

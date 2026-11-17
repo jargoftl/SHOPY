@@ -127,7 +127,7 @@ const MessageCenterPage = () => {
       <header className={`border-b ${isAdmin ? 'border-[#111111] bg-[#111111]' : 'border-[#e5e5e5] bg-white'}`}>
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-5 py-5 md:px-10">
           <div>
-            <Link to="/" className={`text-2xl font-black tracking-[-0.07em] ${isAdmin ? 'text-white' : 'text-[#111111]'}`}><SiteName /><span className="ml-1 text-sm">▰</span></Link>
+            <Link to="/" className={`text-2xl font-black tracking-[-0.07em] ${isAdmin ? 'text-white' : 'text-[#111111]'}`}><SiteName logo /></Link>
             <p className={`mt-1 text-xs ${isAdmin ? 'text-[#777777]' : 'text-[#555555]'}`}>{isAdmin ? 'Store administration' : user?.role === 'customer' ? 'Buyer account' : 'Seller workspace'}</p>
           </div>
           <div className="flex items-center gap-3 text-sm">

@@ -63,7 +63,7 @@ const PurchasePage = () => {
   }
 
   return <main className="min-h-screen bg-[#f7f7f7] px-5 py-8 text-[#111111]">
-    <div className="mx-auto max-w-3xl"><Link to="/" className="text-2xl font-black"><SiteName /> ▰</Link>
+    <div className="mx-auto max-w-3xl"><Link to="/" className="text-2xl font-black"><SiteName logo /></Link>
       <div className="mt-8 rounded-2xl border border-[#e5e5e5] bg-white p-6 sm:p-8">
         <p className="text-xs uppercase tracking-widest text-[#555555]">Order #{order?.orderNumber || "…"}</p><h1 className="mt-2 text-3xl font-semibold">Your order</h1>
         {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}

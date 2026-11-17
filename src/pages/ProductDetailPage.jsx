@@ -112,7 +112,7 @@ const ProductDetailPage = () => {
     <div className="min-h-screen bg-white pb-24 text-[#171717] md:pb-0">
       <header className="border-b border-[#e9e9e9] bg-white">
         <div className="mx-auto flex min-h-16 max-w-[1440px] items-center justify-between gap-4 px-5 sm:px-8">
-          <Link to="/" className="text-[26px] font-black tracking-[-0.08em]"><SiteName /><span className="ml-1 text-sm">▰</span></Link>
+          <Link to="/" className="text-[26px] font-black tracking-[-0.08em]"><SiteName logo /></Link>
           <Link to="/products" className="text-xs underline underline-offset-4">All products</Link>
         </div>
       </header>

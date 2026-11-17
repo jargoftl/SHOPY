@@ -23,7 +23,7 @@ const DiscountsPage = () => {
   return (
     <div className="min-h-screen bg-white px-4 pb-24 text-[#171717] sm:px-7 md:pb-10">
       <header className="mx-auto flex max-w-[1440px] items-center justify-between border-b border-[#e8e8e8] py-5">
-        <Link to="/" className="text-[26px] font-black tracking-[-0.08em]"><SiteName /><span className="ml-1 text-sm">▰</span></Link>
+        <Link to="/" className="text-[26px] font-black tracking-[-0.08em]"><SiteName logo /></Link>
         <Link to="/products" className="text-xs underline underline-offset-4">All products</Link>
       </header>
       <main className="mx-auto max-w-[1440px] py-10 sm:py-14">

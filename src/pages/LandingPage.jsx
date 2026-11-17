@@ -343,7 +343,7 @@ const LandingPage = () => {
               {mobileMenuOpen ? <X size={24} strokeWidth={1.6} /> : <Menu size={24} strokeWidth={1.6} />}
             </button>
             <Link to="/" className="text-[29px] font-black leading-none tracking-[-0.08em] sm:text-[32px]">
-              <SiteName /><span className="ml-1 inline-block translate-y-[-2px] text-[19px] tracking-normal">▰</span>
+              <SiteName logo />
             </Link>
           </div>
 
@@ -444,7 +444,7 @@ const LandingPage = () => {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-white px-5 pb-10 pt-5 lg:hidden">
           <div className="flex items-center justify-between border-b border-[#e7e7e7] pb-5">
-            <Link to="/" onClick={() => setMobileMenuOpen(false)} className="text-[30px] font-black leading-none tracking-[-0.08em]"><SiteName /><span className="ml-1 text-[18px]">▰</span></Link>
+            <Link to="/" onClick={() => setMobileMenuOpen(false)} className="text-[30px] font-black leading-none tracking-[-0.08em]"><SiteName logo /></Link>
             <button type="button" aria-label="Close menu" onClick={() => setMobileMenuOpen(false)} className="grid size-11 place-items-center"><X size={25} strokeWidth={1.5} /></button>
           </div>
           <nav className="pt-4" aria-label="Mobile navigation">

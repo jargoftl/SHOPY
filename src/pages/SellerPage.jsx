@@ -220,7 +220,7 @@ const SellerPage = () => {
       <header className="border-b border-[#e5e5e5] bg-white">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 md:px-10">
           <div>
-            <Link to="/" className="text-2xl font-black tracking-[-0.07em]"><SiteName /><span className="ml-1 text-sm">▰</span></Link>
+            <Link to="/" className="text-2xl font-black tracking-[-0.07em]"><SiteName logo /></Link>
             <p className="mt-1 text-xs text-[#555555]">Seller workspace</p>
           </div>
           <div className="flex items-center gap-4 text-sm">

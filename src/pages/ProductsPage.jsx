@@ -136,7 +136,7 @@ const ProductsPage = () => {
       <header className="sticky top-0 z-30 border-b border-[#e9e9e9] bg-white/95 backdrop-blur">
         <div className="mx-auto flex min-h-16 max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-7">
           <div className="flex items-center gap-3">
-            <Link to="/" className="text-[26px] font-black tracking-[-0.08em]"><SiteName /><span className="ml-1 text-sm">▰</span></Link>
+            <Link to="/" className="text-[26px] font-black tracking-[-0.08em]"><SiteName logo /></Link>
           </div>
           <label className="flex w-full max-w-[420px] items-center gap-2 border border-[#dedede] px-3 py-2">
             <Search size={16} className="shrink-0 text-[#777]" />

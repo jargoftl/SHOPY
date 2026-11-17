@@ -214,7 +214,7 @@ const SellerRegister = () => {
   return (
     <div className="seller-signup">
       <header className="signup-header">
-        <Link to="/" className="signup-brand"><SiteName /><span aria-hidden="true">✳</span></Link>
+        <Link to="/" className="signup-brand"><SiteName logo /></Link>
         <Link to="/seller/login" className="signup-login">Already a seller? <strong>Log in <ArrowRight size={15}/></strong></Link>
       </header>
       <main className="signup-layout">

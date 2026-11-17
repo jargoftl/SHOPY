@@ -64,7 +64,7 @@ const BillingPage = () => {
 
   return (
     <div className="min-h-screen bg-white px-4 pb-24 text-[#171717] sm:px-7 md:pb-10">
-      <header className="mx-auto flex max-w-[1200px] items-center justify-between border-b border-[#e8e8e8] py-5"><Link to="/" className="text-[26px] font-black tracking-[-0.08em]"><SiteName /><span className="ml-1 text-sm">▰</span></Link><Link to="/cart" className="text-xs underline underline-offset-4">Back to cart</Link></header>
+      <header className="mx-auto flex max-w-[1200px] items-center justify-between border-b border-[#e8e8e8] py-5"><Link to="/" className="text-[26px] font-black tracking-[-0.08em]"><SiteName logo /></Link><Link to="/cart" className="text-xs underline underline-offset-4">Back to cart</Link></header>
       <main className="mx-auto max-w-[1200px] py-9 sm:py-14">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9a5c46]">Checkout · Step 1 of 2</p>
         <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">Billing and delivery</h1>
