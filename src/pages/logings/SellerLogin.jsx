@@ -1,3 +1,4 @@
+import ContentPlaceholder from '../../components/ContentPlaceholder.jsx'
 import PasswordInput from '../../components/PasswordInput.jsx'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
@@ -51,7 +52,7 @@ const SellerLogin = () => {
 
   return (
     <AuthLayout>
-      {isCheckingSession ? <p role="status" className="text-sm text-[#666]">Checking your account…</p> : <>
+      {isCheckingSession ? <ContentPlaceholder/> : <>
       <div className="mb-7">
         <p className="mb-2 text-xs font-bold tracking-[0.14em] text-[#555555]">SELLER CENTER</p>
         <h1 className="text-4xl font-bold tracking-tight">Seller login</h1>

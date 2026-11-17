@@ -1,32 +1,33 @@
+import {loadPage,preloadLink} from './lib/pagePreload.js'
 import ContentPlaceholder from './components/ContentPlaceholder.jsx'
-const SellerFinancePage=lazy(()=>import('./pages/SellerFinancePage.jsx'))
+const SellerFinancePage=lazy(()=>loadPage('SellerFinancePage'))
 import {lazy,Suspense,useEffect,useState} from 'react'
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { CartProvider } from './context/CartContext.jsx'
 import MobileBottomNav from './components/store/MobileBottomNav.jsx'
 import Login from './pages/logings/Login.jsx'
 import LandingPage from './pages/LandingPage.jsx'
-const AdminPage=lazy(()=>import('./pages/AdminPage.jsx'))
+const AdminPage=lazy(()=>loadPage('AdminPage'))
 import Register from './pages/logings/Register.jsx'
-const SellerPage=lazy(()=>import('./pages/SellerPage.jsx'))
+const SellerPage=lazy(()=>loadPage('SellerPage'))
 import SellerLogin from './pages/logings/SellerLogin.jsx'
 import SellerRegister from './pages/logings/SellerRegister.jsx'
 import ProductsPage from './pages/ProductsPage.jsx'
 import SellerApplicationPage from './pages/SellerApplicationPage.jsx'
-const SellerMarketingPage=lazy(()=>import('./pages/SellerMarketingPage.jsx'))
+const SellerMarketingPage=lazy(()=>loadPage('SellerMarketingPage'))
 import CartPage from './pages/CartPage.jsx'
 import BillingPage from './pages/BillingPage.jsx'
 import CheckoutPage from './pages/CheckoutPage.jsx'
 import DiscountsPage from './pages/DiscountsPage.jsx'
 import PartnerStorePage from './pages/PartnerStorePage.jsx'
-const MessageCenterPage=lazy(()=>import('./pages/MessageCenterPage.jsx'))
+const MessageCenterPage=lazy(()=>loadPage('MessageCenterPage'))
 import ProductDetailPage from './pages/ProductDetailPage.jsx'
-const SellerDashboardPage=lazy(()=>import('./pages/SellerDashboardPage.jsx'))
-const AdminSellerMetricsPage=lazy(()=>import('./pages/AdminSellerMetricsPage.jsx'))
-const BuyerProfilePage=lazy(()=>import('./pages/BuyerProfilePage.jsx'))
+const SellerDashboardPage=lazy(()=>loadPage('SellerDashboardPage'))
+const AdminSellerMetricsPage=lazy(()=>loadPage('AdminSellerMetricsPage'))
+const BuyerProfilePage=lazy(()=>loadPage('BuyerProfilePage'))
 import ForgotPassword from './pages/logings/ForgotPassword.jsx'
 import ResetPassword from './pages/logings/ResetPassword.jsx'
-const AdminUserDetailsPage=lazy(()=>import('./pages/AdminUserDetailsPage.jsx'))
+const AdminUserDetailsPage=lazy(()=>loadPage('AdminUserDetailsPage'))
 import PurchasePage from './pages/PurchasePage.jsx'
 import MyPurchasesPage from './pages/MyPurchasesPage.jsx'
 import SellerOrdersPage from './pages/SellerOrdersPage.jsx'
@@ -224,6 +225,12 @@ function Storefront() {
 
 const AnimatedRoutes = () => {
   const location = useLocation()
+
+  useEffect(() => {
+    const events=['pointerover','focusin','touchstart']
+    events.forEach(type=>document.addEventListener(type,preloadLink,{passive:true}))
+    return()=>events.forEach(type=>document.removeEventListener(type,preloadLink))
+  }, [])
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' })
