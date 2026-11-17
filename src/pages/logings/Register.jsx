@@ -67,8 +67,8 @@ const Register = () => {
         <label className="block text-sm font-medium">Email
           <input className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="email" name="email" readOnly={codeSent} autoComplete="email" maxLength={254} required placeholder="Enter your email address" />
         </label>
-        <label className="block text-sm font-medium">Phone number <span className="font-normal text-[#777]">(optional)</span>
-          <input className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="tel" name="phone" autoComplete="tel" maxLength={30} placeholder="+1 (202) 555-0123" />
+        <label className="block text-sm font-medium">Phone number
+          <input className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" type="tel" name="phone" autoComplete="tel" required maxLength={30} placeholder="+1 (202) 555-0123" />
         </label>
         <label className="block text-sm font-medium">Password
           <PasswordInput className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black"  name="password" autoComplete="new-password" minLength={8} required placeholder="Create a password" />
