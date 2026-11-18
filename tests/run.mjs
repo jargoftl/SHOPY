@@ -1,3 +1,4 @@
+import {testAccountRecovery} from './account-recovery-flow.mjs';
 import {testAdminAccess} from './admin-access-flow.mjs';
 import {testEmailLifecycle} from './email-lifecycle-flow.mjs';
 import {testAdminBuyerFunding} from './admin-buyer-funding-flow.mjs';
@@ -38,7 +39,7 @@ pg.Pool.prototype.query=query;
 pg.Pool.prototype.connect=async()=>({query,release(){}});
 pg.Pool.prototype.end=async()=>{};
 // Regression fixtures use isolated accounts, storage and mocked email delivery.
-Object.assign(process.env,{SELLER_VERIFICATION_WORKER:'disabled',DELIVERY_EMAIL_WORKER:'disabled',SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto'});
+Object.assign(process.env,{SELLER_VERIFICATION_WORKER:'disabled',DELIVERY_EMAIL_WORKER:'disabled',SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto',REGISTRATION_EMAIL_VERIFICATION:'disabled'});
 const { ObjectStorage } = await import('../dist-server/storage.js');
 const realPut=ObjectStorage.prototype.put,realGet=ObjectStorage.prototype.get,realVerify=ObjectStorage.prototype.verifyBucket;
 ObjectStorage.prototype.verifyBucket=async()=>{};
@@ -129,10 +130,10 @@ try{
  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify({...sellerForm,email:'incomplete@example.test',storeName:''})});check('seller profile validation still applies',r.status===400,r);
  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify({...sellerForm,email:'invalid-email'})});check('seller email format validation still applies',r.status===400,r);
  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(sellerForm)});check('duplicate seller rejected',r.status===409,r);
- process.env.SELLER_EMAIL_VERIFICATION='required';
+ process.env.REGISTRATION_EMAIL_VERIFICATION='required';
  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify({...sellerForm,email:'required@example.test'})});check('required mode rejects unverified signup',r.status===400,r);
  r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:'required@example.test'})});check('required mode never returns production code or bypass',r.status===503&&!r.data.developmentCode&&r.data.verificationRequired!==false,r);
- process.env.SELLER_EMAIL_VERIFICATION='auto';process.env.BREVO_API_KEY='test-only-placeholder';process.env.EMAIL_FROM='sender@example.test';
+ process.env.REGISTRATION_EMAIL_VERIFICATION='required';process.env.BREVO_API_KEY='test-only-placeholder';process.env.EMAIL_FROM='sender@example.test';
  const actualFetch=globalThis.fetch;let deliveredCode;
  try{
   globalThis.fetch=async(url,options)=>{
@@ -142,7 +143,7 @@ try{
    return actualFetch(url,options);
   };
   const verifiedForm={...sellerForm,email:'verified-seller@example.test'};
-  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(verifiedForm)});check('auto restores verification when email configured',r.status===400,r);
+  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(verifiedForm)});check('explicit required mode enforces verification when mail configured',r.status===400,r);
   r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:verifiedForm.email,fullName:verifiedForm.fullName})});check('configured email sends code without exposing it',r.status===200&&r.data.sent===true&&!r.data.developmentCode&&/^\d{6}$/.test(deliveredCode||''),r);
   const verifiedBrowser=r.cookie;
   r=await req('/api/auth/verify-seller-email-code',{method:'POST',body:JSON.stringify({email:verifiedForm.email,code:deliveredCode})},verifiedBrowser);check('delivered code verifies',r.status===200&&r.data.verified===true,r);
@@ -150,7 +151,7 @@ try{
   // An outage in a configured provider must never downgrade verification to optional.
   globalThis.fetch=async(url,options)=>String(url)==='https://api.brevo.com/v3/smtp/email'?new Response('{}',{status:503}):actualFetch(url,options);
   r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:'outage@example.test'})});check('provider outage does not bypass verification',r.status===503&&r.data.verificationRequired!==false&&!r.data.developmentCode,r);
- }finally{globalThis.fetch=actualFetch;process.env.BREVO_API_KEY='';process.env.EMAIL_FROM='';process.env.SELLER_EMAIL_VERIFICATION='auto'}
+ }finally{globalThis.fetch=actualFetch;process.env.BREVO_API_KEY='';process.env.EMAIL_FROM='';process.env.REGISTRATION_EMAIL_VERIFICATION='disabled'}
  // Logo uploads use the existing image API and private Storage, and failed uploads roll back signup.
  const logoForm={...sellerForm,email:'logo-seller@example.test',storeLogoUpload:{type:'image/png',data:png.toString('base64')}};
  r=await req('/api/auth/register-seller',{method:'POST',body:JSON.stringify(logoForm)});check('seller signup with uploaded logo',r.status===201,r);
@@ -239,6 +240,7 @@ try{
  await testProductionCleanup({req,check,db,cookie,buyer,sellerId});
  await testAdminAccess({req,check,db,cookie,buyer,seller});
  await testAdminBuyerFunding({req,check,db,cookie,buyer,buyerId,seller,sellerId});
+ await testAccountRecovery({req,check,db,cookie,buyer,seller});
  await testEmailLifecycle({req,check,db,cookie,seller,sellerId,sellerForm});
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.
  const storageFetch=globalThis.fetch;

@@ -3,9 +3,9 @@ import {Database} from '../dist-server/database.js'
 import {deliverSellerDeliveryEmails} from '../dist-server/deliveryEmails.js'
 import {deliverApprovalEmails} from '../dist-server/sellerVerification.js'
 export async function testEmailLifecycle({req,check,db,cookie,seller,sellerId,sellerForm}){
- const saved={fetch:globalThis.fetch,key:process.env.BREVO_API_KEY,from:process.env.EMAIL_FROM,verification:process.env.SELLER_EMAIL_VERIFICATION,url:process.env.APP_URL}
+ const saved={fetch:globalThis.fetch,key:process.env.BREVO_API_KEY,from:process.env.EMAIL_FROM,verification:process.env.REGISTRATION_EMAIL_VERIFICATION,url:process.env.APP_URL}
  const accepted=[],attempted=[];let providerWorks=true
- process.env.BREVO_API_KEY='fixture-email-key';process.env.EMAIL_FROM='sender@example.test';process.env.SELLER_EMAIL_VERIFICATION='required';process.env.APP_URL='https://example.test'
+ process.env.BREVO_API_KEY='fixture-email-key';process.env.EMAIL_FROM='sender@example.test';process.env.REGISTRATION_EMAIL_VERIFICATION='required';process.env.APP_URL='https://example.test'
  globalThis.fetch=async(url,options)=>{if(String(url)==='https://api.brevo.com/v3/smtp/email'){const mail=JSON.parse(options.body);attempted.push(mail);if(providerWorks)accepted.push(mail);return new Response('{}',{status:providerWorks?201:503})}return saved.fetch(url,options)}
  const post=(path,body,who,method='POST')=>req(path,{method,headers:{'X-Forwarded-For':'198.51.100.94'},body:JSON.stringify(body)},who)
  const codeFor=email=>attempted.findLast(m=>m.to[0].email===email&&/verification code is \d{6}/.test(m.textContent))?.textContent.match(/verification code is (\d{6})/)[1]
@@ -60,5 +60,5 @@ export async function testEmailLifecycle({req,check,db,cookie,seller,sellerId,se
   providerWorks=true;r=await post(`/api/admin/purchase-sellers/${failedOrder}/${sellerId}/delivery-email`,{},cookie);check('administrator can retry failed delivery email',r.status===200&&r.data.email.status==='sent')
   r=await post(`/api/admin/purchase-sellers/${failedOrder}/${sellerId}/delivery-email`,{},cookie);check('sent delivery email cannot be manually resent',r.status===409)
   r=await req('/api/seller/purchases',{},seller);check('seller dashboard exposes actual delivery email status',r.data.orders.some(o=>o.id===failedOrder&&o.sellers[0].deliveryEmailStatus==='sent'))
- }finally{globalThis.fetch=saved.fetch;for(const [name,key] of [['BREVO_API_KEY','key'],['EMAIL_FROM','from'],['SELLER_EMAIL_VERIFICATION','verification'],['APP_URL','url']]){if(saved[key]===undefined)delete process.env[name];else process.env[name]=saved[key]}}
+ }finally{globalThis.fetch=saved.fetch;for(const [name,key] of [['BREVO_API_KEY','key'],['EMAIL_FROM','from'],['REGISTRATION_EMAIL_VERIFICATION','verification'],['APP_URL','url']]){if(saved[key]===undefined)delete process.env[name];else process.env[name]=saved[key]}}
 }

@@ -7,7 +7,7 @@ export async function testAuthCaptcha({req,check}) {
   r=await post('/api/auth/login',{email:'admin@example.test',password:'long-test-password-123'});check('login succeeds without a puzzle',r.status===200&&r.data.user.role==='admin')
   r=await post('/api/auth/login',{email:'admin@example.test',password:'incorrect'});check('puzzle removal retains password verification',r.status===401)
   r=await post('/api/auth/register',{fullName:'Puzzle-free buyer',email:'no-puzzle@example.test',password:'test-puzzle-free-password'});check('buyer signup succeeds without puzzle while mail unconfigured',r.status===201)
-  process.env.BREVO_API_KEY='test-only-email';process.env.EMAIL_FROM='sender@example.test';process.env.SELLER_EMAIL_VERIFICATION='auto'
+  process.env.BREVO_API_KEY='test-only-email';process.env.EMAIL_FROM='sender@example.test';process.env.REGISTRATION_EMAIL_VERIFICATION='required'
   globalThis.fetch=async(url,options)=>{if(String(url)==='https://api.brevo.com/v3/smtp/email'){const mail=JSON.parse(options.body),match=mail.textContent.match(/verification code is (\d{6})/);if(match)code=match[1];return new Response('{}',{status:201})}return originalFetch(url,options)}
   const account={fullName:'Email Buyer',email:'browser-email@example.test',password:'test-email-password'}
   r=await post('/api/auth/register',account);check('configured mail still requires a verification code',r.status===400)
@@ -17,5 +17,5 @@ export async function testAuthCaptcha({req,check}) {
   r=await post('/api/auth/verify-registration-email-code',{email:account.email,code},browser);check('original browser can verify emailed code without puzzle',r.status===200&&r.data.verified)
   r=await post('/api/auth/register',account);check('verified email cannot be reused by another browser',r.status===400)
   r=await post('/api/auth/register',account,browser);check('verified buyer can register without puzzle',r.status===201)
- }finally{globalThis.fetch=originalFetch;for(const key of ['BREVO_API_KEY','EMAIL_FROM','SELLER_EMAIL_VERIFICATION']){if(old[key]===undefined)delete process.env[key];else process.env[key]=old[key]}}
+ }finally{globalThis.fetch=originalFetch;for(const key of ['BREVO_API_KEY','EMAIL_FROM','REGISTRATION_EMAIL_VERIFICATION']){if(old[key]===undefined)delete process.env[key];else process.env[key]=old[key]}}
 }

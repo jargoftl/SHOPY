@@ -1,3 +1,5 @@
+import {registerAccountRecovery} from './accountRecovery.ts'
+import {registrationEmailRequired as isSellerEmailVerificationRequired} from './registrationPolicy.ts'
 import {loginLocation} from './loginLocation.ts'
 import {registerAdminAccess} from './adminAccess.ts'
 import {prepareSellerSsn} from './sellerSsn.ts'
@@ -16,7 +18,7 @@ import helmet from 'helmet'
 import { rateLimit } from 'express-rate-limit'
 import { createHash, randomBytes, randomInt } from 'node:crypto'
 import { resolve } from 'node:path'
-import { isSellerEmailVerificationRequired, isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
+import { isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
 import { prepareVerificationPhotos, optionalSsnLast4, verificationPhone, uploadVerificationPhotos, insertApplicationPhotos, queuePhotoCleanup, registerSellerVerification, type StoredVerificationPhoto } from './sellerVerification.ts'
 import { registerAuthBrowser, authBrowserBinding } from './authBrowser.ts'
 import { warehousePricing } from './warehousePricing.ts'
@@ -784,7 +786,8 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
         )
       }
     }
-    const emailNotifications = existingAccount ? {userEmailSent:false,adminEmailSent:false} : await sendAuthNotifications(user, 'registered', (await getSiteName()))
+    const emailNotifications = {userEmailSent:false,adminEmailSent:false}
+    if(!existingAccount&&isSellerEmailVerificationRequired())void getSiteName().then(name=>sendAuthNotifications(user,'registered',name)).catch(()=>{})
     return res.status(201).json({ user: publicUser(user), emailNotifications })
   } catch (error: unknown) {
     if (!registrationCommitted && uploadedVerification.length) await queuePhotoCleanup(database, uploadedVerification)
@@ -2222,6 +2225,7 @@ registerReferrals(app,database,requireAuth,requireRole)
 registerReviews(app,database,requireAuth)
 registerAdminBuyerFunding(app,database,requireAuth,requireRole)
 registerAdminAccess(app,database,requireAuth)
+registerAccountRecovery(app,database,requireAuth)
 registerSellerAdminFunding(app,database,requireAuth,requireRole)
 registerSellerDisplayStats(app,database,requireAuth,requireRole)
 registerTransactionPin(app, database, requireAuth, requireRole)
