@@ -31,60 +31,6 @@ button {
   cursor: pointer;
 }
 
-.theme-control {
-  position: fixed;
-  z-index: 45;
-  right: 12px;
-  top: 45%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.theme-control button {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  border: 1px solid #555555;
-  border-radius: 50%;
-  background: #111111;
-  color: white;
-  box-shadow: 0 2px 10px #0003;
-}
-
-.theme-control span {
-  max-width: 150px;
-  padding: 6px;
-  background: #111111;
-  color: white;
-  font-size: 12px;
-}
-
-:root[data-theme='dark'] {
-  color-scheme: dark;
-  color: #e5e5e5;
-  background: #111111;
-}
-
-:root[data-theme='dark'] :is([class~='bg-white'], [class*='bg-white/'], [class*='bg-[#f'], [class*='bg-[#e'], [class*='bg-[#fff'], [class~='bg-gray-50']):not([data-preserve-theme], [data-preserve-theme] *) {
-  background-color: #111111;
-}
-
-:root[data-theme='dark'] :is([class*='text-[#202'], [class*='text-[#1'], [class*='text-[#2'], [class*='text-[#3'], [class*='text-[#4'], [class*='text-[#5'], [class*='text-[#6'], [class*='text-[#7'], [class*='text-[#8'], [class~='text-black']):not([data-preserve-theme], [data-preserve-theme] *, [class*='bg-[#cccccc'], [class*='bg-[#e76'], [class*='bg-[#ff'], [class*='bg-[#67'], [class*='bg-[#74'], [class*='bg-[#52']) {
-  color: #cccccc;
-}
-
-:root[data-theme='dark'] :is(input, select, textarea):not([data-preserve-theme] *) {
-  background-color: #111111;
-  color: #f7f7f7;
-  border-color: #111111;
-}
-
-:root[data-theme='dark'] :is([class*='border-[#d'], [class*='border-[#e'], [class~='border-white']):not([data-preserve-theme], [data-preserve-theme] *) {
-  border-color: #111111;
-}
-
 /* The admin centre uses a neutral light workspace, including legacy embedded controls. */
 .admin-workspace { color:#111; background:#f7f7f7; }
 .admin-workspace :is([class*="bg-[#111111]"],[class*="bg-[#171717]"]) { background-color:#fff !important; color:#111 !important; }

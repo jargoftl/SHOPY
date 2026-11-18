@@ -170,7 +170,7 @@ const ProductDetailPage = () => {
             </fieldset>}
 
             <div className="mt-3 grid grid-cols-2 gap-3">
-              <button type="button" onClick={addSelectedToCart} className="cart-add-button"><ShoppingCart size={16} /> Add to cart</button>
+              <button type="button" onClick={addSelectedToCart} className="cart-add-button"><ShoppingCart size={18} aria-hidden="true" className="shrink-0"/> Add to cart</button>
               <button type="button" onClick={purchaseNow} className="flex min-h-12 items-center justify-center gap-2 bg-[#111111] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#cccccc] hover:text-[#111111] sm:text-sm">Purchase now</button>
             </div>
             {followMessage && <p role="status" className="mt-3 text-xs text-[#555]">{followMessage} {followMessage.includes('Sign in') && <Link to="/login" className="font-semibold underline">Log in</Link>}</p>}

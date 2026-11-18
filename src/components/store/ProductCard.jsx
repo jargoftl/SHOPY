@@ -37,7 +37,7 @@ const ProductCard = ({ product }) => {
       </Link>
       <Link to={`/products/${product.id}#reviews`} className="mb-3 inline-flex min-h-10 items-center gap-1 text-xs underline"><Star size={14}/>Rate & review</Link>
       <button type="button" onClick={() => addItem(product)} className="cart-add-button mt-auto w-full">
-        <ShoppingCart size={17} aria-hidden="true"/> Add to cart
+        <ShoppingCart size={18} aria-hidden="true" className="shrink-0"/> Add to cart
       </button>
     </motion.article>
   )

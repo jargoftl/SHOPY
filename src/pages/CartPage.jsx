@@ -1,6 +1,6 @@
 import SiteName from '../components/SiteName.jsx'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Check, ChevronRight, CreditCard, Headphones, Heart, Minus, PackageCheck, Plus, Search, ShoppingCart, UserRound, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronRight, CreditCard, Headphones, Heart, Minus, PackageCheck, Plus, Search, ShoppingBag, ShoppingCart, UserRound, X } from 'lucide-react'
 import { useCart } from '../context/CartContext.jsx'
 import { calculateOrderTotals } from '../lib/orderTotals.js'
 import '../styles/cart.css'

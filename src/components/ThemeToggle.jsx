@@ -1,20 +1,11 @@
-import { useEffect, useState } from 'react'
-import { Moon, Sun } from 'lucide-react'
-
-export default function ThemeToggle() {
-  const [preference, setPreference] = useState(() => {
-    try { return { theme: window.localStorage.getItem('shopfy-theme') === 'dark' ? 'dark' : 'light', storageError: false } }
-    catch { return { theme: 'light', storageError: true } }
-  })
-  const { theme, storageError } = preference
-  useEffect(() => { document.documentElement.dataset.theme = theme }, [theme])
-  const toggle = () => {
-    const next = theme === 'light' ? 'dark' : 'light'
-    try { window.localStorage.setItem('shopfy-theme', next); setPreference({ theme: next, storageError: false }) }
-    catch { setPreference({ theme: next, storageError: true }) }
-  }
-  return <div className="theme-control">
-    <button type="button" onClick={toggle} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
-    {storageError && <span role="status">Theme cannot be saved in this browser.</span>}
-  </div>
+import {useEffect,useRef,useState} from 'react'
+import {Palette,Check,X} from 'lucide-react'
+import {siteThemes,readSiteTheme,applySiteTheme} from '../lib/siteTheme.js'
+export default function ThemeToggle(){
+ const [theme,setTheme]=useState(readSiteTheme),[open,setOpen]=useState(false),[storageError,setStorageError]=useState(false)
+ const control=useRef(null)
+ useEffect(()=>{applySiteTheme(theme)},[theme])
+ useEffect(()=>{if(!open)return;const outside=e=>{if(!control.current?.contains(e.target))setOpen(false)},escape=e=>{if(e.key==='Escape'){setOpen(false);control.current?.querySelector('button')?.focus()}};document.addEventListener('pointerdown',outside);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape)}},[open])
+ const choose=value=>{setTheme(applySiteTheme(value));try{localStorage.setItem('shopfy-theme',value);setStorageError(false)}catch{setStorageError(true)}}
+ return <div className="theme-control" ref={control}><button type="button" className="theme-trigger" aria-label="Choose website colors" aria-expanded={open} aria-controls="website-theme-picker" onClick={()=>setOpen(v=>!v)}><Palette size={20}/></button>{open&&<section id="website-theme-picker" className="theme-panel" aria-label="Website colors"><div className="theme-panel-heading"><div><h2>Your colors</h2><p>A fresh look, your way.</p></div><button type="button" className="theme-close" aria-label="Close color selector" onClick={()=>setOpen(false)}><X size={17}/></button></div><fieldset><legend className="sr-only">Choose a color theme</legend>{siteThemes.map(item=><label key={item.id} className={`theme-option ${theme===item.id?'theme-option-selected':''}`} style={{'--swatch':item.accent,'--swatch-soft':item.soft}}><input type="radio" name="website-theme" value={item.id} checked={theme===item.id} onChange={()=>choose(item.id)}/><span className="theme-swatch" aria-hidden="true"/><span className="theme-option-name">{item.name}</span>{theme===item.id&&<Check size={17} aria-hidden="true"/>}</label>)}</fieldset>{storageError&&<p role="status" className="theme-storage-note">Colors apply now but cannot be saved in this browser.</p>}</section>}</div>
 }

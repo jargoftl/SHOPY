@@ -1,3 +1,4 @@
+import {ShoppingCart} from 'lucide-react'
 const SuperAdminPage=lazy(()=>loadPage('SuperAdminPage'))
 import {loadPage,preloadLink} from './lib/pagePreload.js'
 import ContentPlaceholder from './components/ContentPlaceholder.jsx'
@@ -203,9 +204,9 @@ function Storefront() {
                   <button
                     type="button"
                     onClick={() => setBagCount((count) => count + 1)}
-                    className="mt-4 w-full border border-[#cccccc] py-2.5 text-xs font-bold transition-colors hover:border-[#111111] hover:bg-[#111111] hover:text-white sm:text-sm"
+                    className="cart-add-button mt-4 w-full border border-[#cccccc] py-2.5 text-xs font-bold transition-colors hover:border-[#111111] hover:bg-[#111111] hover:text-white sm:text-sm"
                   >
-                    Add to bag
+                    <ShoppingCart size={18} aria-hidden="true" /> Add to cart
                   </button>
                 </article>
               ))}
