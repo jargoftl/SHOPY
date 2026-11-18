@@ -1,4 +1,5 @@
 const loaders = {
+ SuperAdminPage:()=>import('../pages/SuperAdminPage.jsx'),
  AdminPage:()=>import('../pages/AdminPage.jsx'),
  AdminUserDetailsPage:()=>import('../pages/AdminUserDetailsPage.jsx'),
  AdminSellerMetricsPage:()=>import('../pages/AdminSellerMetricsPage.jsx'),
@@ -21,6 +22,7 @@ export function loadPage(name) {
 export function pageForPath(path) {
  if(/^\/admin\/users\/[^/]+\/?$/.test(path))return 'AdminUserDetailsPage'
  if(path==='/admin/seller-metrics')return 'AdminSellerMetricsPage'
+ if(path==='/super-admin')return 'SuperAdminPage'
  if(path==='/admin')return 'AdminPage'
  if(/^\/profile(?:\/[^/]+)?\/?$/.test(path))return 'BuyerProfilePage'
  if(path==='/messages')return 'MessageCenterPage'

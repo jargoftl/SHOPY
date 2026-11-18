@@ -17,7 +17,7 @@ const Login = () => {
     let active = true
     apiRequest('/api/auth/me', { background: true })
       .then(({ user }) => {
-        if (active) navigate(user.role === 'admin' ? '/admin' : user.role === 'seller' ? '/seller' : '/profile', { replace: true })
+        if (active) navigate(user.isSuperAdmin ? '/super-admin' : user.role === 'admin' ? '/admin' : user.role === 'seller' ? '/seller' : '/profile', { replace: true })
       })
       .catch((error) => { if (active && error.status !== 401) setMessage(error.message) })
       .finally(() => { if (active) setIsCheckingSession(false) })
@@ -35,7 +35,7 @@ const Login = () => {
         method: 'POST',
         body: JSON.stringify({ email: formData.get('email'), password: formData.get('password') }),
       })
-      navigate(user.role === 'admin' ? '/admin' : user.role === 'seller' ? '/seller' : '/profile')
+      navigate(user.isSuperAdmin ? '/super-admin' : user.role === 'admin' ? '/admin' : user.role === 'seller' ? '/seller' : '/profile')
     } catch (error) {
 
       setMessage(error.message)

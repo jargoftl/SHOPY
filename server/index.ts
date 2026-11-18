@@ -1,3 +1,5 @@
+import {loginLocation} from './loginLocation.ts'
+import {registerAdminAccess} from './adminAccess.ts'
 import {prepareSellerSsn} from './sellerSsn.ts'
 import {registerDeliveryEmails} from './deliveryEmails.ts'
 import {registerAdminBuyerFunding} from './adminBuyerFunding.ts'
@@ -37,6 +39,7 @@ interface UserRow {
   email: string
   phone: string | null
   password_hash: string
+  is_super_admin: number
   role: UserRole
   suspended: number
   seller_status: string
@@ -97,6 +100,9 @@ interface AdminSellerRow extends Pick<UserRow, 'id' | 'public_id' | 'full_name' 
 }
 
 interface AdminEventRow {
+  ip_address: string
+  location: string
+  location_source: string
   publicId: string
   id: number
   event_type: 'registered' | 'login'
@@ -301,6 +307,7 @@ const publicUser = (user: UserRow) => ({
   email: user.email,
   phone: user.phone,
   role: user.role,
+  isSuperAdmin: Boolean(user.is_super_admin),
   sellerStatus: user.seller_status || 'none',
   createdAt: user.created_at,
 })
@@ -803,7 +810,8 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
     if (req.body.loginType === 'seller' && !['seller', 'admin'].includes(currentUser.role) && !['pending','rejected','needs_changes'].includes(currentUser.seller_status)) return res.status(403).json({ error: 'This account is not a seller account. Use customer login instead.' })
 
     await createSession(currentUser.id, req, res)
-    await database.prepare('INSERT INTO auth_events (user_id, event_type) VALUES (?, ?)').run(currentUser.id, 'login')
+    const location=loginLocation(req)
+    await database.prepare('INSERT INTO auth_events (user_id,event_type,ip_address,location,location_source) VALUES (?,?,?,?,?)').run(currentUser.id,'login',location.ip,location.location,location.source)
     const emailNotifications = await sendAuthNotifications(currentUser, 'login', (await getSiteName()))
     return res.json({ user: publicUser(currentUser), emailNotifications })
   } catch (error: unknown) {
@@ -2189,7 +2197,7 @@ app.patch('/api/admin/sellers/:id/stats', requireAuth, requireRole('admin'), asy
 
 app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res) => {
   const events = (await getRows<AdminEventRow>(`
-    SELECT auth_events.id, auth_events.event_type, auth_events.created_at,
+    SELECT auth_events.id, auth_events.event_type, auth_events.created_at, auth_events.ip_address, auth_events.location, auth_events.location_source,
       users.id AS user_id, users.public_id AS publicId, users.full_name, users.email
     FROM auth_events
     JOIN users ON users.id = auth_events.user_id
@@ -2198,6 +2206,9 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
   `)).map((event) => ({
     id: event.id,
     type: event.event_type,
+    ipAddress: event.ip_address,
+    location: event.location,
+    locationSource: event.location_source,
     createdAt: event.created_at,
     userId: event.user_id,
     publicId: event.publicId,
@@ -2210,6 +2221,7 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
 registerReferrals(app,database,requireAuth,requireRole)
 registerReviews(app,database,requireAuth)
 registerAdminBuyerFunding(app,database,requireAuth,requireRole)
+registerAdminAccess(app,database,requireAuth)
 registerSellerAdminFunding(app,database,requireAuth,requireRole)
 registerSellerDisplayStats(app,database,requireAuth,requireRole)
 registerTransactionPin(app, database, requireAuth, requireRole)

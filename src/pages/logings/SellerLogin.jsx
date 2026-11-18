@@ -17,7 +17,7 @@ const SellerLogin = () => {
     let active = true
     apiRequest('/api/auth/me', { background: true })
       .then(({ user }) => {
-        if (active && ['seller', 'admin'].includes(user.role)) navigate(user.role === 'admin' ? '/admin' : '/seller', { replace: true })
+        if (active && ['seller', 'admin'].includes(user.role)) navigate(user.isSuperAdmin ? '/super-admin' : user.role === 'admin' ? '/admin' : '/seller', { replace: true })
         else if (active && ['pending','rejected','needs_changes'].includes(user.sellerStatus)) navigate('/seller/application', {replace:true})
       })
       .catch((error) => { if (active && error.status !== 401) setMessage(error.message) })
@@ -41,7 +41,7 @@ const SellerLogin = () => {
         setMessage('This account is not a seller account. Create a seller account or use customer login.')
         return
       }
-      navigate(user.role === 'admin' ? '/admin' : '/seller', { replace: true })
+      navigate(user.isSuperAdmin ? '/super-admin' : user.role === 'admin' ? '/admin' : '/seller', { replace: true })
     } catch (error) {
 
       setMessage(error.message)

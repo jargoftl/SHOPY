@@ -1,3 +1,4 @@
+import {testAdminAccess} from './admin-access-flow.mjs';
 import {testEmailLifecycle} from './email-lifecycle-flow.mjs';
 import {testAdminBuyerFunding} from './admin-buyer-funding-flow.mjs';
 import {testProductionCleanup} from './production-cleanup-flow.mjs';
@@ -236,6 +237,7 @@ try{
  await testReviewsMobile({req,check,db,cookie,buyer,buyerId,seller,sellerId,sellerForm});
  await testReferrals({req,check,db,cookie,seller,sellerId,buyer,sellerForm});
  await testProductionCleanup({req,check,db,cookie,buyer,sellerId});
+ await testAdminAccess({req,check,db,cookie,buyer,seller});
  await testAdminBuyerFunding({req,check,db,cookie,buyer,buyerId,seller,sellerId});
  await testEmailLifecycle({req,check,db,cookie,seller,sellerId,sellerForm});
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.

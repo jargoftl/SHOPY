@@ -171,3 +171,19 @@ No new required email environment variables are needed beyond the configured pro
 ### Seller SSN storage
 Full SSNs are optional and US-only, encrypted with AES-256-GCM. Set `SSN_ENCRYPTION_KEY` on Render to a unique 64-character hexadecimal secret generated with `openssl rand -hex 32`. Keep this key out of Git, email, and screenshots; retain a secure backup. Changing or losing it prevents decryption of existing records. Leave it unset to reject full-SSN collection while continuing to accept applications without an SSN. Existing last-four-only records stay last-four-only.
 Admins can reveal a stored number through the applicant review panel. The protected POST endpoint records an `ssn_viewed` audit event without recording the number and returns a non-cacheable response. The UI hides it after 30 seconds. SSNs are self-reported, not automatically verified; they do not replace the required ID review. Run `npm run build:api` then `node --test tests/seller-ssn.test.mjs` to check encryption and tamper rejection.
+
+### Client super-admin handover
+The existing `admin` role keeps its normal dashboard permissions. The additional `users.is_super_admin` flag permits access to `/super-admin`. Public registration and regular admin endpoints cannot grant this flag. No existing account is automatically promoted.
+After the client registers and verifies their account, a trusted database owner can run the following **once** in Supabase SQL Editor, replacing the email with the exact client account:
+
+```sql
+UPDATE shop.users
+SET role = 'admin', is_super_admin = 1
+WHERE email = 'CLIENT-EXACT-EMAIL-HERE'
+  AND suspended = 0
+RETURNING id, email, role, is_super_admin;
+```
+Confirm exactly one expected account is returned. The client then signs out and back in and opens `/super-admin` (also linked from Admin → Manage admins). They can search an existing account by exact email or public ID, grant/revoke regular admin access, and confirm each change with their own password. Access changes are audited and revoke all sessions of the changed account. Approved sellers revert to seller access when admin permission is removed; other accounts revert to buyer access. Super-admin accounts cannot be demoted through this screen, protecting the last owner. Ownership changes still require a trusted database owner. Never grant this flag to the ordinary support/admin team.
+
+### Login network records
+Successful buyer, seller and admin sign-ins record the network IP and hosting-proxy country/region/city metadata when available. Admin → Account activity shows these fields. No extra location lookup or third-party request delays sign-in. Proxy-reported locations are approximate, may reflect VPN/proxy routing, and are never used to verify identity or authorize access. Missing metadata and historical records show “Location unavailable”; no city is fabricated. Access to event records remains admin-only.

@@ -1,3 +1,4 @@
+const SuperAdminPage=lazy(()=>loadPage('SuperAdminPage'))
 import {loadPage,preloadLink} from './lib/pagePreload.js'
 import ContentPlaceholder from './components/ContentPlaceholder.jsx'
 const SellerFinancePage=lazy(()=>loadPage('SellerFinancePage'))
@@ -259,6 +260,7 @@ const AnimatedRoutes = () => {
             <Route path="/profile/:section?" element={<BuyerProfilePage />} />
             <Route path="/seller/application" element={<SellerApplicationPage />} />
             <Route path="/seller/login" element={<SellerLogin />} />
+            <Route path="/super-admin" element={<SuperAdminPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/admin/users/:userId" element={<AdminUserDetailsPage />} />
             <Route path="/admin/seller-metrics" element={<AdminSellerMetricsPage />} />
