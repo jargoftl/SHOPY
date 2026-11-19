@@ -17,7 +17,7 @@
     "preview": "vite preview",
     "start": "npm run start:api",
     "migrate:sqlite": "node --experimental-sqlite dist-server/migrate.js",
-    "test": "npm run test:unit && npm run build && node --test tests/database-tls.test.mjs tests/warehouse-catalog.test.mjs tests/marketing-pricing.test.mjs tests/verification-storage.test.mjs tests/login-location.test.mjs && node --experimental-sqlite tests/run.mjs",
+    "test": "npm run test:unit && npm run build && node --test tests/database-tls.test.mjs tests/warehouse-catalog.test.mjs tests/marketing-pricing.test.mjs tests/verification-storage.test.mjs tests/login-location.test.mjs tests/store-date-format.test.mjs && node --experimental-sqlite tests/run.mjs",
     "test:unit": "node --test tests/money.test.mjs tests/cart-orders.test.mjs tests/order-totals.test.mjs tests/billing-defaults.test.mjs tests/wallet-modal.test.mjs tests/api-read-coalescing.test.mjs tests/delivery-estimate.test.mjs tests/identity-cache.test.mjs tests/site-theme.test.mjs"
   },
   "dependencies": {

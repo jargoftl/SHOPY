@@ -1,3 +1,4 @@
+import StoreDates from '../components/StoreDates.jsx'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import ReviewsPanel from '../components/ReviewsPanel.jsx'
 import { notifyFollowedStoresUpdated } from '../lib/buyerEvents.js'
@@ -122,6 +123,7 @@ const PartnerStorePage = () => {
             </div>
           </div>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-white/85">{store.storeDescription || `A curated collection from ${store.ownerName}.`}</p>
+          <StoreDates storeCreatedAt={store.storeCreatedAt} establishedOn={store.establishedOn}/>
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs text-white/80">
             <span>Curated by {store.ownerName}</span>
             <span>{products.length} products</span>

@@ -1,3 +1,4 @@
+import {registerStoreDates} from './storeDates.ts'
 import {registerAccountRecovery} from './accountRecovery.ts'
 import {registrationEmailRequired as isSellerEmailVerificationRequired} from './registrationPolicy.ts'
 import {loginLocation} from './loginLocation.ts'
@@ -959,9 +960,11 @@ app.get('/api/stores/:sellerId', async (req, res) => {
     logo_url: string
     follower_count: number
     visitor_count: number
+    storeCreatedAt: string
+    establishedOn: string | null
   }>(`
     SELECT users.id AS user_id, users.public_id AS publicId, users.full_name, seller_profiles.store_name,
-      seller_profiles.store_description, seller_profiles.logo_url,
+      seller_profiles.store_description, seller_profiles.logo_url, seller_profiles.created_at AS "storeCreatedAt",seller_profiles.established_on::text AS "establishedOn",
       seller_profiles.follower_count + (SELECT COUNT(*) FROM store_follows WHERE seller_id = users.id) AS follower_count,
       seller_profiles.visitor_count
     FROM seller_profiles
@@ -1000,6 +1003,8 @@ app.get('/api/stores/:sellerId', async (req, res) => {
       ownerName: store.full_name,
       followerCount: store.follower_count,
       visitorCount: store.visitor_count,
+      storeCreatedAt: store.storeCreatedAt,
+      establishedOn: store.establishedOn,
     },
     products,
   })
@@ -2226,6 +2231,7 @@ registerReviews(app,database,requireAuth)
 registerAdminBuyerFunding(app,database,requireAuth,requireRole)
 registerAdminAccess(app,database,requireAuth)
 registerAccountRecovery(app,database,requireAuth)
+registerStoreDates(app,database,requireAuth)
 registerSellerAdminFunding(app,database,requireAuth,requireRole)
 registerSellerDisplayStats(app,database,requireAuth,requireRole)
 registerTransactionPin(app, database, requireAuth, requireRole)
