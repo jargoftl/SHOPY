@@ -1,3 +1,4 @@
+import {testAccountDeletion} from './account-delete-flow.mjs';
 import {testStoreDates} from './store-dates-flow.mjs';
 import {testAccountRecovery} from './account-recovery-flow.mjs';
 import {testAdminAccess} from './admin-access-flow.mjs';
@@ -242,6 +243,7 @@ try{
  await testAdminAccess({req,check,db,cookie,buyer,seller});
  await testAdminBuyerFunding({req,check,db,cookie,buyer,buyerId,seller,sellerId});
  await testStoreDates({req,check,db,cookie,buyer,seller,sellerId});
+ await testAccountDeletion({req,check,db,cookie,buyer,seller,sellerId});
  await testAccountRecovery({req,check,db,cookie,buyer,seller});
  await testEmailLifecycle({req,check,db,cookie,seller,sellerId,sellerForm});
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.

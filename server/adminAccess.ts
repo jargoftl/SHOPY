@@ -13,7 +13,7 @@ export function registerAdminAccess(app:Express,db:Database,auth:RequestHandler)
  app.get('/api/admin/access',auth,owner,async(req,res)=>{
   const search=typeof req.query.search==='string'?req.query.search.trim().slice(0,254):''
   const accounts=await db.prepare(`SELECT id,public_id AS "publicId",full_name AS "fullName",email,role,is_super_admin AS "isSuperAdmin",suspended FROM users
-    WHERE role='admin' OR (?<>'' AND (lower(email)=lower(?) OR public_id=?)) ORDER BY is_super_admin DESC,id LIMIT 100`).all(search,search,search.replace(/^#/,''))
+    WHERE deleted_at IS NULL AND (role='admin' OR (?<>'' AND (lower(email)=lower(?) OR public_id=?))) ORDER BY is_super_admin DESC,id LIMIT 100`).all(search,search,search.replace(/^#/,''))
   const history=await db.prepare(`SELECT h.id,h.action,h.details,h.created_at AS "createdAt",u.email AS "targetEmail",a.email AS "adminEmail" FROM account_admin_history h JOIN users u ON u.id=h.user_id JOIN users a ON a.id=h.admin_id WHERE h.action IN ('admin_granted','admin_removed') ORDER BY h.id DESC LIMIT 100`).all()
   res.json({accounts,history})
  })

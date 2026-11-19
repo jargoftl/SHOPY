@@ -1,3 +1,4 @@
+import {registerAccountDeletion} from './accountDeletion.ts'
 import {registerStoreDates} from './storeDates.ts'
 import {registerAccountRecovery} from './accountRecovery.ts'
 import {registrationEmailRequired as isSellerEmailVerificationRequired} from './registrationPolicy.ts'
@@ -43,6 +44,7 @@ interface UserRow {
   phone: string | null
   password_hash: string
   is_super_admin: number
+  deleted_at: string | null
   role: UserRole
   suspended: number
   seller_status: string
@@ -84,7 +86,7 @@ interface CategoryRow {
   name: string
 }
 
-interface AdminUserRow extends Pick<UserRow, 'id' | 'public_id' | 'full_name' | 'email' | 'phone' | 'role' | 'created_at'> {}
+interface AdminUserRow extends Pick<UserRow, 'id' | 'public_id' | 'full_name' | 'email' | 'phone' | 'role' | 'created_at' | 'deleted_at'> {}
 
 interface AdminSellerRow extends Pick<UserRow, 'id' | 'public_id' | 'full_name' | 'email' | 'phone' | 'created_at'> {
   publicId: string
@@ -437,7 +439,7 @@ const requireAuth: RequestHandler = async (req, res, next) => {
     clearSessionCookie(req, res)
     return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
   }
-  if (session.suspended) {
+  if (session.suspended || session.deleted_at) {
     clearSessionCookie(req, res)
     return res.status(403).json({ error: 'Your account is suspended. Contact the administrator.' })
   }
@@ -810,7 +812,7 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
       return res.status(401).json({ error: 'Email or password is incorrect.' })
     }
     const currentUser = (await getRow<UserRow>('SELECT * FROM users WHERE id = ?', user.id))
-    if (!currentUser || currentUser.suspended) return res.status(403).json({ error: 'Your account is suspended. Contact the administrator.' })
+    if (!currentUser || currentUser.suspended || currentUser.deleted_at) return res.status(403).json({ error: 'Your account is suspended. Contact the administrator.' })
     if (req.body.loginType === 'seller' && !['seller', 'admin'].includes(currentUser.role) && !['pending','rejected','needs_changes'].includes(currentUser.seller_status)) return res.status(403).json({ error: 'This account is not a seller account. Use customer login instead.' })
 
     await createSession(currentUser.id, req, res)
@@ -1459,9 +1461,10 @@ app.patch('/api/admin/users/:id/rewards', requireAuth, requireRole('admin'), asy
   if (!Number.isSafeInteger(userId) || userId < 1 || !Number.isSafeInteger(adjustmentUnits) || adjustmentUnits === 0 || !reason || reason.length > 500) {
     return res.status(400).json({ error: 'Enter a valid reward adjustment and a reason (up to 500 characters).' })
   }
-  const user = (await getRow<{ role: UserRole }>("SELECT role FROM users WHERE id = ? AND role IN ('customer', 'seller')", userId))
+  const user = (await getRow<{ role: UserRole }>("SELECT role FROM users WHERE id = ? AND deleted_at IS NULL AND role IN ('customer', 'seller')", userId))
   if (!user) return res.status(404).json({ error: 'Account not found.' })
   const balanceUnits = (await database.transaction(async () => {
+    if(!await getRow('SELECT id FROM users WHERE id=? AND deleted_at IS NULL',userId))return null
     const balance = (await getRow<{ balance_units: number }>('SELECT balance_units FROM reward_balances WHERE user_id = ?', userId))?.balance_units ?? 0
     const next = balance + adjustmentUnits
     const held=(await getRow<{amount:number}>('SELECT amount_cents AS amount FROM buyer_wallet_holds WHERE user_id=?',userId))?.amount||0
@@ -1895,7 +1898,7 @@ app.get('/api/admin/receipts/:id', requireAuth, requireRole('admin'), async (req
 app.get('/api/admin/buyers', requireAuth, requireRole('admin'), async (_req, res) => {
   const buyers = (await Promise.all((await getRows<{ id: number, fullName: string, email: string, phone: string | null, createdAt: string, balanceCents: number }>(`
     SELECT u.id, u.public_id AS publicId, u.full_name AS fullName, u.email, u.phone, u.created_at AS createdAt, COALESCE(w.balance_units, 0) AS balanceCents
-    FROM users u LEFT JOIN reward_balances w ON w.user_id = u.id WHERE u.role = 'customer' ORDER BY u.id DESC
+    FROM users u LEFT JOIN reward_balances w ON w.user_id = u.id WHERE u.role = 'customer' AND u.deleted_at IS NULL ORDER BY u.id DESC
   `)).map(async (buyer) => ({ ...buyer, visits: (await buyerVisits(buyer.id)), addresses: (await buyerAddresses(buyer.id)) }))))
   const requests = (await walletRequests())
   return res.json({ buyers, requests })
@@ -1910,7 +1913,7 @@ app.patch('/api/admin/buyers/:id/balance', requireAuth, requireRole('admin'), as
     return res.status(400).json({ error: 'Enter a valid manual wallet balance and a reason (up to 500 characters).' })
   }
   const newBalance=await database.transaction(async()=>{
-    const wallet=await getRow<{balance_cents:number}>("SELECT COALESCE(w.balance_units,0) AS balance_cents FROM users u LEFT JOIN reward_balances w ON w.user_id=u.id WHERE u.id=? AND u.role='customer'",userId)
+    const wallet=await getRow<{balance_cents:number}>("SELECT COALESCE(w.balance_units,0) AS balance_cents FROM users u LEFT JOIN reward_balances w ON w.user_id=u.id WHERE u.id=? AND u.role='customer' AND u.deleted_at IS NULL",userId)
     if(!wallet)return null
     const next=isAdjustment?wallet.balance_cents+adjustmentCents:balanceCents
     const held=(await getRow<{amount:number}>('SELECT amount_cents AS amount FROM buyer_wallet_holds WHERE user_id=?',userId))?.amount||0
@@ -1965,7 +1968,7 @@ app.patch('/api/admin/buyer-requests/:id',requireAuth,requireRole('admin'),async
 
 app.get('/api/admin/users', requireAuth, requireRole('admin'), async (_req, res) => {
   const users = (await getRows<AdminUserRow>(`
-    SELECT id, public_id, full_name, email, phone, role, created_at
+    SELECT id, public_id, full_name, email, phone, role, created_at, deleted_at
     FROM users ORDER BY id
   `)).map((user) => ({
     id: user.id,
@@ -1975,6 +1978,7 @@ app.get('/api/admin/users', requireAuth, requireRole('admin'), async (_req, res)
     phone: user.phone,
     role: user.role,
     createdAt: user.created_at,
+    deletedAt: user.deleted_at,
   }))
   return res.json({ users })
 })
@@ -1982,8 +1986,8 @@ app.get('/api/admin/users', requireAuth, requireRole('admin'), async (_req, res)
 app.get('/api/admin/users/:id/details', requireAuth, requireRole('admin'), async (req, res) => {
   const userId = Number(req.params.id)
   if (!Number.isSafeInteger(userId) || userId < 1) return res.status(404).json({ error: 'User not found.' })
-  const user = (await getRow<{ id: number, fullName: string, email: string, phone: string | null, role: UserRole, suspended: number, createdAt: string }>(`
-    SELECT id, public_id AS publicId, full_name AS fullName, email, phone, role, suspended, created_at AS createdAt FROM users WHERE id = ?
+  const user = (await getRow<{ id: number, fullName: string, email: string, phone: string | null, role: UserRole, suspended: number, createdAt: string, deletedAt: string | null, isSuperAdmin:number }>(`
+    SELECT id, public_id AS publicId, full_name AS fullName, email, phone, role, suspended, created_at AS createdAt, deleted_at AS deletedAt,is_super_admin AS isSuperAdmin FROM users WHERE id = ?
   `, userId))
   if (!user) return res.status(404).json({ error: 'User not found.' })
   const wallet = (await getRow<{ balanceCents: number }>('SELECT balance_units AS balanceCents FROM reward_balances WHERE user_id = ?', userId)) ?? { balanceCents: 0 }
@@ -2017,14 +2021,18 @@ app.patch('/api/admin/users/:id/suspension', requireAuth, requireRole('admin'), 
   const { suspended } = req.body
   const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : ''
   if (!Number.isSafeInteger(userId) || userId < 1 || typeof suspended !== 'boolean' || !reason || reason.length > 500) return res.status(400).json({ error: 'Provide a valid account status and reason (up to 500 characters).' })
-  const user = (await getRow<{ role: UserRole, suspended: number }>('SELECT role, suspended FROM users WHERE id = ?', userId))
+  const user = (await getRow<{ role: UserRole, suspended: number, deleted_at: string|null }>('SELECT role, suspended,deleted_at FROM users WHERE id = ?', userId))
+  if(user?.deleted_at)return res.status(409).json({error:'Deleted accounts cannot be restored through suspension controls.'})
   if (!user || user.role === 'admin') return res.status(404).json({ error: 'User not found or admin accounts cannot be suspended.' })
   if (Boolean(user.suspended) === suspended) return res.status(409).json({ error: 'The account already has that status.' })
-  await database.transaction(async () => {
-    await database.prepare('UPDATE users SET suspended = ? WHERE id = ?').run(suspended ? 1 : 0, userId)
+  const updated=await database.transaction(async () => {
+    const changed=await database.prepare('UPDATE users SET suspended = ? WHERE id = ? AND deleted_at IS NULL').run(suspended ? 1 : 0, userId)
+    if(!changed.changes)return false
     if (suspended) await database.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId)
     await database.prepare('INSERT INTO account_admin_history (user_id, admin_id, action, details) VALUES (?, ?, ?, ?)').run(userId, req.user!.id, suspended ? 'Suspended' : 'Restored', reason)
+    return true
   })()
+  if(!updated)return res.status(409).json({error:'Account was deleted. Reload the page.'})
   return res.json({ suspended })
 })
 
@@ -2049,7 +2057,7 @@ app.patch('/api/admin/users/:id/role', requireAuth, requireRole('admin'), async 
   }
   const candidate = await getRow<{role: string, seller_status: string}>('SELECT role,seller_status FROM users WHERE id=?', userId)
   if (role === 'seller' && candidate && candidate.role !== 'seller' && candidate.seller_status !== 'approved') return res.status(409).json({error:'Approve this user’s seller verification application before granting seller access.'})
-  const result = (await database.prepare('UPDATE users SET role = ? WHERE id = ? AND role != ?').run(role, userId, 'admin'))
+  const result = (await database.prepare('UPDATE users SET role = ? WHERE id = ? AND role != ? AND deleted_at IS NULL').run(role, userId, 'admin'))
   if (!result.changes) return res.status(404).json({ error: 'User not found or the admin role cannot be changed here.' })
   if (role === 'customer') await database.prepare('INSERT OR IGNORE INTO buyer_wallets (user_id, balance_cents) VALUES (?, 0)').run(userId)
   return res.json({ ok: true })
@@ -2232,6 +2240,7 @@ registerAdminBuyerFunding(app,database,requireAuth,requireRole)
 registerAdminAccess(app,database,requireAuth)
 registerAccountRecovery(app,database,requireAuth)
 registerStoreDates(app,database,requireAuth)
+registerAccountDeletion(app,database,requireAuth)
 registerSellerAdminFunding(app,database,requireAuth,requireRole)
 registerSellerDisplayStats(app,database,requireAuth,requireRole)
 registerTransactionPin(app, database, requireAuth, requireRole)

@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS users (
     role TEXT NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'seller', 'admin')),
     created_at TEXT NOT NULL DEFAULT to_char(timezone('UTC', now()), 'YYYY-MM-DD HH24:MI:SS')
   , suspended BIGINT NOT NULL DEFAULT 0 CHECK (suspended IN (0, 1)));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_by BIGINT REFERENCES users(id);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BIGINT NOT NULL DEFAULT 0 CHECK(is_super_admin IN (0,1) AND (is_super_admin=0 OR role='admin'));
 ALTER TABLE users ADD COLUMN IF NOT EXISTS seller_status TEXT NOT NULL DEFAULT 'none' CHECK(seller_status IN ('none','pending','approved','rejected','needs_changes'));
 UPDATE users SET seller_status='approved' WHERE role='seller' AND seller_status='none';

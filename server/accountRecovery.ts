@@ -9,7 +9,7 @@ export function registerAccountRecovery(app:Express,db:Database,auth:RequestHand
   const email=typeof req.body?.email==='string'?req.body.email.trim().toLowerCase():''
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254)return res.status(400).json({error:'Enter a valid email address.'})
   await db.transaction(async()=>{
-   const user=await db.prepare('SELECT id FROM users WHERE email=?').get(email) as {id:number}|undefined
+   const user=await db.prepare('SELECT id FROM users WHERE email=? AND deleted_at IS NULL').get(email) as {id:number}|undefined
    if(!user)return
    const previous=await db.prepare('SELECT requested_at FROM account_recovery_requests WHERE user_id=?').get(user.id) as {requested_at:string}|undefined
    if(previous&&Date.now()-Date.parse(previous.requested_at)<60*60*1000)return
@@ -34,7 +34,7 @@ export function registerAccountRecovery(app:Express,db:Database,auth:RequestHand
   const token=randomBytes(32).toString('hex'),hash=createHash('sha256').update(token).digest('hex'),expiresAt=new Date(Date.now()+30*60*1000).toISOString()
   const result=await db.transaction(async()=>{
    const current=await db.prepare('SELECT role,is_super_admin,password_hash,suspended FROM users WHERE id=?').get(req.user!.id) as {role:string,is_super_admin:number,password_hash:string,suspended:number}
-   const user=await db.prepare('SELECT role,is_super_admin FROM users WHERE id=?').get(id) as {role:string,is_super_admin:number}|undefined
+   const user=await db.prepare('SELECT role,is_super_admin FROM users WHERE id=? AND deleted_at IS NULL').get(id) as {role:string,is_super_admin:number}|undefined
    if(current.role!=='admin'||current.suspended||current.password_hash!==actor.password_hash)return 403
    if(!user)return 404
    // Regular admins can recover buyers/sellers. Admin recovery belongs to the owner.
