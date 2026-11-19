@@ -33,6 +33,8 @@ const SellerPage = () => {
   const [categories, setCategories] = useState([])
   const [editingProduct, setEditingProduct] = useState(null)
   const [showWarehouse, setShowWarehouse] = useState(false)
+  const [catalogSearch,setCatalogSearch]=useState('')
+  const [catalogLimit,setCatalogLimit]=useState(24)
   const [newCategory, setNewCategory] = useState('')
   const [productForm, setProductForm] = useState({ name: '', category: '', price: '', compareAtPrice: '', imageUrl: '', imageUrls: [], description: '', isPublished: true })
   const [message, setMessage] = useState(location.state?.welcome || '')
@@ -52,7 +54,7 @@ const SellerPage = () => {
         if (['pending','rejected','needs_changes'].includes(account.sellerStatus) && account.role==='customer') { navigate('/seller/application',{replace:true}); return }
         if (!['seller', 'admin'].includes(account.role)) {
           if (isCurrent) {
-            setMessage('store access is not enabled for this account. Ask the store admin to promote your account.')
+            setMessage('Store access is not enabled. Check your application status or contact support.')
             setIsLoading(false)
           }
           return
@@ -146,7 +148,7 @@ const SellerPage = () => {
       description: product.description || '',
       isPublished: product.isPublished,
     })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    requestAnimationFrame(()=>document.getElementById('catalog-editor')?.scrollIntoView({behavior:'smooth',block:'start'}))
   }
 
   const addCategory = async (event) => {
@@ -216,7 +218,7 @@ const SellerPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5] text-[#111111]">
+    <div className="seller-portal seller-products-page min-h-screen bg-[#f7f7f5] text-[#111111]">
       <header className="border-b border-[#e5e5e5] bg-white">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 md:px-10">
           <div>
@@ -243,8 +245,8 @@ const SellerPage = () => {
           return product
         }}/>}
       </section>
-      <main className="mx-auto grid max-w-[1440px] gap-8 px-5 py-9 md:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] md:px-10 md:py-12">
-        <section className="min-w-0">
+      <main className="seller-catalog-layout mx-auto grid max-w-[1440px] gap-8 px-5 py-9 md:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] md:px-10 md:py-12">
+        <details id="catalog-editor" open={Boolean(editingProduct)} className="catalog-editor min-w-0"><summary className="portal-editor-heading">{editingProduct?'Edit product':'Add a product / categories'}</summary>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#111111]">Catalog tools</p>
           <h1 className="mt-2 text-3xl font-semibold">{editingProduct ? 'Edit product' : 'Add a product'}</h1>
           <p className="mt-2 text-sm text-[#555555]">Published items become visible on the storefront.</p>
@@ -303,7 +305,7 @@ const SellerPage = () => {
               ))}
             </ul>
           </details>
-        </section>
+        </details>
 
         <section id="seller-catalog" className="min-w-0">
           <div className="mb-5 flex items-end justify-between gap-4">
@@ -313,17 +315,20 @@ const SellerPage = () => {
 
           {message && <p role="status" className="mb-4 border border-[#e5e5e5] bg-white px-4 py-3 text-sm">{message}</p>}
 
-          <div className="divide-y divide-[#eee] bg-white">
-            {products.map((product) => (
+          <label className="portal-product-search"><span className="sr-only">Search store products</span><input type="search" value={catalogSearch} onChange={e=>{setCatalogSearch(e.target.value);setCatalogLimit(24)}} placeholder="Search product name or category"/></label>
+          <div className="portal-catalog-shortcuts"><Link to="/seller/warehouse">Product warehouse →</Link><Link to="/seller/reviews">Product reviews →</Link></div>
+          <div className="seller-catalog-list divide-y divide-[#eee] bg-white">
+            {products.filter(p=>`${p.name} ${p.category}`.toLowerCase().includes(catalogSearch.toLowerCase())).slice(0,catalogLimit).map((product) => (
               <article id={`seller-product-${product.id}`} key={product.id} className="flex items-center gap-3 p-4 sm:gap-4 sm:p-5">
                 <img src={product.imageUrl} alt="" className="size-16 shrink-0 bg-[#f7f7f7] object-cover" />
                 <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{product.name}</h3><p className="mt-1 text-xs text-[#555555]">{product.category} · ${product.price.toFixed(2)}{product.compareAtPrice ? ` · Was $${product.compareAtPrice.toFixed(2)}` : ''}</p><p className="mt-1 text-[10px] uppercase tracking-wide text-[#777]">{product.isPublished ? 'Published' : 'Draft'}</p></div>
-                <div className="flex shrink-0 gap-2">
+                <div className="catalog-item-actions flex shrink-0 gap-2">
                   <button type="button" onClick={() => editProduct(product)} aria-label={`Edit ${product.name}`} className="border border-[#ddd] px-3 py-2 text-xs hover:border-black">Edit</button>
                   <button type="button" onClick={() => deleteProduct(product.id)} aria-label={`Delete ${product.name}`} className="border border-[#ddd] px-3 py-2 text-xs hover:border-black">Delete</button>
                 </div>
               </article>
             ))}
+            {products.filter(p=>`${p.name} ${p.category}`.toLowerCase().includes(catalogSearch.toLowerCase())).length>catalogLimit&&<button className="portal-load-more" onClick={()=>setCatalogLimit(n=>n+24)}>Show more products</button>}
             {!products.length && <p className="p-8 text-center text-sm text-[#555555]">No products yet. Add one using the form.</p>}
           </div>
         </section>

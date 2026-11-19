@@ -65,8 +65,8 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  (SELECT COALESCE(SUM(amount_cents),0)::bigint FROM seller_sale_releases WHERE seller_id=? AND status='released') AS releasedCents`).get(seller,seller,seller,seller,seller,seller)
  const display=await db.prepare('SELECT values_json,updated_at FROM seller_stat_adjustments WHERE seller_id=?').get(seller) as {values_json:string,updated_at:string}|undefined
  return {dates:await storeDates(db,seller),today:new Date().toISOString().slice(0,10),overview,daily,orders,displayStats:display?JSON.parse(display.values_json):{},displayStatsUpdatedAt:display?.updated_at||null,activity:await db.prepare('SELECT * FROM seller_store_activity WHERE seller_id=? ORDER BY id DESC LIMIT 100').all(seller),visits:await db.prepare('SELECT day,visits FROM store_daily_visits WHERE seller_id=? ORDER BY day DESC').all(seller),
- products:await db.prepare(`SELECT i.product_id AS id,MAX(i.name) AS name,SUM(CASE WHEN o.status='paid' THEN i.quantity ELSE 0 END)::integer AS units,
- SUM(CASE WHEN o.status='paid' THEN i.price_cents*i.quantity ELSE 0 END)::bigint AS salesCents FROM purchase_items i JOIN purchase_orders o ON o.id=i.order_id WHERE i.seller_id=? GROUP BY i.product_id ORDER BY "salesCents" DESC LIMIT 10`).all(seller)}
+ products:await db.prepare(`SELECT i.product_id AS id,MAX(i.name) AS name,MAX(i.image_url) AS imageUrl,SUM(CASE WHEN o.status='paid' THEN i.quantity ELSE 0 END)::integer AS units,
+ SUM(CASE WHEN o.status='paid' THEN i.price_cents*i.quantity ELSE 0 END)::bigint AS salesCents FROM purchase_items i JOIN purchase_orders o ON o.id=i.order_id WHERE i.seller_id=? AND o.status='paid' GROUP BY i.product_id ORDER BY "salesCents" DESC LIMIT 10`).all(seller)}
  }
  app.get('/api/seller/analytics',auth,role('seller','admin'),protectedRoute(async(req,res)=>{res.set('Cache-Control','no-store').json(await analytics(req.user!.id))}))
  app.get('/api/admin/sellers/:id/analytics',auth,role('admin'),protectedRoute(async(req,res)=>{res.json(await analytics(Number(req.params.id)))}))

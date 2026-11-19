@@ -1,3 +1,5 @@
+import SellerAccountPage from './pages/SellerAccountPage.jsx'
+import SellerBottomNav from './components/SellerBottomNav.jsx'
 import {ShoppingCart} from 'lucide-react'
 const SuperAdminPage=lazy(()=>loadPage('SuperAdminPage'))
 import {loadPage,preloadLink} from './lib/pagePreload.js'
@@ -266,6 +268,7 @@ const AnimatedRoutes = () => {
             <Route path="/admin/users/:userId" element={<AdminUserDetailsPage />} />
             <Route path="/admin/seller-metrics" element={<AdminSellerMetricsPage />} />
             <Route path="/seller" element={<SellerDashboardPage />} />
+            <Route path="/seller/account" element={<SellerAccountPage />} />
             <Route path="/seller/wallet" element={<SellerFinancePage />} />
             <Route path="/seller/financial-statement" element={<SellerFinancePage view="statement" />} />
             <Route path="/seller/fund-record" element={<SellerFinancePage view="record" />} />
@@ -285,6 +288,7 @@ const AnimatedRoutes = () => {
         </div>
       </Suspense>
       <MobileBottomNav />
+      <SellerBottomNav/>
       <ThemeToggle />
       <OrderNotifications />
       <CartToast />

@@ -20,6 +20,7 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  r=await post(adminPath,{action:'quote',network:'TRC20',address:'fixture-admin-address',usdRate:'1'},cookie,'PATCH');check('admin sends coin payment quote',r.status===200,r)
  r=await req('/api/seller/finance',{},seller);check('exact quoted coin amount',r.data.requests[0].coin_amount==='200.00000000')
  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jF9kAAAAASUVORK5CYII=','base64')
+ check('buyers cannot submit seller payment receipts',(await req(`/api/seller/finance/requests/${q.id}/receipt`,{method:'POST',body:png,headers:{'Content-Type':'image/png'}},buyer)).status===403)
  r=await req(`/api/seller/finance/requests/${q.id}/receipt`,{method:'POST',body:png,headers:{'Content-Type':'image/png'}},seller);check('private seller deposit receipt uploaded',r.status===200,r)
  finance=(await req('/api/seller/finance',{},seller)).data
  r=await req('/api/seller/finance/receipts/'+finance.requests[0].receiptId,{},buyer);check('another buyer cannot read receipt',r.status===404)

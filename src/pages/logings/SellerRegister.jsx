@@ -12,7 +12,7 @@ import { apiRequest } from '../../lib/api.js'
 
 const steps = ['Welcome', 'Your account', 'Your store', 'Verification']
 const titles = ['Let’s build something yours.', 'First, a little about you.', 'Give your store its own identity.', 'One last step. Make it official.']
-const descriptions = ['Your next chapter starts with a store. Here’s what to expect before you apply.', 'Add your contact details and create a secure account to manage your store.', 'Introduce your business with a name, a logo and a little of your story.', 'Share your location and identity photos so our administrators can review your application.']
+const descriptions = ['Your next chapter starts with a store. Here’s what to expect before you apply.', 'Add your contact details and create a secure account to manage your store.', 'Introduce your business with a name, a logo and a little of your story.', 'Share your location and identity photos so our support team can review your application.']
 const initialForm = {
   fullName: '', email: '', phone: '', password: '', confirmPassword: '', verificationCode: '',
   storeName: '', storeDescription: '', storeLogoUrl: '', country: 'United States', address: '', city: '', region: '', postalCode: '',
@@ -130,7 +130,7 @@ const SellerRegister = () => {
         }
         if(!verification.sent)throw new Error('Email delivery is temporarily unavailable. Please try again later.')
         setCodeSent(true)
-        setMessage('Enter the six-digit code sent to your email. After you submit your seller application, the administrator will review it.')
+        setMessage('Enter the six-digit code sent to your email. After you submit your seller application, the support team will review it.')
       } catch (error) {
 
       setMessage(error.message)
@@ -201,7 +201,7 @@ const SellerRegister = () => {
 
       setOptionalSsn('')
       clearReferralCode()
-      navigate('/seller/application', { replace: true, state: { welcome: `Your application was submitted, ${user.fullName}. Seller access is pending administrator approval.` } })
+      navigate('/seller/application', { replace: true, state: { welcome: `Your application was submitted, ${user.fullName}. Your application is under review.` } })
     } catch (error) {
 
       setMessage(error.message)
@@ -230,9 +230,9 @@ const SellerRegister = () => {
           {!hasStarted && <div className="signup-welcome">
             <div className="signup-welcome-note"><Sparkles size={20}/><span>A considered start for your business</span></div>
             <div className="signup-checklist">
-              {[[Store,'Make it yours','Create your account and tell us about your store.'],[ShieldCheck,'Verify your identity','Have your phone number, a selfie and the front and back of your government-issued ID ready.'],[ClipboardCheck,'Leave the review to us','Submit your application. Seller access opens after an administrator approves it.']].map(([Icon,title,copy])=><div key={title}><span className="signup-check-icon"><Icon size={21} strokeWidth={1.6}/></span><section><h3>{title}</h3><p>{copy}</p></section></div>)}
+              {[[Store,'Make it yours','Create your account and tell us about your store.'],[ShieldCheck,'Verify your identity','Have your phone number, a selfie and the front and back of your government-issued ID ready.'],[ClipboardCheck,'Leave the review to us','Submit your application. Seller access opens after an support team approves it.']].map(([Icon,title,copy])=><div key={title}><span className="signup-check-icon"><Icon size={21} strokeWidth={1.6}/></span><section><h3>{title}</h3><p>{copy}</p></section></div>)}
             </div>
-            <label className="signup-agreement"><input type="checkbox" checked={acceptedTerms} onChange={event=>setAcceptedTerms(event.target.checked)}/><span>I agree to provide accurate information belonging to me and submit my application for administrator review. I understand I can start selling only after approval.</span></label>
+            <label className="signup-agreement"><input type="checkbox" checked={acceptedTerms} onChange={event=>setAcceptedTerms(event.target.checked)}/><span>I agree to provide accurate information belonging to me and submit my application for support team review. I understand I can start selling only after approval.</span></label>
             <button type="button" className="signup-primary" disabled={!acceptedTerms} onClick={()=>{setHasStarted(true);setMessage('')}}>Agree & start my application <ArrowRight size={18}/></button>
             <p className="signup-private-note"><ShieldCheck size={14}/> Your application is reviewed before your store goes live.</p>
           </div>}
@@ -299,7 +299,7 @@ const SellerRegister = () => {
 
       {hasStarted && step === 2 && (
         <form className="space-y-4" onSubmit={finishRegistration}>
-          <p className="text-sm leading-6 text-[#666]">Add your contact location and verification photos. Your administrator must approve your application before seller access is enabled.</p>
+          <p className="text-sm leading-6 text-[#666]">Add your contact location and verification photos. Your support team must approve your application before seller access is enabled.</p>
           <label className="block text-sm font-medium">Country
             <select name="country" value={form.country} onChange={updateForm} required className="mt-2 h-11 w-full border border-[#cccccc] bg-white px-3 outline-none focus:border-black">
               <option value="">Select country</option><option>United States</option><option>Canada</option><option>United Kingdom</option><option>Nigeria</option><option>Germany</option><option>Japan</option><option>Other</option>
@@ -329,11 +329,11 @@ const SellerRegister = () => {
 
           <label className="flex items-start gap-2 text-xs leading-5 text-[#555]">
             <input type="checkbox" checked={acceptedTerms} onChange={(event) => setAcceptedTerms(event.target.checked)} className="mt-1 accent-black" />
-            I confirm all information and photos in this application belong to me and are accurate. I understand seller access begins only after administrator approval.
+            I confirm all information and photos in this application belong to me and are accurate. I understand seller access begins only after support team approval.
           </label>
 
           {message && <p role="status" className="text-sm text-[#a33]">{message}</p>}
-          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isSubmitting || isReadingLogo || isReadingVerification} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">{isSubmitting ? 'Submitting…' : 'Submit for admin review'}</button></div>
+          <div className="grid grid-cols-2 gap-3"><button type="button" onClick={() => setStep(1)} className="h-12 border border-[#ccc] text-sm">Back</button><button type="submit" disabled={isSubmitting || isReadingLogo || isReadingVerification} className="h-12 bg-black text-sm font-semibold text-white disabled:opacity-60">{isSubmitting ? 'Submitting…' : 'Submit for review'}</button></div>
         </form>
       )}
 
