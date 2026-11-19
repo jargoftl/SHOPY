@@ -9,8 +9,8 @@ export function registerAccountDeletion(app:Express,db:Database,auth:RequestHand
  const admin:RequestHandler=(req,res,next)=>{if(req.user!.role!=='admin')return res.status(403).json({error:'Administrator access required.'});res.set('Cache-Control','private, no-store');next()}
  const limit=rateLimit({windowMs:15*60*1000,max:10,keyGenerator:req=>String(req.user!.id),standardHeaders:true,legacyHeaders:false})
  app.delete('/api/admin/users/:id',auth,admin,limit,async(req,res)=>{
-  const id=Number(req.params.id),password=req.body?.password,confirmEmail=req.body?.confirmEmail,reason=typeof req.body?.reason==='string'?req.body.reason.trim():''
-  if(!Number.isSafeInteger(id)||id<1||typeof password!=='string'||Buffer.byteLength(password)>72||typeof confirmEmail!=='string'||!reason||reason.length>500)return res.status(400).json({error:'Confirm the account email, your password and a deletion reason.'})
+  const id=Number(req.params.id),password=req.body?.password,confirmEmail=req.body?.confirmEmail,reason=(typeof req.body?.reason==='string'?req.body.reason.trim():'')||'Account deleted by administrator'
+  if(!Number.isSafeInteger(id)||id<1||typeof password!=='string'||Buffer.byteLength(password)>72||typeof confirmEmail!=='string'||!reason||reason.length>500)return res.status(400).json({error:'Confirm the account email, your administrator password.'})
   const actor=await db.prepare('SELECT * FROM users WHERE id=?').get(req.user!.id) as Account
   if(!await bcrypt.compare(password,actor.password_hash))return res.status(403).json({error:'Your password is incorrect.'})
   const unusableHash=await bcrypt.hash(randomBytes(32).toString('hex'),12)

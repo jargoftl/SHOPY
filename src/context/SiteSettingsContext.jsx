@@ -3,7 +3,7 @@ import { apiRequest } from '../lib/api.js'
 import { SiteSettingsContext } from './siteSettings.js'
 
 export function SiteSettingsProvider({ children }) {
-  const [siteName, setSiteName] = useState('GGU')
+  const [siteName, setSiteName] = useState('tiktokshop')
   const [error, setError] = useState('')
   const version = useRef(0)
 
@@ -12,7 +12,7 @@ export function SiteSettingsProvider({ children }) {
     try {
       const settings = await apiRequest('/api/site-settings', { cache: 'no-store', background: true })
       if (requestVersion === version.current) {
-        setSiteName(settings.siteName)
+        setSiteName(/^(ggu|tiktok\s*shop)$/i.test(settings.siteName?.trim())?'tiktokshop':settings.siteName)
         setError('')
       }
     } catch (requestError) {
@@ -27,7 +27,7 @@ export function SiteSettingsProvider({ children }) {
         method: 'PUT',
         body: JSON.stringify({ siteName: name }),
       })
-      setSiteName(settings.siteName)
+      setSiteName(/^(ggu|tiktok\s*shop)$/i.test(settings.siteName?.trim())?'tiktokshop':settings.siteName)
       setError('')
       return settings.siteName
     } finally {

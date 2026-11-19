@@ -274,7 +274,7 @@ const SellerPage = () => {
                 <input name="price" type="number" value={productForm.price} onChange={(event) => setProductForm((current) => ({ ...current, price: event.target.value }))} min="0" max="1000000" step="0.01" required className="mt-2 h-11 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" placeholder="49.00" />
               </label>
             </div>
-            <label className="block text-sm font-medium">Compare-at price <span className="font-normal text-[#777]">(optional, must be higher than current price)</span>
+            <label className="block text-sm font-medium">Compare-at price <span className="font-normal text-[#777]">(must be higher than current price)</span>
               <input name="compareAtPrice" type="number" value={productForm.compareAtPrice} onChange={(event) => setProductForm((current) => ({ ...current, compareAtPrice: event.target.value }))} min="0" max="1000000" step="0.01" className="mt-2 h-11 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" placeholder="Original price" />
             </label>
             <ProductImageFields key={imageFormVersion} form={productForm} setForm={setProductForm} uploads={imageUploads} setUploads={setImageUploads} onBusyChange={setIsReadingImages} onError={setMessage} />

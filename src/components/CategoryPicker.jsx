@@ -15,7 +15,7 @@ export default function CategoryPicker({ value, onChange, additionalCategories =
       </div>
     </fieldset>
     {selectedGroup && <fieldset>
-      <legend className="text-sm font-semibold">Subcategory <span className="font-normal opacity-70">(optional)</span></legend>
+      <legend className="text-sm font-semibold">Subcategory <span className="font-normal opacity-70"></span></legend>
       <div className="mt-2 flex max-h-36 flex-wrap gap-2 overflow-y-auto rounded-lg border border-[#cccccc] p-2">
         <button type="button" aria-pressed={value === selectedGroup.name} onClick={() => onChange(selectedGroup.name)} className={buttonClass(value === selectedGroup.name)}>All {selectedGroup.name}</button>
         {selectedGroup.items.map((item) => <button key={item} type="button" aria-pressed={value === `${selectedGroup.name} / ${item}`} onClick={() => onChange(`${selectedGroup.name} / ${item}`)} className={buttonClass(value === `${selectedGroup.name} / ${item}`)}>{item}</button>)}

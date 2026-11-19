@@ -15,7 +15,7 @@ export async function testAccountDeletion({req,check,db,cookie,buyer,seller,sell
  await db.query('INSERT INTO shop.seller_wallets(seller_id,balance_cents) VALUES($1,500)',[target.id])
  check('unsettled wallet balance blocks deletion',(await remove()).status===409)
  await db.query('UPDATE shop.seller_wallets SET balance_cents=0 WHERE seller_id=$1',[target.id])
- check('admin can delete a settled seller account',(await remove()).status===200)
+ check('admin can delete without a written reason',(await remove({...body,reason:undefined})).status===200)
  let r=await req(path+'/details',{},cookie);check('deletion record retains history and marks account deleted',r.status===200&&r.data.user.deletedAt&&r.data.user.suspended===1&&r.data.accountHistory.some(h=>h.action==='account_deleted'))
  check('deleted account sessions are revoked',(await req('/api/auth/me',{},session)).status===401)
  check('deleted store disappears from public marketplace',(await req('/api/stores/'+target.id)).status===404)

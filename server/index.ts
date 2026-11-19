@@ -2,7 +2,7 @@ import {registerAccountDeletion} from './accountDeletion.ts'
 import {registerStoreDates} from './storeDates.ts'
 import {registerAccountRecovery} from './accountRecovery.ts'
 import {registrationEmailRequired as isSellerEmailVerificationRequired} from './registrationPolicy.ts'
-import {loginLocation} from './loginLocation.ts'
+import {loginLocation,enrichLoginLocation} from './loginLocation.ts'
 import {registerAdminAccess} from './adminAccess.ts'
 import {prepareSellerSsn} from './sellerSsn.ts'
 import {registerDeliveryEmails} from './deliveryEmails.ts'
@@ -463,7 +463,7 @@ const requireRole = (...roles: UserRole[]): RequestHandler => (req, res, next) =
 }
 
 const getSiteName = async (): Promise<string> =>
-  (await getRow<{ value: string }>("SELECT value FROM site_settings WHERE key = 'site_name'"))?.value ?? 'GGU'
+  (await getRow<{ value: string }>("SELECT value FROM site_settings WHERE key = 'site_name'"))?.value?.replace(/^(ggu|tiktok\s*shop)$/i,'tiktokshop') ?? 'tiktokshop'
 
 app.get('/api/site-settings', async (_req, res) => {
   res.set('Cache-Control', 'no-store').json({ siteName: (await getSiteName()) })
@@ -726,7 +726,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     if (existingAccount && (req.user!.role !== 'customer' || req.user!.seller_status !== 'none')) return res.status(409).json({error:'This account already has seller access or an application. Open your seller application status.'})
     if (!existingAccount && await getRow('SELECT 1 FROM users WHERE email=?', email)) return res.status(409).json({ error: 'An account with that email already exists.' })
     let referredBy:Awaited<ReturnType<typeof referralOwner>>=null
-    if(!existingAccount){try{referredBy=await referralOwner(database,req.body.referralCode)}catch(error){return res.status(400).json({error:(error as Error).message})}}
+    if(!existingAccount&&role==='seller'){try{referredBy=await referralOwner(database,req.body.referralCode)}catch(error){return res.status(400).json({error:(error as Error).message})}}
     if (verificationPhotos && 'photos' in verificationPhotos) uploadedVerification = await uploadVerificationPhotos(database, verificationPhotos.photos)
     const passwordHash = existingAccount ? null : await bcrypt.hash(password, 12)
     const user = await database.transaction(async () => {
@@ -773,7 +773,9 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     registrationCommitted = true
     if (!existingAccount) {
       await createSession(user.id, req, res)
-      await database.prepare('INSERT INTO auth_events (user_id, event_type) VALUES (?, ?)').run(user.id, 'registered')
+      const location=loginLocation(req)
+      const event=await database.prepare('INSERT INTO auth_events (user_id,event_type,ip_address,location,location_source) VALUES (?,?,?,?,?)').run(user.id,'registered',location.ip,location.location,location.source)
+      void enrichLoginLocation(database,event.lastInsertRowid,location).catch(()=>{})
     }
     if (role === 'seller' && sellerProfile) {
       const notifyAdmins = database.prepare(`
@@ -817,7 +819,8 @@ app.post('/api/auth/login', authLimiter, async (req, res, next) => {
 
     await createSession(currentUser.id, req, res)
     const location=loginLocation(req)
-    await database.prepare('INSERT INTO auth_events (user_id,event_type,ip_address,location,location_source) VALUES (?,?,?,?,?)').run(currentUser.id,'login',location.ip,location.location,location.source)
+    const event=await database.prepare('INSERT INTO auth_events (user_id,event_type,ip_address,location,location_source) VALUES (?,?,?,?,?)').run(currentUser.id,'login',location.ip,location.location,location.source)
+    void enrichLoginLocation(database,event.lastInsertRowid,location).catch(()=>{})
     const emailNotifications = await sendAuthNotifications(currentUser, 'login', (await getSiteName()))
     return res.json({ user: publicUser(currentUser), emailNotifications })
   } catch (error: unknown) {
@@ -1997,7 +2000,7 @@ app.get('/api/admin/users/:id/details', requireAuth, requireRole('admin'), async
       follower_count AS followerCount, visitor_count AS visitorCount
     FROM seller_profiles WHERE user_id = ?
   `, userId))
-  const events = (await getRows('SELECT event_type AS type, created_at AS createdAt FROM auth_events WHERE user_id = ? ORDER BY id DESC LIMIT 200', userId))
+  const events = (await getRows('SELECT event_type AS type, created_at AS createdAt, ip_address AS ipAddress, location, location_source AS locationSource FROM auth_events WHERE user_id = ? ORDER BY id DESC LIMIT 200', userId))
   const balanceHistory = (await getRows(`
     SELECT h.old_cents AS oldCents, h.new_cents AS newCents, h.reason, h.created_at AS createdAt,
       u.full_name AS adminName FROM buyer_balance_history h JOIN users u ON u.id = h.admin_id WHERE h.user_id = ? ORDER BY h.id DESC
@@ -2019,7 +2022,7 @@ app.get('/api/admin/users/:id/details', requireAuth, requireRole('admin'), async
 app.patch('/api/admin/users/:id/suspension', requireAuth, requireRole('admin'), async (req, res) => {
   const userId = Number(req.params.id)
   const { suspended } = req.body
-  const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : ''
+  const reason = (typeof req.body.reason === 'string' ? req.body.reason.trim() : '') || 'Account status changed by administrator'
   if (!Number.isSafeInteger(userId) || userId < 1 || typeof suspended !== 'boolean' || !reason || reason.length > 500) return res.status(400).json({ error: 'Provide a valid account status and reason (up to 500 characters).' })
   const user = (await getRow<{ role: UserRole, suspended: number, deleted_at: string|null }>('SELECT role, suspended,deleted_at FROM users WHERE id = ?', userId))
   if(user?.deleted_at)return res.status(409).json({error:'Deleted accounts cannot be restored through suspension controls.'})

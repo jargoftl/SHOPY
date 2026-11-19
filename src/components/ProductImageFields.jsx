@@ -68,7 +68,7 @@ export default function ProductImageFields({ form, setForm, uploads, setUploads,
     <label className={`block text-xs ${hint}`}>Or use a main image URL
       <input name="imageUrl" type="url" maxLength={2000} required={!uploads.primary && !form.imageUrl} value={form.imageUrl?.startsWith('/') ? '' : form.imageUrl || ''} onChange={(event) => { version.current.primary += 1; setUploads((existing) => ({ ...existing, primary: null })); setForm((existing) => ({ ...existing, imageUrl: event.target.value })) }} className={inputStyle} placeholder="https://example.com/image.jpg" />
     </label>
-    <label className="block text-sm">Upload additional images <span className={`text-xs ${hint}`}>(optional)</span>
+    <label className="block text-sm">Upload additional images <span className={`text-xs ${hint}`}></span>
       <input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => choose(event, 'gallery')} className={inputStyle} />
     </label>
     {!!((form.imageUrls || []).length + uploads.gallery.length) && <div className="flex flex-wrap gap-3">

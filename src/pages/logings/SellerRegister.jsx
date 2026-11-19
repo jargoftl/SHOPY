@@ -112,7 +112,6 @@ const SellerRegister = () => {
   const continueFromAccount = async (event) => {
     event.preventDefault()
     setMessage('')
-    if (!/^\+?[1-9]\d{6,14}$/.test(form.phone.replace(/[\s()-]/g, ''))) { setMessage('Enter a valid phone number with country code (7–15 digits).'); return }
     if (!existingAccount && form.password !== form.confirmPassword) {
       setMessage('Those passwords do not match.')
       return
@@ -243,9 +242,7 @@ const SellerRegister = () => {
             <label className="block text-sm font-medium">Full name
               <input name="fullName" value={form.fullName} onChange={updateForm} autoComplete="name" maxLength={100} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Your legal full name" />
             </label>
-            <label className="block text-sm font-medium">Phone
-              <input name="phone" value={form.phone} onChange={updateForm} type="tel" autoComplete="tel" maxLength={30} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="+1 (202) 555-0123" />
-            </label>
+
           </div>
           <label className="block text-sm font-medium">Email address
             <input name="email" readOnly={Boolean(existingAccount)} value={form.email} onChange={updateForm} type="email" autoComplete="email" maxLength={254} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="you@example.com" />
@@ -261,7 +258,7 @@ const SellerRegister = () => {
           </div>
           </>}
 
-          {!existingAccount&&<label className="block text-sm font-medium">Referral code (optional)<input value={referralCode} onChange={e=>setReferralCode(e.target.value.trim().toUpperCase())} maxLength={16} autoComplete="off" className="mt-2 h-11 w-full rounded-lg border px-3 font-mono" placeholder="Seller referral code"/></label>}
+          {!existingAccount&&<label className="block text-sm font-medium">Referral code<input value={referralCode} onChange={e=>setReferralCode(e.target.value.trim().toUpperCase())} maxLength={16} autoComplete="off" className="mt-2 h-11 w-full rounded-lg border px-3 font-mono" placeholder="Seller referral code"/></label>}
           <p className="text-xs text-gray-500">You’ll set your wallet PIN when you are ready to make a deposit or withdrawal.</p>
           {codeSent && <label className="block text-sm font-medium">Email verification code
             <input name="verificationCode" value={form.verificationCode} onChange={event=>setForm(current=>({...current,verificationCode:event.target.value.replace(/\D/g,'').slice(0,6)}))} type="text" autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="6-digit email code" />
@@ -279,7 +276,7 @@ const SellerRegister = () => {
             <input name="storeName" value={form.storeName} onChange={updateForm} maxLength={100} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Your shop name" />
           </label>
           <div className="space-y-3">
-            <label className="block text-sm font-medium">Shop logo <span className="font-normal text-[#777]">(optional)</span>
+            <label className="block text-sm font-medium">Shop logo <span className="font-normal text-[#777]"></span>
               <input ref={logoInput} name="storeLogoFile" type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseLogo} aria-describedby="store-logo-help" className="mt-2 block w-full border border-[#cccccc] p-2 text-xs file:mr-3 file:border-0 file:bg-[#f7f7f7] file:px-3 file:py-2 file:text-xs file:font-medium" />
             </label>
             <p id="store-logo-help" className="text-xs text-[#777]">Choose a PNG, JPEG or WebP image up to 2 MB.</p>
@@ -323,6 +320,9 @@ const SellerRegister = () => {
             <input name="postalCode" value={form.postalCode} onChange={updateForm} maxLength={20} required autoComplete="postal-code" className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" />
           </label>
 
+            <label className="block text-sm font-medium">Phone
+              <input name="phone" value={form.phone} onChange={updateForm} type="tel" autoComplete="tel" maxLength={30} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="+1 (202) 555-0123" />
+            </label>
           {form.country === 'United States' && <OptionalSellerSsn value={optionalSsn} onChange={setOptionalSsn}/>}
           <div className="signup-section-label"><ShieldCheck size={16}/> YOUR PRIVATE VERIFICATION</div>
           <VerificationPhotoFields photos={verificationPhotos} setPhotos={setVerificationPhotos} consent={verificationConsent} setConsent={setVerificationConsent} onError={setMessage} onBusyChange={setIsReadingVerification} />

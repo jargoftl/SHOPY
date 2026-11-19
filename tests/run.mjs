@@ -41,7 +41,7 @@ pg.Pool.prototype.query=query;
 pg.Pool.prototype.connect=async()=>({query,release(){}});
 pg.Pool.prototype.end=async()=>{};
 // Regression fixtures use isolated accounts, storage and mocked email delivery.
-Object.assign(process.env,{SELLER_VERIFICATION_WORKER:'disabled',DELIVERY_EMAIL_WORKER:'disabled',SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto',REGISTRATION_EMAIL_VERIFICATION:'disabled'});
+Object.assign(process.env,{LOGIN_IP_GEOLOCATION:'disabled',SELLER_VERIFICATION_WORKER:'disabled',DELIVERY_EMAIL_WORKER:'disabled',SKIP_IMPORTED_CATALOG:'true',DATABASE_URL:'postgresql://test:test@localhost/test',PORT:'4311',NODE_ENV:'production',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD:'long-test-password-123',SMTP_HOST:'',SMTP_PORT:'',SMTP_USER:'',SMTP_PASSWORD:'',BREVO_API_KEY:'',EMAIL_FROM:'',SELLER_EMAIL_VERIFICATION:'auto',REGISTRATION_EMAIL_VERIFICATION:'disabled'});
 const { ObjectStorage } = await import('../dist-server/storage.js');
 const realPut=ObjectStorage.prototype.put,realGet=ObjectStorage.prototype.get,realVerify=ObjectStorage.prototype.verifyBucket;
 ObjectStorage.prototype.verifyBucket=async()=>{};
@@ -58,7 +58,7 @@ async function req(path,options={},cookie){const res=await fetch(base+path,{...o
 let failures=0,checks=0;
 function check(name,condition,detail=''){checks++;if(!condition){failures++;console.error('FAIL',name,detail)}else console.log('PASS',name)}
 try{
- let r=await req('/api/site-settings');check('public settings',r.status===200&&r.data.siteName==='GGU',r);
+ let r=await req('/api/site-settings');check('public settings',r.status===200&&r.data.siteName==='tiktokshop',r);
  r=await req('/api/auth/login',{method:'POST',body:JSON.stringify({email:'admin@example.test',password:'long-test-password-123'})});
 
  const cookie=r.cookie;check('admin login',r.status===200&&cookie,r);
