@@ -22,16 +22,6 @@ export function registerAccountDeletion(app:Express,db:Database,auth:RequestHand
    if(id===current.id||target.is_super_admin||target.role==='admin'&&!current.is_super_admin)return 403
    if(confirmEmail!==target.email)return 400
    if(target.deleted_at)return 200
-   const unsettled=await db.prepare(`SELECT 1 WHERE
-    EXISTS(SELECT 1 FROM reward_balances WHERE user_id=? AND balance_units<>0) OR
-    EXISTS(SELECT 1 FROM seller_wallets WHERE seller_id=? AND (balance_cents<>0 OR reserved_cents<>0)) OR
-    EXISTS(SELECT 1 FROM buyer_wallet_holds WHERE user_id=? AND amount_cents<>0) OR
-    EXISTS(SELECT 1 FROM purchase_orders o JOIN purchase_items i ON i.order_id=o.id WHERE i.seller_id=? AND o.status='paid' AND NOT EXISTS(SELECT 1 FROM seller_sale_releases r WHERE r.order_id=o.id AND r.seller_id=i.seller_id)) OR
-    EXISTS(SELECT 1 FROM buyer_wallet_requests WHERE user_id=? AND status NOT IN ('confirmed','rejected')) OR
-    EXISTS(SELECT 1 FROM seller_wallet_requests WHERE seller_id=? AND status NOT IN ('confirmed','rejected')) OR
-    EXISTS(SELECT 1 FROM purchase_orders o JOIN purchase_sellers s ON s.order_id=o.id WHERE (o.buyer_id=? OR s.seller_id=?) AND (o.status IN ('awaiting_quote','awaiting_receipt','awaiting_review') OR (o.status='paid' AND s.status<>'delivered')))
-   `).get(id,id,id,id,id,id,id,id)
-   if(unsettled)return 409
    await db.prepare('UPDATE users SET deleted_at=?,deleted_by=?,suspended=1,password_hash=? WHERE id=?').run(new Date().toISOString(),current.id,unusableHash,id)
    await db.prepare('DELETE FROM sessions WHERE user_id=?').run(id)
    await db.prepare('DELETE FROM password_resets WHERE user_id=?').run(id)
@@ -46,7 +36,7 @@ export function registerAccountDeletion(app:Express,db:Database,auth:RequestHand
    await db.prepare('INSERT INTO account_admin_history(user_id,admin_id,action,details) VALUES(?,?,?,?)').run(id,current.id,'account_deleted',reason)
    return 200
   })()
-  if(status!==200)return res.status(status).json({error:status===409?'Settle balances, pending funding requests and unfinished orders before deleting this account.':status===404?'Account not found.':status===400?'The confirmation email does not match.':'You cannot delete yourself, a super admin, or an administrator without super-admin access.'})
+  if(status!==200)return res.status(status).json({error:status===404?'Account not found.':status===400?'The confirmation email does not match.':'You cannot delete yourself, a super admin, or an administrator without super-admin access.'})
   res.json({ok:true})
  })
 }

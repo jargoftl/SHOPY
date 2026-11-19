@@ -111,7 +111,7 @@ export async function registerSellerVerification(app: Express, db: Database, aut
   app.get('/api/admin/seller-applications',auth,role('admin'),async(_req,res)=>{
     const applications = await db.prepare(`SELECT a.user_id AS userId,u.public_id AS publicId,a.status,a.revision,a.submitted_at AS submittedAt,u.full_name AS fullName,u.email,u.phone,p.store_name AS storeName,
       (SELECT COUNT(*) FROM seller_verification_documents d WHERE d.user_id=a.user_id) AS documentCount
-      FROM seller_applications a JOIN users u ON u.id=a.user_id JOIN seller_profiles p ON p.user_id=u.id ORDER BY CASE WHEN a.status='pending' THEN 0 ELSE 1 END,a.submitted_at DESC LIMIT 250`).all()
+      FROM seller_applications a JOIN users u ON u.id=a.user_id JOIN seller_profiles p ON p.user_id=u.id WHERE u.deleted_at IS NULL ORDER BY CASE WHEN a.status='pending' THEN 0 ELSE 1 END,a.submitted_at DESC LIMIT 250`).all()
     res.json({applications,emailConfigured:isEmailConfigured()})
   })
   app.get('/api/admin/seller-applications/:id',auth,role('admin'),async(req,res)=>{
@@ -132,8 +132,9 @@ export async function registerSellerVerification(app: Express, db: Database, aut
       const application=await getApplication(id)
       if(!application)throw new ReviewError(404,'Seller application not found.')
       if(application.status!=='pending'||req.body?.revision!==application.revision)throw new ReviewError(409,'This application changed or was already reviewed. Reload it first.')
-      const applicant = await db.prepare('SELECT phone,suspended,role FROM users WHERE id=?').get(id) as {phone:string,suspended:number,role:string}
-      if (!applicant || applicant.role==='admin') throw new ReviewError(400,'Administrator accounts cannot be reviewed as seller applicants.')
+      const applicant = await db.prepare('SELECT phone,suspended,role FROM users WHERE id=? AND deleted_at IS NULL').get(id) as {phone:string,suspended:number,role:string}
+      if (!applicant) throw new ReviewError(404,'Active seller applicant not found.')
+      if (applicant.role==='admin') throw new ReviewError(400,'Administrator accounts cannot be reviewed as seller applicants.')
       if(status==='approved') {
         const documents=await db.prepare('SELECT kind FROM seller_verification_documents WHERE user_id=?').all(id) as {kind:string}[]
         if(req.body?.reviewed!==true||kinds.some(kind=>!documents.some(d=>d.kind===kind))||!verificationPhone(applicant.phone)||applicant.suspended)throw new ReviewError(400,'Review all three photos and the phone number before approval. Suspended or admin accounts cannot be approved here.')
