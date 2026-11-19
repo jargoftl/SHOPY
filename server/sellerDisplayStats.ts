@@ -8,8 +8,8 @@ export function registerSellerDisplayStats(app:Express,db:Database,auth:RequestH
   res.set('Cache-Control','no-store').json({values:row?JSON.parse(row.values_json):{},updatedAt:row?.updated_at||null,history})
  })
  app.put('/api/admin/sellers/:id/display-stats',auth,role('admin'),async(req,res)=>{
-  const id=Number(req.params.id),values=req.body?.values,reason=typeof req.body?.reason==='string'?req.body.reason.trim():''
-  if(!Number.isSafeInteger(id)||id<1||!values||typeof values!=='object'||Array.isArray(values)||!reason||reason.length>1000||Object.entries(values).some(([key,value])=>!keys.includes(key)||!Number.isSafeInteger(value)||Number(value)<0||Number(value)>1000000000000))return res.status(400).json({error:'Use nonnegative whole numbers, supported display fields and an audit reason. Leave a value blank to use the actual figure.'})
+  const id=Number(req.params.id),values=req.body?.values,reason=(typeof req.body?.reason==='string'?req.body.reason.trim():'') || 'Administrator action'
+  if(!Number.isSafeInteger(id)||id<1||!values||typeof values!=='object'||Array.isArray(values)||!reason||reason.length>1000||Object.entries(values).some(([key,value])=>!keys.includes(key)||!Number.isSafeInteger(value)||Number(value)<0||Number(value)>1000000000000))return res.status(400).json({error:'Use nonnegative whole numbers and supported display fields. Leave a value blank to use the actual figure.'})
   if(!await db.prepare("SELECT id FROM users WHERE id=? AND role='seller'").get(id))return res.status(404).json({error:'Seller not found.'})
   await db.transaction(async()=>{
    const old=await db.prepare('SELECT values_json FROM seller_stat_adjustments WHERE seller_id=?').get(id) as {values_json:string}|undefined

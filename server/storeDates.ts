@@ -15,8 +15,8 @@ export function registerStoreDates(app:Express,db:Database,auth:RequestHandler){
   res.json(await details(id))
  })
  app.patch('/api/admin/sellers/:id/dates',auth,admin,async(req,res)=>{
-  const id=Number(req.params.id),date=req.body?.establishedOn,expected=req.body?.expectedEstablishedOn,reason=typeof req.body?.reason==='string'?req.body.reason.trim():''
-  if(!Number.isSafeInteger(id)||id<1||(date!==null&&!validEstablishedDate(date))||(expected!==null&&!validEstablishedDate(expected))||!reason||reason.length>500)return res.status(400).json({error:'Choose a valid date (1900–2100) and provide a reason.'})
+  const id=Number(req.params.id),date=req.body?.establishedOn,expected=req.body?.expectedEstablishedOn,reason=(typeof req.body?.reason==='string'?req.body.reason.trim():'') || 'Administrator action'
+  if(!Number.isSafeInteger(id)||id<1||(date!==null&&!validEstablishedDate(date))||(expected!==null&&!validEstablishedDate(expected))||!reason||reason.length>500)return res.status(400).json({error:'Choose a valid date (1900–2100).'})
   const status=await db.transaction(async()=>{
    const previous=await storeDates(db,id);if(!previous)return 404
    if(previous.establishedOn!==expected)return 409

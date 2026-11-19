@@ -1460,9 +1460,9 @@ app.get('/api/rewards', requireAuth, requireRole('customer','seller'),async(req,
 app.patch('/api/admin/users/:id/rewards', requireAuth, requireRole('admin'), async (req, res) => {
   const userId = Number(req.params.id)
   const adjustmentUnits = req.body?.adjustmentUnits
-  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : ''
+  const reason = (typeof req.body?.reason === 'string' ? req.body.reason.trim() : '') || 'Administrator action'
   if (!Number.isSafeInteger(userId) || userId < 1 || !Number.isSafeInteger(adjustmentUnits) || adjustmentUnits === 0 || !reason || reason.length > 500) {
-    return res.status(400).json({ error: 'Enter a valid reward adjustment and a reason (up to 500 characters).' })
+    return res.status(400).json({ error: 'Enter a valid reward adjustment.' })
   }
   const user = (await getRow<{ role: UserRole }>("SELECT role FROM users WHERE id = ? AND deleted_at IS NULL AND role IN ('customer', 'seller')", userId))
   if (!user) return res.status(404).json({ error: 'Account not found.' })
@@ -1910,10 +1910,10 @@ app.get('/api/admin/buyers', requireAuth, requireRole('admin'), async (_req, res
 app.patch('/api/admin/buyers/:id/balance', requireAuth, requireRole('admin'), async (req, res) => {
   const userId = Number(req.params.id)
   const { balanceCents, adjustmentCents } = req.body
-  const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : ''
+  const reason = (typeof req.body.reason === 'string' ? req.body.reason.trim() : '') || 'Administrator action'
   const isAdjustment = adjustmentCents !== undefined && balanceCents === undefined
   if (!Number.isSafeInteger(userId) || !(isAdjustment ? Number.isSafeInteger(adjustmentCents) && adjustmentCents !== 0 : Number.isSafeInteger(balanceCents) && adjustmentCents === undefined) || !reason || reason.length > 500) {
-    return res.status(400).json({ error: 'Enter a valid manual wallet balance and a reason (up to 500 characters).' })
+    return res.status(400).json({ error: 'Enter a valid manual wallet balance.' })
   }
   const newBalance=await database.transaction(async()=>{
     const wallet=await getRow<{balance_cents:number}>("SELECT COALESCE(w.balance_units,0) AS balance_cents FROM users u LEFT JOIN reward_balances w ON w.user_id=u.id WHERE u.id=? AND u.role='customer' AND u.deleted_at IS NULL",userId)
@@ -2022,8 +2022,8 @@ app.get('/api/admin/users/:id/details', requireAuth, requireRole('admin'), async
 app.patch('/api/admin/users/:id/suspension', requireAuth, requireRole('admin'), async (req, res) => {
   const userId = Number(req.params.id)
   const { suspended } = req.body
-  const reason = (typeof req.body.reason === 'string' ? req.body.reason.trim() : '') || 'Account status changed by administrator'
-  if (!Number.isSafeInteger(userId) || userId < 1 || typeof suspended !== 'boolean' || !reason || reason.length > 500) return res.status(400).json({ error: 'Provide a valid account status and reason (up to 500 characters).' })
+  const reason = ((typeof req.body.reason === 'string' ? req.body.reason.trim() : '') || 'Administrator action') || 'Account status changed by administrator'
+  if (!Number.isSafeInteger(userId) || userId < 1 || typeof suspended !== 'boolean' || !reason || reason.length > 500) return res.status(400).json({ error: 'Provide a valid account status.' })
   const user = (await getRow<{ role: UserRole, suspended: number, deleted_at: string|null }>('SELECT role, suspended,deleted_at FROM users WHERE id = ?', userId))
   if(user?.deleted_at)return res.status(409).json({error:'Deleted accounts cannot be restored through suspension controls.'})
   if (!user || user.role === 'admin') return res.status(404).json({ error: 'User not found or admin accounts cannot be suspended.' })

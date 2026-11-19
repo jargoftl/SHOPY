@@ -204,3 +204,10 @@ Deletion requires the exact target email and an administrator password confirmat
 ### Account interface defaults
 
 The initial site name and HTML title are `tiktokshop`, including while settings are fetched. Legacy GGU/Tiktok shop settings normalize to this spelling. Account role badges display BUYER/SELLER; account IDs retain their existing eight digits and the directory accepts searches with or without `#`. Initial signup uses email and password; the seller phone field remains in the private identity-review step. Visible “optional” labels are removed without changing field validation. Seller orders use responsive cards with on-demand dispatch/tracking timelines.
+
+### Simple account screens and action notes
+Account references use a two-digit prefix plus the original random eight-digit suffix: `00` for stores/applicants, `21` for customer accounts. The database migration updates existing references once; a trigger covers new accounts and role/application changes. Primary keys, foreign keys, funds and history are unchanged. Keep references as text so leading zeros survive. Admins can search the full ID with `#` or the eight-digit suffix in People & stores. Role labels remain in admin tools; account screens show IDs instead.
+
+Written reasons are no longer requested for funding, balance adjustments, referral decisions, application review, store dates, display-statistics changes, suspension, deletion or refund requests. The server supplies automatic audit notes when no note is supplied. Amount validation, authorization, password confirmation, idempotency, accounting entries and audit history remain enforced. Older clients may still submit notes. This supersedes earlier references to required reasons in this document.
+
+Mobile account navigation is a single expandable menu. Dashboards use readable text and expandable statistics/chart/activity sections. Dispatch progress shows the current status and step count on small screens; the full stage list remains on larger screens.

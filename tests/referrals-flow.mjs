@@ -20,7 +20,7 @@ export async function testReferrals({req,check,db,cookie,seller,sellerId,buyer,s
  const before=(await req('/api/seller/finance',{},seller)).data.wallet.balanceCents
  check('seller cannot approve own reward',(await post('/api/admin/referrals/'+first.id,{status:'rewarded',amountCents:500,reason:'Fixture reward'},seller,'PATCH')).status===403)
  check('negative rewards rejected',(await post('/api/admin/referrals/'+first.id,{status:'rewarded',amountCents:-1,reason:'Invalid'},cookie,'PATCH')).status===400)
- const reward={status:'rewarded',amountCents:500,reason:'Fixture referral approved'}
+ const reward={status:'rewarded',amountCents:500}
  const concurrent=await Promise.all([post('/api/admin/referrals/'+first.id,reward,cookie,'PATCH'),post('/api/admin/referrals/'+first.id,reward,cookie,'PATCH')]);check('referral rewards are idempotent',concurrent.every(v=>v.status===200))
  const finance=(await req('/api/seller/finance',{},seller)).data
  check('referral credits seller wallet exactly once',finance.wallet.balanceCents===before+500)

@@ -18,3 +18,41 @@
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto!important}}
 
 .store-main-navigation > a,.store-main-navigation > button{font-size:14px!important;font-weight:500;letter-spacing:.025em;line-height:20px}
+
+/* Calm, readable account screens with one menu and generous touch targets. */
+.account-workspace {line-height:1.6}
+.account-workspace main {max-width:1200px;margin-inline:auto;width:100%}
+.account-workspace :is(section,article,details) {box-shadow:none}
+.account-workspace :is(input,select,textarea,button,summary) {min-height:48px}
+.account-workspace :is(button,summary,a) {touch-action:manipulation}
+.delivery-step-caption {display:none}
+@media(max-width:640px){
+ .account-workspace main {padding:20px 16px 90px}
+ .account-workspace header {padding:16px;align-items:center}
+ .account-workspace h1 {font-family:inherit;font-size:26px;line-height:1.25;letter-spacing:-.025em}
+ .account-workspace h2 {font-size:18px;line-height:1.4}
+ .account-workspace .text-xs,.account-workspace .text-\[10px\],.account-workspace .text-\[11px\] {font-size:13px;line-height:1.65}
+ .account-workspace .text-sm {font-size:15px;line-height:1.65}
+ .account-workspace :is(section,article,aside,details) {border-radius:12px}
+ .account-workspace .mobile-seller-nav {grid-template-columns:minmax(0,1fr)}
+ .account-workspace .mobile-seller-nav a {font-size:15px;min-height:48px}
+ .account-workspace aside {padding:16px}
+ .account-workspace summary {display:flex;align-items:center;cursor:pointer}
+ .account-workspace .delivery-progress ol {display:none}
+ .account-workspace .delivery-step-caption {display:block;color:#555}
+ .account-workspace .delivery-progress {padding:16px}
+ .account-workspace .shipment-history-list {font-size:14px}
+}
+
+@media(max-width:640px){
+ .account-workspace .dashboard-metrics {display:block;border:1px solid #e5e5e5;border-radius:12px;background:white;padding:0 16px}
+ .account-workspace .dashboard-metrics section {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;border:0;border-bottom:1px solid #eee;border-radius:0;padding:18px 0}
+ .account-workspace .dashboard-metrics section:last-child {border-bottom:0}
+ .account-workspace .dashboard-metrics section>div {font-size:15px}
+ .account-workspace .dashboard-metrics svg {display:none}
+ .account-workspace .dashboard-metrics section>p:nth-child(2) {margin:0;font-size:23px}
+ .account-workspace .dashboard-metrics section>p:last-child {grid-column:1/-1;margin:0}
+ .account-workspace .dashboard-metrics section>p:empty {display:none}
+ .account-workspace details>summary:after {content:'+';margin-left:auto;padding-left:16px;font-size:20px;font-weight:400}
+ .account-workspace details[open]>summary:after {content:'−'}
+}

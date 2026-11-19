@@ -2,8 +2,8 @@ import {randomUUID} from 'node:crypto'
 export async function testSellerFinance({req,check,db,cookie,seller,buyer,sellerId,buyerId}) {
  const post=(path,body,who=seller,method='POST')=>req(path,{method,body:JSON.stringify(path==='/api/seller/finance/requests'?{transactionPin:'0456',...body}:body)},who)
  let r=await req('/api/auth/me',{},seller);const publicId=r.data.user.publicId
- check('seller has stable random eight digit public reference',/^[1-9]\d{7}$/.test(publicId))
- r=await req('/api/auth/me',{},buyer);check('buyer has distinct eight digit reference',/^[1-9]\d{7}$/.test(r.data.user.publicId)&&r.data.user.publicId!==publicId)
+ check('seller reference starts with 00 and eight digits',/^00[1-9]\d{7}$/.test(publicId))
+ r=await req('/api/auth/me',{},buyer);check('buyer reference starts with 21 and eight digits',/^21[1-9]\d{7}$/.test(r.data.user.publicId)&&r.data.user.publicId!==publicId)
  r=await req('/api/products');check('all public products have eight digit references',r.data.products.every(p=>/^[1-9]\d{7}$/.test(p.publicId)))
  r=await req('/api/warehouse',{},seller);check('warehouse products have public references',r.data.products.every(p=>/^[1-9]\d{7}$/.test(p.publicId)))
  for(const path of ['/api/seller/finance','/api/seller/analytics']){r=await req(path,{},buyer);check('buyer denied '+path,r.status===403)}

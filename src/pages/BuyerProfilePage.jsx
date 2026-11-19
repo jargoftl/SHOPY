@@ -41,6 +41,7 @@ const BuyerProfilePage = () => {
   const location = useLocation()
   const { section } = useParams()
   const [profile, setProfile] = useState(null)
+  const [menuOpen,setMenuOpen]=useState(false)
   const [notifications, setNotifications] = useState([])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState(location.state?.signupNotice || '')
@@ -224,11 +225,11 @@ const BuyerProfilePage = () => {
   const modalRequest = profile.requests.find((request) => request.id === modalRequestId && request.status === 'pending' && request.walletAddress)
 
   return (
-    <div className="min-h-screen bg-[#f7f7f7] pb-24 text-[#111111]">
+    <div className="account-workspace profile-workspace min-h-screen bg-[#f7f7f7] pb-24 text-[#111111]">
       {modalRequest && <WalletModal key={`${modalRequest.id}-${modalRequest.walletAddress}-${modalRequest.network}-${modalRequest.paymentCoin}`} request={modalRequest} onClose={() => { modalRequestRef.current = null; setModalRequestId(null) }} />}
       <header className="border-b border-[#e5e5e5] bg-white"><div className="mx-auto flex max-w-[1300px] items-center justify-between gap-4 px-5 py-5"><Link to="/" className="text-2xl font-black tracking-[-0.07em]"><SiteName logo /></Link><nav className="flex items-center gap-5 text-sm"><Link to="/products" className="transition-colors hover:text-[#555555]">Shop</Link><button type="button" onClick={logOut} className="rounded-full border border-[#e5e5e5] px-4 py-2 transition-colors hover:border-[#111111]">Log out</button></nav></div></header>
       <main className="mx-auto max-w-[1300px] px-5 py-8 sm:py-12">
-        <div className="mb-8"><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#555555]">Your account</p><h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Profile</h1><p className="mt-2 text-sm text-[#555555]">A little space for everything that matters to you.</p></div>
+        <div className="mb-8"><p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#555555]">Your account</p><h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Profile</h1><p className="mt-2 text-sm text-[#555555]">Manage your orders, wallet and account.</p></div>
         {error && <p role="alert" className="mb-4 border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
         {notice && <p role="status" className="mb-4 border border-green-200 bg-green-50 p-3 text-sm">{notice}</p>}
         {updatesError && <p role="alert" className="mb-4 border border-red-200 bg-red-50 p-3 text-sm text-red-800">{updatesError}</p>}
@@ -236,7 +237,7 @@ const BuyerProfilePage = () => {
           <aside className="h-fit rounded-2xl border border-[#e5e5e5] bg-white p-5 shadow-[0_8px_30px_rgba(27,50,33,0.04)]">
             <div className="flex items-center gap-3 lg:block"><div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[#e5e5e5] text-[#111111]"><UserRound size={27} /></div>
             <div><h2 className="break-words font-semibold lg:mt-4">{profile.user.fullName}</h2><p className="mt-1 break-all text-xs text-[#555555]">{profile.user.email}</p><p className="mt-2 font-mono text-xs text-[#555555]">Member ID: #{profile.user.publicId}</p></div></div>
-            <nav aria-label="Profile navigation" className="mt-5 grid grid-cols-2 gap-1 border-t border-[#f7f7f7] pt-4 sm:grid-cols-3 lg:grid-cols-1">{profileLinks.map(({ to, label, Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors ${isActive ? 'bg-[#f7f7f7] font-semibold text-[#111111]' : 'text-[#555555] hover:bg-[#f7f7f7] hover:text-[#111111]'}`}><Icon size={18} className="shrink-0" aria-hidden="true" /><span>{label}</span>{to==='/profile/stores'&&<span className="ml-auto rounded-full bg-[#e5e5e5] px-2 py-0.5 text-[10px] font-semibold text-[#555555]">{profile.follows.length}</span>}</NavLink>)}</nav>
+            <button type="button" aria-controls="profile-menu" aria-expanded={menuOpen} onClick={()=>setMenuOpen(v=>!v)} className="mt-4 flex min-h-12 w-full items-center justify-between rounded-lg border px-4 text-sm font-semibold lg:hidden">Menu<span>{menuOpen?'Close −':'Open +'}</span></button><nav id="profile-menu" aria-label="Profile navigation" onClick={()=>setMenuOpen(false)} className={`${menuOpen?'grid':'hidden'} mt-4 grid-cols-1 gap-1 border-t border-[#f7f7f7] pt-4 lg:grid`}>{profileLinks.map(({ to, label, Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => `flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors ${isActive ? 'bg-[#f7f7f7] font-semibold text-[#111111]' : 'text-[#555555] hover:bg-[#f7f7f7] hover:text-[#111111]'}`}><Icon size={18} className="shrink-0" aria-hidden="true" /><span>{label}</span>{to==='/profile/stores'&&<span className="ml-auto rounded-full bg-[#e5e5e5] px-2 py-0.5 text-[10px] font-semibold text-[#555555]">{profile.follows.length}</span>}</NavLink>)}</nav>
           </aside>
           <div className="min-w-0 space-y-6">
             {!section && <><section className="overflow-hidden rounded-2xl bg-[#111111] p-7 text-white sm:p-9"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#cccccc]">Welcome back</p><h2 className="mt-3 break-words text-2xl font-semibold sm:text-3xl">{profile.user.fullName}</h2><p className="mt-3 max-w-lg text-sm leading-6 text-[#e5e5e5]">Manage your account, follow your favorite stores, and keep track of your orders all in one place.</p><div className="mt-7 flex flex-wrap items-end justify-between gap-4 border-t border-white/15 pt-5"><BalanceDisplay balanceCents={profile.wallet.balanceCents} /><Link to="/profile/wallet" className="inline-flex items-center gap-2 rounded-full bg-[#e5e5e5] px-4 py-2 text-sm font-semibold text-[#111111]">View wallet <ArrowUpRight size={16} /></Link></div></section></>}

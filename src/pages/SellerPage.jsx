@@ -52,7 +52,7 @@ const SellerPage = () => {
         if (['pending','rejected','needs_changes'].includes(account.sellerStatus) && account.role==='customer') { navigate('/seller/application',{replace:true}); return }
         if (!['seller', 'admin'].includes(account.role)) {
           if (isCurrent) {
-            setMessage('Seller access is not enabled for this account. Ask the store admin to promote your account.')
+            setMessage('store access is not enabled for this account. Ask the store admin to promote your account.')
             setIsLoading(false)
           }
           return
@@ -207,9 +207,9 @@ const SellerPage = () => {
   if (!user) {
     return (
       <main className="mx-auto max-w-xl px-5 py-20 text-center">
-        <h1 className="text-3xl font-semibold">Seller access required</h1>
+        <h1 className="text-3xl font-semibold">store access required</h1>
         <p className="mt-3 text-sm text-[#666]">{message}</p>
-        <Link to="/seller/register" className="mt-6 inline-block bg-black px-5 py-3 text-sm font-medium text-white">Sign up as a seller</Link>
+        <Link to="/seller/register" className="mt-6 inline-block bg-black px-5 py-3 text-sm font-medium text-white">Sign up as a store</Link>
         <Link to="/" className="mt-6 inline-block border border-[#ccc] px-5 py-3 text-sm">Back to store</Link>
       </main>
     )
@@ -221,7 +221,7 @@ const SellerPage = () => {
         <div className="mx-auto flex max-w-[1440px] items-center justify-between px-5 py-5 md:px-10">
           <div>
             <Link to="/" className="text-2xl font-black tracking-[-0.07em]"><SiteName logo /></Link>
-            <p className="mt-1 text-xs text-[#555555]">Seller workspace</p>
+            <p className="mt-1 text-xs text-[#555555]">Workspace</p>
           </div>
           <div className="flex items-center gap-4 text-sm">
             <span className="hidden text-[#666] sm:inline">{user.fullName} · #{user.publicId || '—'}</span>

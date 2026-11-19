@@ -61,7 +61,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
   app.post('/api/purchases/:id/refunds', auth, async (req, res) => {
     const order = (await orderById(validId(req.params.id)))
     const sellerId = Number(req.body?.sellerId)
-    const reason = text(req.body?.reason, 1000)
+    const reason = text(req.body?.reason, 1000) || 'Refund requested'
     if (!order || order.buyer_id !== req.user!.id) return res.status(404).json({ error: 'Order not found.' })
     if (order.status !== 'paid') return res.status(409).json({ error: 'Only confirmed paid orders can be considered for a refund.' })
     if (order.coin === 'BALANCE') return res.status(409).json({ error: 'Contact the administrator to review a store-credit refund for this order.' })

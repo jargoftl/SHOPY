@@ -8,8 +8,8 @@ export function registerAdminBuyerFunding(app:Express,db:Database,auth:RequestHa
   res.set('Cache-Control','no-store').json({buyers,history})
  })
  app.post('/api/admin/buyer-funding',auth,role('admin'),async(req,res)=>{
-  const {buyerId,amountCents,requestKey,verified}=req.body||{},reason=typeof req.body?.reason==='string'?req.body.reason.trim():''
-  if(!Number.isSafeInteger(buyerId)||buyerId<1||!Number.isSafeInteger(amountCents)||amountCents<1||amountCents>100000000||!reason||reason.length>1000||!/^[a-f0-9-]{36}$/i.test(requestKey||'')||verified!==true)return res.status(400).json({error:'Choose a buyer, enter a positive amount up to $1,000,000, supply a reason and authorize the credit.'})
+  const {buyerId,amountCents,requestKey,verified}=req.body||{},reason=(typeof req.body?.reason==='string'?req.body.reason.trim():'') || 'Administrator action'
+  if(!Number.isSafeInteger(buyerId)||buyerId<1||!Number.isSafeInteger(amountCents)||amountCents<1||amountCents>100000000||!reason||reason.length>1000||!/^[a-f0-9-]{36}$/i.test(requestKey||'')||verified!==true)return res.status(400).json({error:'Choose a buyer, enter a positive amount up to $1,000,000 and authorize the credit.'})
   try{await db.transaction(async()=>{
    const existing=await db.prepare('SELECT buyer_id,amount_cents,reason,admin_id FROM admin_buyer_funding WHERE request_key=?').get(requestKey) as {buyer_id:number,amount_cents:number,reason:string,admin_id:number}|undefined
    if(existing){if(existing.buyer_id!==buyerId||existing.amount_cents!==amountCents||existing.reason!==reason||existing.admin_id!==req.user!.id)throw Object.assign(new Error('That request key was already used for another funding action.'),{status:409});return}

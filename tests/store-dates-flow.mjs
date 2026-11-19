@@ -10,7 +10,7 @@ export async function testStoreDates({req,check,db,cookie,buyer,seller,sellerId}
  let r=await req(path,{},cookie);check('admin sees original creation timestamps',r.status===200&&r.data.dates.accountCreatedAt===original.account&&r.data.dates.storeCreatedAt===original.store)
  const initial=r.data.dates.establishedOn
  r=await post({establishedOn:'2021-02-30',expectedEstablishedOn:initial,reason:'Invalid date'});check('impossible business date is rejected',r.status===400)
- r=await post({establishedOn:'2020-01-01',expectedEstablishedOn:initial,reason:''});check('date edits require a reason',r.status===400)
+ r=await post({establishedOn:initial,expectedEstablishedOn:initial});check('date edits work without a written reason',r.status===200)
  r=await post({establishedOn:'2020-01-01',expectedEstablishedOn:initial,reason:'Business started before platform registration'})
  check('admin can set historical business establishment date',r.status===200&&r.data.dates.establishedOn==='2020-01-01')
  check('business date edit is audited with actor and reason',r.data.history.some(h=>JSON.parse(h.details).to==='2020-01-01'&&h.adminName))

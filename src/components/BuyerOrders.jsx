@@ -20,7 +20,6 @@ const statusLabel = (status) => filters.find(([value]) => value === status)?.[1]
 const BuyerOrders = () => {
   const [purchases, setPurchases] = useState([])
   const [refunds, setRefunds] = useState([])
-  const [reasons, setReasons] = useState({})
   const [refundBusy, setRefundBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -55,11 +54,9 @@ const BuyerOrders = () => {
   }
   const requestRefund = async (event, orderId, sellerId) => {
     event.preventDefault(); setRefundBusy(true); setError('')
-    const key = `${orderId}-${sellerId}`
     try {
-      await apiRequest(`/api/purchases/${orderId}/refunds`, { method: 'POST', body: JSON.stringify({ sellerId, reason: reasons[key] }) })
+      await apiRequest(`/api/purchases/${orderId}/refunds`, { method: 'POST', body: JSON.stringify({ sellerId }) })
       const data = await apiRequest('/api/refunds'); setRefunds(data.refunds)
-      setReasons((current) => ({ ...current, [key]: '' }))
     } catch (err) { setError(err.message) } finally { setRefundBusy(false) }
   }
 
@@ -88,7 +85,7 @@ const BuyerOrders = () => {
         const refund = refunds.find((item) => item.orderId === order.id && item.sellerId === seller.sellerId)
         const key = `${order.id}-${seller.sellerId}`
         if (order.coin === 'BALANCE') return <p key={key} className="border-t border-[#f7f7f7] px-4 py-4 text-xs text-[#111111] sm:px-6">For a store-credit refund for {seller.storeName}, <Link to="/messages" className="font-semibold underline">contact the administrator</Link>.</p>
-        return <details key={key} className="border-t border-[#f7f7f7] px-4 py-4 text-sm sm:px-6"><summary className="cursor-pointer font-medium text-[#111111]">Refund · {seller.storeName}{refund ? ` · ${statusLabel(refund.status)}` : ''}</summary>{refund ? <div className="mt-3"><StatusBadge status={refund.status} label={`Refund ${statusLabel(refund.status)}`} /><p className="mt-2 text-xs leading-5 text-[#111111]">Approval is not a payment; refunds are arranged manually.{refund.transferReference && ` Transfer reference: ${refund.transferReference}`}</p></div> : <form onSubmit={(event) => requestRefund(event, order.id, seller.sellerId)} className="mt-3"><label className="block">Reason for this seller’s items<textarea required maxLength={1000} value={reasons[key] || ''} onChange={(event) => setReasons((current) => ({ ...current, [key]: event.target.value }))} className="mt-2 block w-full rounded border border-[#e5e5e5] p-2" /></label><p className="mt-2 text-xs text-[#555555]">One request per seller and order. The seller reviews it; any refund is handled manually by the administrator.</p><button disabled={refundBusy} className="mt-2 rounded bg-[#111111] px-4 py-2 text-white disabled:opacity-50">Request refund</button></form>}</details>
+        return <details key={key} className="border-t border-[#f7f7f7] px-4 py-4 text-sm sm:px-6"><summary className="cursor-pointer font-medium text-[#111111]">Refund · {seller.storeName}{refund ? ` · ${statusLabel(refund.status)}` : ''}</summary>{refund ? <div className="mt-3"><StatusBadge status={refund.status} label={`Refund ${statusLabel(refund.status)}`} /><p className="mt-2 text-xs leading-5 text-[#111111]">Approval is not a payment; refunds are arranged manually.{refund.transferReference && ` Transfer reference: ${refund.transferReference}`}</p></div> : <form onSubmit={(event) => requestRefund(event, order.id, seller.sellerId)} className="mt-3"><p className="mt-2 text-xs text-[#555555]">One request per store and order. The store reviews it; any refund is handled manually by the administrator.</p><button disabled={refundBusy} className="mt-2 rounded bg-[#111111] px-4 py-2 text-white disabled:opacity-50">Request refund</button></form>}</details>
       })}
     </article>)}</div>
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}

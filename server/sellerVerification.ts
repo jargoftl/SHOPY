@@ -126,8 +126,8 @@ export async function registerSellerVerification(app: Express, db: Database, aut
     res.set('Cache-Control','private, no-store').set('X-Content-Type-Options','nosniff').set('Content-Disposition','inline').type(document.content_type).send(image)
   })
   app.patch('/api/admin/seller-applications/:id/review',auth,role('admin'),reviewedRoute(async(req,res)=>{
-    const id=idValue(req.params.id),status=req.body?.status,note=typeof req.body?.note==='string'?req.body.note.trim():''
-    if(!['approved','rejected','needs_changes'].includes(status)||note.length>2000||((status==='rejected'||status==='needs_changes')&&!note)) return res.status(400).json({error:'Choose a review decision and explain any rejection or requested changes.'})
+    const id=idValue(req.params.id),status=req.body?.status,note=(typeof req.body?.note==='string'?req.body.note.trim():'') || 'Application reviewed by administrator'
+    if(!['approved','rejected','needs_changes'].includes(status)||note.length>2000||((status==='rejected'||status==='needs_changes')&&!note)) return res.status(400).json({error:'Choose a review decision.'})
     await db.transaction(async()=>{
       const application=await getApplication(id)
       if(!application)throw new ReviewError(404,'Seller application not found.')

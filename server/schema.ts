@@ -433,6 +433,18 @@ UPDATE users SET public_id=shop.new_public_reference() WHERE public_id IS NULL;
 ALTER TABLE users ALTER COLUMN public_id SET DEFAULT shop.new_public_reference();
 ALTER TABLE users ALTER COLUMN public_id SET NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS users_public_reference ON users(public_id);
+CREATE OR REPLACE FUNCTION shop.account_reference_prefix() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.role <> 'admin' THEN
+  NEW.public_id := (CASE WHEN NEW.role='seller' OR NEW.seller_status<>'none' THEN '00' ELSE '21' END) || right(NEW.public_id,8);
+ END IF;
+ RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS account_reference_prefix ON users;
+CREATE TRIGGER account_reference_prefix BEFORE INSERT OR UPDATE OF role,seller_status,public_id ON users FOR EACH ROW EXECUTE FUNCTION shop.account_reference_prefix();
+UPDATE users SET public_id=(CASE WHEN role='seller' OR seller_status<>'none' THEN '00' ELSE '21' END)||right(public_id,8)
+ WHERE role<>'admin' AND public_id IS DISTINCT FROM (CASE WHEN role='seller' OR seller_status<>'none' THEN '00' ELSE '21' END)||right(public_id,8);
+
 ALTER TABLE products ADD COLUMN IF NOT EXISTS public_id TEXT;
 UPDATE products SET public_id=shop.new_public_reference() WHERE public_id IS NULL;
 ALTER TABLE products ALTER COLUMN public_id SET DEFAULT shop.new_public_reference();

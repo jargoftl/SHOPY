@@ -9,8 +9,8 @@ export function registerSellerAdminFunding(app:Express,db:Database,auth:RequestH
   res.set('Cache-Control','no-store').json({sellers,history})
  })
  app.post('/api/admin/seller-funding',auth,role('admin'),async(req,res)=>{
-  const {sellerId,amountCents,requestKey,verified}=req.body||{},reason=typeof req.body?.reason==='string'?req.body.reason.trim():''
-  if(!Number.isSafeInteger(sellerId)||sellerId<1||!Number.isSafeInteger(amountCents)||amountCents<1||amountCents>100000000||!reason||reason.length>1000||!/^[a-f0-9-]{36}$/i.test(requestKey||'')||verified!==true)return res.status(400).json({error:'Choose a seller, enter a positive amount up to $1,000,000, supply a reason and authorize the funding credit.'})
+  const {sellerId,amountCents,requestKey,verified}=req.body||{},reason=(typeof req.body?.reason==='string'?req.body.reason.trim():'') || 'Administrator action'
+  if(!Number.isSafeInteger(sellerId)||sellerId<1||!Number.isSafeInteger(amountCents)||amountCents<1||amountCents>100000000||!reason||reason.length>1000||!/^[a-f0-9-]{36}$/i.test(requestKey||'')||verified!==true)return res.status(400).json({error:'Choose a seller, enter a positive amount up to $1,000,000 and authorize the funding credit.'})
   try{await db.transaction(async()=>{
    if(!await db.prepare("SELECT id FROM users WHERE id=? AND role='seller' AND suspended=0").get(sellerId))throw Object.assign(new Error('Seller not found.'),{status:404})
    const old=await db.prepare("SELECT seller_id,delta_cents,note,actor_id FROM seller_fund_records WHERE kind='admin_funding' AND reference=?").get(requestKey) as {seller_id:number,delta_cents:number,note:string,actor_id:number}|undefined

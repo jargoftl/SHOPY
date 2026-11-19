@@ -41,7 +41,7 @@ export function registerReferrals(app:Express,db:Database,auth:RequestHandler,ro
   res.set('Cache-Control','no-store').json({referrals,sellers})
  })
  app.patch('/api/admin/referrals/:id',auth,role('admin'),async(req,res)=>{
-  const id=Number(req.params.id),{status,amountCents}=req.body||{},reason=typeof req.body.reason==='string'?req.body.reason.trim():''
+  const id=Number(req.params.id),{status,amountCents}=req.body||{},reason=(typeof req.body.reason==='string'?req.body.reason.trim():'') || 'Administrator action'
   if(!Number.isSafeInteger(id)||!['rewarded','rejected'].includes(status)||!reason||reason.length>500||(status==='rewarded'&&(!Number.isSafeInteger(amountCents)||amountCents<1||amountCents>10000000)))return res.status(400).json({error:'Choose a decision, add a reason, and enter a positive reward up to $100,000.'})
   try{await db.transaction(async()=>{
    const row=await db.prepare('SELECT * FROM seller_referrals WHERE id=?').get(id) as {referrer_id:number,status:string,amount_cents:number,reason:string}|undefined
