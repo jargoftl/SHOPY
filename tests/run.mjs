@@ -248,6 +248,17 @@ try{
  }
  await testWarehousePublication({req,check,cookie,seller,buyer,db,sellerId});
  await testBuyerFollowedStores({req,check,db,buyer,buyerId,sellerId});
+ const sendChat=(body,who)=>req('/api/messages',{method:'POST',body:JSON.stringify(body)},who)
+ const chatPath='/api/messages/'+sellerId
+ r=await sendChat({body:'Live seller support fixture'},seller);check('seller can send a temporary support message',r.status===201&&r.data.message.isMine,r)
+ r=await req(chatPath,{},buyer);check('unrelated buyer cannot receive another account chat',r.status===403,r)
+ r=await req(chatPath,{},cookie);check('support receives the live seller message',r.status===200&&r.data.messages.some(message=>message.body==='Live seller support fixture'&&!message.isMine),r)
+ r=await req(chatPath,{},cookie);check('received messages cannot be replayed as chat history',r.status===200&&r.data.messages.length===0,r)
+ r=await sendChat({sellerId,body:'Live support reply fixture'},cookie);check('support can reply to the seller',r.status===201,r)
+ r=await req('/api/messages',{},seller);check('seller receives the live reply',r.status===200&&r.data.messages.some(message=>message.body==='Live support reply fixture'),r)
+ const storedChat=await db.query("SELECT id FROM shop.messages WHERE body IN ('Live seller support fixture','Live support reply fixture')")
+ const storedNotice=await db.query("SELECT id FROM shop.notifications WHERE body IN ('Live seller support fixture','Live support reply fixture')")
+ check('live chat content is not saved as messages or notifications',storedChat.rows.length===0&&storedNotice.rows.length===0)
  await testSellerFinance({req,check,db,cookie,seller,buyer,sellerId,buyerId});
  await testTransactionPin({req,check,db,buyer,seller,buyerId,sellerId});
  await testBalanceMarketplace({req,check,db,cookie,seller,sellerId});

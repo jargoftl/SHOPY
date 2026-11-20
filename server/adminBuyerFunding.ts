@@ -20,7 +20,7 @@ export function registerAdminBuyerFunding(app:Express,db:Database,auth:RequestHa
    await db.prepare('INSERT INTO reward_balances(user_id,balance_units) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET balance_units=excluded.balance_units').run(buyerId,after)
    await db.prepare('INSERT INTO admin_buyer_funding(buyer_id,amount_cents,before_cents,after_cents,reason,admin_id,request_key) VALUES(?,?,?,?,?,?,?)').run(buyerId,amountCents,before,after,reason,req.user!.id,requestKey)
    await db.prepare('INSERT INTO reward_history(user_id,admin_id,adjustment_units,balance_units,reason) VALUES(?,?,?,?,?)').run(buyerId,req.user!.id,amountCents,after,reason)
-   await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'wallet','Admin funding added',?,'/profile/wallet')").run(buyerId,`$${(amountCents/100).toFixed(2)} credited to your account balance. ${reason}`)
+   await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'wallet','Credited to wallet',?,'/profile/wallet')").run(buyerId,`$${(amountCents/100).toFixed(2)} credited to your wallet.`)
   })()}catch(error){const e=error as Error&{status?:number};if(e.status)return res.status(e.status).json({error:e.message});throw error}
   res.json({ok:true})
  })

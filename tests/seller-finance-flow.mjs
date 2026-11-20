@@ -127,4 +127,11 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
   check('missing market rate returns a retryable error',r.status===503,r)
  }finally{globalThis.fetch=realFetch}
 
+ await db.query("INSERT INTO shop.notifications(user_id,type,title,body,link) VALUES($1,'wallet','Wallet request updated',$2,'/seller/wallet')",[sellerId,'Open My wallet to see the administrator’s response.'])
+ const sellerNotices=(await req('/api/notifications',{},seller)).data.notifications.filter(n=>n.type==='wallet')
+ check('seller wallet notifications name the action and amount',sellerNotices.some(n=>n.title==='Wallet credited'&&n.body==='$200.00 credited to your wallet.')&&sellerNotices.some(n=>n.title==='Wallet debited'&&n.body==='$150.00 debited from your wallet.')&&sellerNotices.some(n=>n.title==='Withdrawal declined'),sellerNotices.map(n=>n.title))
+ check('old seller wallet notices omit administrator wording',sellerNotices.some(n=>n.body==='Open My wallet to see the current status.')&&sellerNotices.every(n=>!/admin/i.test(n.title+' '+n.body)))
+ const reviewNotices=(await req('/api/notifications',{},cookie)).data.notifications.filter(n=>n.link==='/admin#seller-finance')
+ check('admin wallet notifications identify what needs review',reviewNotices.some(n=>n.title==='Withdrawal requested')&&reviewNotices.some(n=>n.title==='Deposit proof received')&&reviewNotices.every(n=>!/admin/i.test(n.title+' '+n.body)))
+
 }

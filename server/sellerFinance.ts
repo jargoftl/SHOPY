@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import {storeDates} from './storeDates.ts'
 import {recordShipmentEvent} from './shipmentTracking.ts'
 import express, { type Express, type RequestHandler } from 'express'
@@ -57,18 +57,35 @@ export async function postSellerFunds(db: Database, seller: number, kind: string
  await db.prepare('INSERT INTO seller_fund_records(seller_id,kind,reference,delta_cents,before_cents,after_cents,reserved_before,reserved_after,actor_id,note) VALUES(?,?,?,?,?,?,?,?,?,?)').run(seller,kind,reference,delta,before.balance_cents,balance,before.reserved_cents,reserved,actor,note)
 }
 export async function reverseSellerRelease(db: Database, order: number, seller: number, actor: number) {
- const release=await db.prepare("SELECT amount_cents FROM seller_sale_releases WHERE order_id=? AND seller_id=? AND status='released'").get(order,seller) as {amount_cents:number}|undefined
+ const release=await db.prepare("SELECT amount_cents,withdrawal_request_id FROM seller_sale_releases WHERE order_id=? AND seller_id=? AND status='released'").get(order,seller) as {amount_cents:number,withdrawal_request_id:number|null}|undefined
  if (!release) return
+ if(release.withdrawal_request_id){
+  const payout=await db.prepare("SELECT id,amount_cents FROM seller_wallet_requests WHERE id=? AND status='awaiting_transfer'").get(release.withdrawal_request_id) as {id:number,amount_cents:number}|undefined
+  if(payout){
+   await postSellerFunds(db,seller,'withdrawal_rejected',String(payout.id),0,-payout.amount_cents,actor)
+   await db.prepare("UPDATE seller_wallet_requests SET status='rejected',instructions='The related sale was refunded.',reviewed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(actor,payout.id)
+  }
+ }
  await postSellerFunds(db,seller,'sale_refund',`${order}:${seller}`,-release.amount_cents,0,actor)
  await db.prepare("UPDATE seller_sale_releases SET status='reversed' WHERE order_id=? AND seller_id=?").run(order,seller)
 }
 export function registerSellerFinance(app: Express, db: Database, auth: RequestHandler, role: (...roles: ('customer'|'seller'|'admin')[])=>RequestHandler) {
  const protectedRoute=(handler: RequestHandler): RequestHandler => async(req,res,next)=>{try {await handler(req,res,next)} catch(error) {if((error as {status?:number}).status) res.status(409).json({error:(error as Error).message});else next(error)}}
  const notify=async(user:number,title:string,body:string)=>{await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'wallet',?,?, '/seller/wallet')").run(user,title,body)}
- const adminNotice=async(body:string)=>{await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) SELECT id,'wallet','Seller wallet request',?,'/admin#seller-finance' FROM users WHERE role='admin'").run(body)}
+ const reviewNotice=async(title:string,body:string)=>{await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) SELECT id,'wallet',?,?,'/admin#seller-finance' FROM users WHERE role='admin'").run(title,body)}
+ const queueWithdrawal=async(seller:number,requestKey:string,coin:string,amount:number,network:string,address:string,actor:number)=>{
+  const result=await db.prepare("INSERT INTO seller_wallet_requests(seller_id,request_key,kind,coin,amount_cents,status,network,address) VALUES(?,?,?,?,?,'awaiting_transfer',?,?)").run(seller,requestKey,'withdrawal',coin,amount,network,address)
+  await postSellerFunds(db,seller,'withdrawal_hold',String(result.lastInsertRowid),0,amount,actor)
+  await reviewNotice('Withdrawal requested','A withdrawal is ready for review.')
+  return result.lastInsertRowid
+ }
  const requests=async(seller?:number)=>{
  const rows=await db.prepare(`SELECT r.*,u.public_id AS sellerPublicId,COALESCE(p.store_name,u.full_name) AS storeName,
- (SELECT id FROM seller_wallet_receipts WHERE request_id=r.id) AS receiptId FROM seller_wallet_requests r JOIN users u ON u.id=r.seller_id LEFT JOIN seller_profiles p ON p.user_id=r.seller_id ${seller===undefined?'':'WHERE r.seller_id=?'} ORDER BY r.id DESC LIMIT 200`).all(...(seller===undefined?[]:[seller]))
+ (SELECT id FROM seller_wallet_receipts WHERE request_id=r.id) AS receiptId,
+ EXISTS(SELECT 1 FROM seller_sale_releases release JOIN purchase_refunds refund
+ ON refund.order_id=release.order_id AND refund.seller_id=release.seller_id
+ WHERE release.withdrawal_request_id=r.id AND refund.status<>'rejected') AS refundPending
+ FROM seller_wallet_requests r JOIN users u ON u.id=r.seller_id LEFT JOIN seller_profiles p ON p.user_id=r.seller_id ${seller===undefined?'':'WHERE r.seller_id=?'} ORDER BY r.id DESC LIMIT 200`).all(...(seller===undefined?[]:[seller]))
  return (rows as Array<WalletRequest & {qr_image: string | null, qr_content_type: string | null}>).map(({qr_image,qr_content_type,...request})=>({...request,hasQr:Boolean(qr_image&&qr_content_type)}))
  }
  const sales=async(seller?:number)=>db.prepare(`SELECT o.id AS orderId,n.number AS orderNumber,i.seller_id AS sellerId,u.public_id AS sellerPublicId,
@@ -147,10 +164,8 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
    .run(req.user!.id,requestKey,kind,coin,amountCents,wallet.network,wallet.address,wallet.usd_rate,coinAmount(amountCents,wallet.usd_rate),wallet.qr_image,wallet.qr_content_type)
   return {id:result.lastInsertRowid,status:'awaiting_receipt'}
  }
- const result=await db.prepare("INSERT INTO seller_wallet_requests(seller_id,request_key,kind,coin,amount_cents,status,network,address) VALUES(?,?,?,?,?,'awaiting_transfer',?,?)").run(req.user!.id,requestKey,kind,coin,amountCents,network,address)
- await postSellerFunds(db,req.user!.id,'withdrawal_hold',String(result.lastInsertRowid),0,amountCents,req.user!.id)
- await adminNotice('Withdrawal request submitted for review.')
- return {id:result.lastInsertRowid,status:'awaiting_transfer'}
+ const id=await queueWithdrawal(req.user!.id,requestKey,coin,amountCents,network,address,req.user!.id)
+ return {id,status:'awaiting_transfer'}
  })()
  res.status(201).json({ok:true,...result})
  }))
@@ -180,7 +195,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  if(!request||request.kind!=='deposit'||request.status!=='awaiting_receipt') fail('This deposit is not awaiting a receipt.')
  await db.prepare('INSERT INTO seller_wallet_receipts(request_id,content_type,image) VALUES(?,?,?)').run(request.id,contentType,await storage.put(image,String(contentType)))
  await db.prepare("UPDATE seller_wallet_requests SET status='awaiting_review',submitted_reference=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(reference,request.id)
- await adminNotice('A seller submitted a deposit receipt. Independently verify the transfer before confirming.')
+ await reviewNotice('Deposit proof received','A deposit is ready for verification.')
  })()
  res.json({ok:true})
  }))
@@ -211,18 +226,35 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  } else if(action==='confirm') {
  if(req.body.verified!==true||!text(req.body.transferReference,300)) fail('Independently verify the transfer and enter its transaction reference.')
  if(!request.usd_rate||request.status!==(request.kind==='deposit'?'awaiting_review':'awaiting_transfer')) fail('This request is not ready to confirm.')
+ if(request.kind==='withdrawal'&&await db.prepare(`SELECT 1 FROM seller_sale_releases r
+  JOIN purchase_refunds f ON f.order_id=r.order_id AND f.seller_id=r.seller_id
+  WHERE r.withdrawal_request_id=? AND f.status<>'rejected'`).get(request.id)) fail('Resolve the related refund before sending this withdrawal.')
  const reference=text(req.body.transferReference,300)
  if(await db.prepare('SELECT id FROM seller_wallet_requests WHERE coin=? AND network=? AND transfer_reference=?').get(request.coin,request.network,reference)) fail('That transfer has already been recorded.')
  await postSellerFunds(db,request.seller_id,request.kind,String(request.id),request.kind==='deposit'?request.amount_cents:-request.amount_cents,request.kind==='withdrawal'?-request.amount_cents:0,req.user!.id)
  await db.prepare("UPDATE seller_wallet_requests SET status='confirmed',transfer_reference=?,reviewed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(reference,req.user!.id,request.id)
  } else fail('Choose quote, confirm or reject.')
- await notify(request.seller_id,'Wallet request updated','Open My wallet to see the administrator’s response.')
+ const deposit=request.kind==='deposit'
+ const amount=`$${(request.amount_cents/100).toFixed(2)}`
+ if(action==='confirm') await notify(request.seller_id,deposit?'Wallet credited':'Wallet debited',`${amount} ${deposit?'credited to':'debited from'} your wallet.`)
+ else if(action==='reject') await notify(request.seller_id,deposit?'Deposit declined':'Withdrawal declined',deposit?'Your deposit was declined.':'Your withdrawal was declined and the hold was released.')
+ else await notify(request.seller_id,deposit?'Deposit instructions ready':'Withdrawal details ready',deposit?'View your payment details in My wallet.':'Your withdrawal is awaiting transfer.')
  })()
  res.json({ok:true})
  }))
  const releaseSale:RequestHandler=protectedRoute(async(req,res)=>{
  const order=Number(req.body.orderId),seller=Number(req.body.sellerId)
  if(req.user!.role==='seller'&&seller!==req.user!.id)return void res.status(403).json({error:'You can only confirm sales for your own store.'})
+ const destination=req.body.destination??'wallet'
+ const coin=text(req.body.coin,20),network=text(req.body.network,100),address=text(req.body.address,500)
+ if(!['wallet','crypto'].includes(destination))return void res.status(400).json({error:'Choose a payout destination.'})
+ if(destination==='crypto'){
+  if(req.user!.role!=='seller'||!sellerPaymentCoins.includes(coin)||!network||!address||/[\r\n]/.test(network+address)){
+   return void res.status(400).json({error:'Enter the coin, network and receiving address for your crypto wallet.'})
+  }
+  const pinError=await checkTransactionPin(db,seller,req.body.transactionPin)
+  if(pinError)return void res.status(403).json({error:pinError})
+ }
  await db.transaction(async()=>{
  const eligible=await db.prepare(`SELECT o.status,o.coin,o.account_balance_payment AS funded,s.status AS fulfillment,SUM(i.price_cents*i.quantity)::bigint AS amount
  FROM purchase_orders o JOIN purchase_sellers s ON s.order_id=o.id JOIN purchase_items i ON i.order_id=o.id AND i.seller_id=s.seller_id
@@ -232,12 +264,18 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  if(await db.prepare("SELECT id FROM purchase_refunds WHERE order_id=? AND seller_id=? AND status<>'rejected'").get(order,seller)) fail('Resolve this order’s refund before releasing funds.')
  if(req.body.verified!==true||req.body.amountCents!==eligible.amount) fail('Confirm the full product-sale amount before release.')
  if(await db.prepare('SELECT 1 FROM seller_sale_releases WHERE order_id=? AND seller_id=?').get(order,seller)) fail('This sale has already been released.')
+ if(destination==='crypto'&&eligible.amount>100000000)fail('This sale exceeds the per-withdrawal limit. Credit it to your SHOPY wallet to withdraw in smaller amounts.')
  await db.prepare("INSERT INTO seller_sale_releases(order_id,seller_id,amount_cents,status,admin_id,confirmed_role) VALUES(?,?,?,'released',?,?)").run(order,seller,eligible.amount,req.user!.id,req.user!.role)
  await postSellerFunds(db,seller,'sale_release',`${order}:${seller}`,eligible.amount,0,req.user!.id)
+ if(destination==='crypto'){
+  const withdrawal=await queueWithdrawal(seller,randomUUID(),coin,eligible.amount,network,address,req.user!.id)
+  await db.prepare('UPDATE seller_sale_releases SET withdrawal_request_id=? WHERE order_id=? AND seller_id=?').run(withdrawal,order,seller)
+ }
  if(eligible.fulfillment==='pending')await recordShipmentEvent(db,order,seller,'confirmed',req.user!.id,req.user!.role,'Paid sale confirmed')
  await db.prepare("UPDATE purchase_sellers SET status='confirmed' WHERE order_id=? AND seller_id=? AND status='pending'").run(order,seller)
  await db.prepare("INSERT INTO seller_store_activity(seller_id,kind,details) VALUES(?,'sale_confirmed',?)").run(seller,`${req.user!.role==='admin'?'Administrator':'Store owner'} ${req.user!.full_name} confirmed ${eligible.amount} cents of paid sale proceeds.`)
- await notify(seller,'Sale funds released','The full product-sale amount has been credited to your seller wallet.')
+ if(destination==='crypto')await notify(seller,'Withdrawal requested','Your sale proceeds are reserved for transfer to your crypto wallet.')
+ else await notify(seller,'Wallet credited','The sale amount has been credited to your wallet.')
  })()
  res.json({ok:true})
  })
