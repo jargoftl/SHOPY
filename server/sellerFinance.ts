@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {storeDates} from './storeDates.ts'
 import {recordShipmentEvent} from './shipmentTracking.ts'
 import express, { type Express, type RequestHandler } from 'express'
@@ -92,6 +93,16 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  }>
  return rows.filter(wallet=>coins.includes(wallet.coin)&&wallet.network&&wallet.address&&rateValid(wallet.usd_rate||''))
  }
+ const walletVersion=(wallet:Awaited<ReturnType<typeof configuredWallets>>[number])=>
+  createHash('sha256').update(JSON.stringify([wallet.coin,wallet.network,wallet.address,wallet.usd_rate,wallet.qr_image,wallet.qr_content_type])).digest('hex')
+ app.get('/api/seller/finance/deposit-wallets/:coin',auth,role('seller'),protectedRoute(async(req,res)=>{
+  const wallet=(await configuredWallets()).find(wallet=>wallet.coin===req.params.coin)
+  if(!wallet)return void res.status(404).json({error:'This deposit wallet is unavailable.'})
+  const qrUrl=wallet.qr_image&&wallet.qr_content_type
+   ? `data:${wallet.qr_content_type};base64,${(await new ObjectStorage().get(wallet.qr_image)).toString('base64')}`
+   : null
+  res.set('Cache-Control','no-store').json({coin:wallet.coin,network:wallet.network,address:wallet.address,usdRate:wallet.usd_rate,version:walletVersion(wallet),qrUrl})
+ }))
  app.get('/api/seller/finance',auth,role('seller','admin'),protectedRoute(async(req,res)=>{
  const wallet=await db.prepare('SELECT balance_cents AS balanceCents,reserved_cents AS reservedCents FROM seller_wallets WHERE seller_id=?').get(req.user!.id)||{balanceCents:0,reservedCents:0}
  res.set('Cache-Control','no-store').json({wallet,depositWallets:(await configuredWallets()).map(({coin,network})=>({coin,network})),sales:(await sales(req.user!.id)).map(userFinanceEntry),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:(await requests(req.user!.id)).map(userFinanceEntry),records:(await db.prepare("SELECT f.*,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? ORDER BY f.id DESC LIMIT 1000").all(req.user!.id)).map(userFinanceEntry)})
@@ -103,25 +114,28 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  if(kind==='withdrawal'&&(!network||!address)) return void res.status(400).json({error:'Enter your receiving network and wallet address.'})
  const pinError=await checkTransactionPin(db,req.user!.id,req.body.transactionPin)
  if(pinError) return void res.status(403).json({error:pinError})
- const id=await db.transaction(async()=>{
+ const result=await db.transaction(async()=>{
  const existing=await db.prepare('SELECT * FROM seller_wallet_requests WHERE seller_id=? AND request_key=?').get(req.user!.id,requestKey) as WalletRequest|undefined
  if(existing) {
   if(existing.kind!==kind||existing.coin!==coin||existing.amount_cents!==amountCents||(kind==='withdrawal'&&(existing.address!==address||existing.network!==network))) fail('Request key already used for different details.')
-  return existing.id
+  return {id:existing.id,status:existing.status}
  }
  if(kind==='deposit'){
   const wallet=(await configuredWallets()).find(wallet=>wallet.coin===coin)
   if(!wallet) fail('This deposit wallet is unavailable. Choose a configured wallet.')
+  if(req.body.walletVersion!==undefined&&req.body.walletVersion!==walletVersion(wallet)){
+   fail('The receiving wallet changed. If you already sent funds, contact support before sending again.')
+  }
   const result=await db.prepare("INSERT INTO seller_wallet_requests(seller_id,request_key,kind,coin,amount_cents,status,network,address,usd_rate,coin_amount,qr_image,qr_content_type) VALUES(?,?,?,?,?,'awaiting_receipt',?,?,?,?,?,?)")
    .run(req.user!.id,requestKey,kind,coin,amountCents,wallet.network,wallet.address,wallet.usd_rate,coinAmount(amountCents,wallet.usd_rate),wallet.qr_image,wallet.qr_content_type)
-  return result.lastInsertRowid
+  return {id:result.lastInsertRowid,status:'awaiting_receipt'}
  }
  const result=await db.prepare("INSERT INTO seller_wallet_requests(seller_id,request_key,kind,coin,amount_cents,status,network,address) VALUES(?,?,?,?,?,'awaiting_transfer',?,?)").run(req.user!.id,requestKey,kind,coin,amountCents,network,address)
  await postSellerFunds(db,req.user!.id,'withdrawal_hold',String(result.lastInsertRowid),0,amountCents,req.user!.id)
  await adminNotice('Withdrawal request submitted for review.')
- return result.lastInsertRowid
+ return {id:result.lastInsertRowid,status:'awaiting_transfer'}
  })()
- res.status(201).json({ok:true,id})
+ res.status(201).json({ok:true,...result})
  }))
  app.get('/api/seller/finance/requests/:id/qr',auth,role('seller'),protectedRoute(async(req,res)=>{
  const wallet=await db.prepare("SELECT qr_image,qr_content_type FROM seller_wallet_requests WHERE id=? AND seller_id=? AND kind='deposit'").get(Number(req.params.id),req.user!.id) as {qr_image:string|null,qr_content_type:string|null}|undefined
