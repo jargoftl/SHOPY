@@ -6,6 +6,12 @@ export async function testReviewsMobile({req,check,db,cookie,buyer,seller,seller
  r=await req(path);check('public reviews include score and safe author fields',r.status===200&&Number(r.data.summary.average)===4&&r.data.reviews.some(v=>v.authorRole==='customer')&&!JSON.stringify(r.data).includes('password'),r)
  await post(path,{rating:5,comment:'Updated synthetic review'});r=await req(path);check('one review per buyer updates rather than duplicates',Number(r.data.summary.count)===1&&Number(r.data.summary.average)===5)
  r=await post('/api/reviews/store/'+sellerId,{rating:5,comment:'Synthetic store review'});check('buyer can review store',r.status===201,r)
+ r=await post('/api/reviews/store/'+sellerId,{rating:1,comment:'Internal fixture'},cookie)
+ const listing=(await req('/api/stores')).data.stores.find(store=>store.id===sellerId)
+ const storefront=(await req('/api/stores/'+sellerId)).data.store
+ for(const [label,store] of [['landing',listing],['storefront',storefront]]){
+  check(label+' shows paid items sold, followers and public rating',store.itemsSold>0&&Number.isInteger(store.followerCount)&&store.reviewCount===1&&store.averageRating===5,store)
+ }
  r=await post('/api/reviews/store/'+sellerId,{rating:5,comment:'Own store'},seller);check('seller cannot rate own store',r.status===403)
  r=await post(path,{rating:9,comment:'Invalid'});check('ratings enforce valid score',r.status===400)
  r=await post(path,{rating:3,comment:'<script>alert(1)</script>'},cookie);check('admin can add labeled feedback',r.status===201,r)

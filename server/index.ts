@@ -915,6 +915,26 @@ app.get('/api/categories', async (_req, res) => {
   return res.json({ categories })
 })
 
+type PublicStoreStats = { items_sold: number; average_rating: number | null; review_count: number }
+const publicStoreStatsSql = `
+  COALESCE((SELECT SUM(i.quantity) FROM purchase_items i
+    JOIN purchase_orders o ON o.id=i.order_id AND o.status='paid'
+    WHERE i.seller_id=users.id AND NOT EXISTS (
+      SELECT 1 FROM purchase_refunds f WHERE f.order_id=i.order_id AND f.seller_id=i.seller_id AND f.status='completed'
+    )),0) AS items_sold,
+  reviews.average_rating, COALESCE(reviews.review_count,0) AS review_count
+`
+const publicStoreReviewsSql = `
+  LEFT JOIN LATERAL (SELECT AVG(rating) AS average_rating, COUNT(*) AS review_count
+    FROM marketplace_reviews WHERE target_kind='store' AND target_id=users.id
+      AND deleted_at IS NULL AND author_role!='admin') reviews ON TRUE
+`
+const publicStoreStats = (store: PublicStoreStats) => ({
+  itemsSold: Number(store.items_sold),
+  averageRating: store.average_rating===null?null:Number(store.average_rating),
+  reviewCount: store.review_count,
+})
+
 app.get('/api/stores', async (_req, res) => {
   const stores = (await getRows<{
     user_id: number
@@ -927,16 +947,17 @@ app.get('/api/stores', async (_req, res) => {
     image_url: string | null
     follower_count: number
     visitor_count: number
-  }>(`
+  } & PublicStoreStats>(`
     SELECT users.id AS user_id, users.public_id AS publicId, users.full_name, seller_profiles.store_name,
       seller_profiles.store_description, seller_profiles.logo_url,
       (SELECT COUNT(*) FROM products WHERE seller_id = users.id AND is_store_published = 1) AS product_count,
       (SELECT image_url FROM products WHERE seller_id = users.id AND is_store_published = 1
         ORDER BY created_at DESC, id DESC LIMIT 1) AS image_url,
       seller_profiles.follower_count + (SELECT COUNT(*) FROM store_follows WHERE seller_id = users.id) AS follower_count,
-      seller_profiles.visitor_count
+      seller_profiles.visitor_count, ${publicStoreStatsSql}
     FROM seller_profiles
     JOIN users ON users.id = seller_profiles.user_id
+    ${publicStoreReviewsSql}
     WHERE users.role = 'seller' AND users.suspended = 0
     ORDER BY seller_profiles.created_at DESC, users.id DESC
   `)).map((store) => ({
@@ -950,6 +971,7 @@ app.get('/api/stores', async (_req, res) => {
     imageUrl: store.image_url,
     followerCount: store.follower_count,
     visitorCount: store.visitor_count,
+    ...publicStoreStats(store),
   }))
   return res.json({ stores })
 })
@@ -968,13 +990,14 @@ app.get('/api/stores/:sellerId', async (req, res) => {
     visitor_count: number
     storeCreatedAt: string
     establishedOn: string | null
-  }>(`
+  } & PublicStoreStats>(`
     SELECT users.id AS user_id, users.public_id AS publicId, users.full_name, seller_profiles.store_name,
       seller_profiles.store_description, seller_profiles.logo_url, seller_profiles.created_at AS "storeCreatedAt",seller_profiles.established_on::text AS "establishedOn",
       seller_profiles.follower_count + (SELECT COUNT(*) FROM store_follows WHERE seller_id = users.id) AS follower_count,
-      seller_profiles.visitor_count
+      seller_profiles.visitor_count, ${publicStoreStatsSql}
     FROM seller_profiles
     JOIN users ON users.id = seller_profiles.user_id
+    ${publicStoreReviewsSql}
     WHERE users.id = ? AND users.role = 'seller' AND users.suspended = 0
   `, sellerId))
   if (!store) return res.status(404).json({ error: 'Store not found.' })
@@ -1009,6 +1032,7 @@ app.get('/api/stores/:sellerId', async (req, res) => {
       ownerName: store.full_name,
       followerCount: store.follower_count,
       visitorCount: store.visitor_count,
+      ...publicStoreStats(store),
       storeCreatedAt: store.storeCreatedAt,
       establishedOn: store.establishedOn,
     },
@@ -1504,15 +1528,22 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
     SELECT id, type, title, body, link, read_at, created_at
     FROM notifications WHERE user_id = ?
     ORDER BY id DESC LIMIT 100
-  `, req.user!.id)).map((notification) => ({
-    id: notification.id,
-    type: notification.type,
-    title: notification.title,
-    body: notification.body,
-    link: notification.link,
-    isRead: Boolean(notification.read_at),
-    createdAt: notification.created_at,
-  }))
+  `, req.user!.id)).map((notification) => {
+    if (notification.type === 'wallet' && notification.link === '/seller/wallet' && notification.title === 'Admin funding added') {
+      const amount = notification.body.match(/^\$[0-9]+\.[0-9]{2}(?= credited to your seller wallet\.)/)?.[0]
+      notification.title = 'Credited to wallet'
+      notification.body = amount ? `${amount} credited to your wallet.` : 'The amount has been credited to your wallet.'
+    }
+    return {
+      id: notification.id,
+      type: notification.type,
+      title: notification.title,
+      body: notification.body,
+      link: notification.link,
+      isRead: Boolean(notification.read_at),
+      createdAt: notification.created_at,
+    }
+  })
   const unreadCount = (await getRow<{ count: number }>('SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL', req.user!.id))!.count
   return res.json({ notifications, unreadCount })
 })

@@ -1,3 +1,4 @@
+import StoreStats from '../components/StoreStats.jsx'
 import StoreDates from '../components/StoreDates.jsx'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import ReviewsPanel from '../components/ReviewsPanel.jsx'
@@ -124,10 +125,10 @@ const PartnerStorePage = () => {
           </div>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-white/85">{store.storeDescription || `A curated collection from ${store.ownerName}.`}</p>
           <StoreDates storeCreatedAt={store.storeCreatedAt} establishedOn={store.establishedOn}/>
-          <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs text-white/80">
+          <div className="mt-5 text-white"><StoreStats store={store}/></div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs text-white/80">
             <span>Curated by {store.ownerName}</span>
             <span>{products.length} products</span>
-            <span>{Number(store.followerCount || 0).toLocaleString()} {Number(store.followerCount)===1?'follower':'followers'}</span>
             <span>{Number(store.visitorCount || 0).toLocaleString()} visits</span>
             <button type="button" disabled={followBusy} onClick={toggleFollow} aria-pressed={isFollowing} className={`inline-flex min-h-9 items-center gap-2 border px-3 text-xs font-semibold ${isFollowing ? 'border-[#e5e5e5] bg-[#e5e5e5] text-[#111111]' : 'border-white/60 text-white hover:bg-white hover:text-[#111111]'}`}><Heart size={14} className={isFollowing ? 'fill-current' : ''} />{followBusy?'Updating…':isFollowing ? 'Following · Unfollow' : 'Follow store'}</button>
           </div>

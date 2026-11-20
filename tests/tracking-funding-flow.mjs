@@ -23,9 +23,13 @@ export async function testTrackingFunding({req,check,db,cookie,buyer,buyerId,sel
  check('funding retries succeed idempotently',concurrent.every(r=>r.status===200))
  const finance=(await req('/api/seller/finance',{},seller)).data
  check('seller funding credits once',finance.wallet.balanceCents===before+12345)
- check('funding record stores reason and administrator',finance.records.some(r=>r.kind==='admin_funding'&&r.note===funding.reason&&r.actorRole==='admin'&&r.delta_cents===12345))
+ check('seller funding history shows the credit without source or reason',finance.records.some(r=>r.kind==='admin_funding'&&r.note===''&&!('actorRole' in r)&&!('actor_id' in r)&&!('reference' in r)&&r.delta_cents===12345))
+ await db.query("INSERT INTO shop.notifications(user_id,type,title,body,link) VALUES($1,'wallet','Admin funding added',$2,'/seller/wallet')",[sellerId,'$1.25 credited to your seller wallet. Historical private reason.'])
+ r=await req('/api/notifications',{},seller)
+ const credits=r.data.notifications.filter(n=>n.title==='Credited to wallet')
+ check('new and old seller notifications show only the credited amount',credits.some(n=>n.body==='$123.45 credited to your wallet.')&&credits.some(n=>n.body==='$1.25 credited to your wallet.')&&!r.data.notifications.some(n=>n.title==='Admin funding added'))
  r=await post('/api/admin/seller-funding',{...funding,amountCents:500});check('same funding key cannot be reused for another amount',r.status===409)
- r=await req('/api/admin/seller-funding',{},cookie);check('admin funding tab has balances and audit history',r.status===200&&r.data.sellers.some(s=>s.id===sellerId)&&r.data.history.some(h=>h.reference===funding.requestKey))
+ r=await req('/api/admin/seller-funding',{},cookie);check('admin funding tab has balances and audit history',r.status===200&&r.data.sellers.some(s=>s.id===sellerId)&&r.data.history.some(h=>h.reference===funding.requestKey&&h.note===funding.reason&&h.adminName))
  r=await req('/api/admin/overview',{},cookie);check('lightweight admin overview returns counts without full product payload',r.status===200&&Number.isInteger(r.data.counts.products)&&!('products'in r.data))
  r=await req('/api/notifications/summary',{},cookie);check('notification summary returns unread count only',r.status===200&&Number.isInteger(r.data.unreadCount)&&!('notifications'in r.data))
 }
