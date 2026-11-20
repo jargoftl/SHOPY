@@ -9,7 +9,7 @@ import {registerDeliveryEmails} from './deliveryEmails.ts'
 import {registerAdminBuyerFunding} from './adminBuyerFunding.ts'
 import {archiveBootstrapCatalog} from './productionCatalog.ts'
 import {ensureReferralCode,referralOwner,recordReferral,registerReferrals} from './referrals.ts'
-import {registerReviews} from './reviews.ts'
+import {publicStoreReviewsSql,registerReviews} from './reviews.ts'
 import 'dotenv/config'
 import express, { type NextFunction, type Request, type Response, type RequestHandler } from 'express'
 import { Database } from './database.ts'
@@ -921,13 +921,8 @@ const publicStoreStatsSql = `
     JOIN purchase_orders o ON o.id=i.order_id AND o.status='paid'
     WHERE i.seller_id=users.id AND NOT EXISTS (
       SELECT 1 FROM purchase_refunds f WHERE f.order_id=i.order_id AND f.seller_id=i.seller_id AND f.status='completed'
-    )),0) AS items_sold,
+    )),0) + seller_profiles.historical_items_sold AS items_sold,
   reviews.average_rating, COALESCE(reviews.review_count,0) AS review_count
-`
-const publicStoreReviewsSql = `
-  LEFT JOIN LATERAL (SELECT AVG(rating) AS average_rating, COUNT(*) AS review_count
-    FROM marketplace_reviews WHERE target_kind='store' AND target_id=users.id
-      AND deleted_at IS NULL AND author_role!='admin') reviews ON TRUE
 `
 const publicStoreStats = (store: PublicStoreStats) => ({
   itemsSold: Number(store.items_sold),

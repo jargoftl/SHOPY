@@ -1,6 +1,18 @@
 import type {Express,RequestHandler} from 'express'
 import type {Database} from './database.ts'
 import {rateLimit} from 'express-rate-limit'
+export const publicStoreReviewsSql = `
+  LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS count, COALESCE(SUM(rating),0) AS points
+    FROM marketplace_reviews WHERE target_kind='store' AND target_id=seller_profiles.user_id
+      AND deleted_at IS NULL AND author_role!='admin'
+  ) online_reviews ON TRUE
+  CROSS JOIN LATERAL (
+    SELECT online_reviews.count + seller_profiles.historical_rating_count AS review_count,
+      (online_reviews.points + COALESCE(seller_profiles.historical_rating_average,0)*seller_profiles.historical_rating_count)
+        / NULLIF(online_reviews.count + seller_profiles.historical_rating_count,0) AS average_rating
+  ) reviews
+`
 export function registerReviews(app:Express,db:Database,auth:RequestHandler){
  const limiter=rateLimit({windowMs:60000,limit:15,standardHeaders:'draft-8',legacyHeaders:false})
  const target=async(kind:string,id:number)=>kind==='product'?db.prepare("SELECT p.id,p.seller_id AS sellerId FROM products p JOIN users u ON u.id=p.seller_id WHERE p.id=? AND p.is_published=1 AND p.is_store_published=1 AND u.role IN ('seller','admin') AND u.suspended=0").get(id):db.prepare("SELECT u.id,u.id AS sellerId FROM users u JOIN seller_profiles p ON p.user_id=u.id WHERE u.id=? AND u.role='seller' AND u.suspended=0").get(id)
@@ -8,7 +20,10 @@ export function registerReviews(app:Express,db:Database,auth:RequestHandler){
   const kind=String(req.params.kind),id=Number(req.params.id)
   if(!['product','store'].includes(kind)||!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid review target.'})
   if(!await target(kind,id))return res.status(404).json({error:'Not found.'})
-  const summary=await db.prepare("SELECT COUNT(*) AS count,COALESCE(AVG(rating),0) AS average FROM marketplace_reviews WHERE target_kind=? AND target_id=? AND deleted_at IS NULL AND author_role!='admin'").get(kind,id)
+  const summary=kind==='store'
+   ? await db.prepare(`SELECT reviews.review_count AS count,COALESCE(reviews.average_rating,0) AS average
+      FROM seller_profiles ${publicStoreReviewsSql} WHERE seller_profiles.user_id=?`).get(id)
+   : await db.prepare("SELECT COUNT(*) AS count,COALESCE(AVG(rating),0) AS average FROM marketplace_reviews WHERE target_kind=? AND target_id=? AND deleted_at IS NULL AND author_role!='admin'").get(kind,id)
   const reviews=await db.prepare('SELECT r.id,r.rating,r.comment,r.author_role AS authorRole,r.verified_purchase AS verifiedPurchase,r.created_at AS createdAt,u.full_name AS authorName FROM marketplace_reviews r JOIN users u ON u.id=r.author_id WHERE r.target_kind=? AND r.target_id=? AND r.deleted_at IS NULL ORDER BY r.id DESC LIMIT 100').all(kind,id)
   res.json({summary,reviews})
  })
