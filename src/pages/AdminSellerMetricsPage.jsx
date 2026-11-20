@@ -1,3 +1,4 @@
+import AdminStoreDates from '../components/AdminStoreDates.jsx'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import SiteName from '../components/SiteName.jsx'
 import { useEffect, useState } from 'react'
@@ -35,7 +36,6 @@ const AdminSellerMetricsPage = () => {
   const [salesTrack, setSalesTrack] = useState('')
   const [visitsTrack, setVisitsTrack] = useState('')
   const [topProductVolumes, setTopProductVolumes] = useState({})
-  const [adminFollowerCount, setAdminFollowerCount] = useState('0')
   const [message, setMessage] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -76,19 +76,14 @@ const AdminSellerMetricsPage = () => {
   useEffect(() => {
     if (!selectedSellerId) return undefined
     let isCurrent = true
-    Promise.all([
-      apiRequest(`/api/admin/sellers/${selectedSellerId}/dashboard-metrics`),
-      apiRequest('/api/admin/sellers'),
-    ])
-      .then(([metricData, sellerData]) => {
+    apiRequest(`/api/admin/sellers/${selectedSellerId}/dashboard-metrics`)
+      .then(metricData => {
         if (!isCurrent) return
         const metrics = metricData.metrics || {}
         setForm(Object.fromEntries(metricFields.map(({ key }) => [key, metrics[key] ?? ''])))
         setSalesTrack(formatTrack(metrics.salesTrack))
         setVisitsTrack(formatTrack(metrics.visitsTrack))
         setTopProductVolumes(Object.fromEntries((metrics.topProducts || []).map((item) => [item.productId, String(item.salesVolume)])))
-        const seller = sellerData.sellers.find((item) => item.id === Number(selectedSellerId))
-        setAdminFollowerCount(String(seller?.adminFollowerCount ?? 0))
         setMessage('')
       })
       .catch((error) => { if (isCurrent) setMessage(error.message) })
@@ -118,13 +113,6 @@ const AdminSellerMetricsPage = () => {
         method: 'PUT',
         body: JSON.stringify({ metrics }),
       })
-      await apiRequest(`/api/admin/sellers/${selectedSellerId}/stats`, {
-        method: 'PATCH',
-        body: JSON.stringify({ followerCount: Number(adminFollowerCount) }),
-      })
-      setSellers((current) => current.map((seller) => seller.id === Number(selectedSellerId)
-        ? { ...seller, adminFollowerCount: Number(adminFollowerCount), followerCount: Number(adminFollowerCount) + Math.max(0, seller.followerCount - seller.adminFollowerCount) }
-        : seller))
       setMessage(`Dashboard values saved for ${selectedSeller?.storeName || selectedSeller?.fullName}.`)
     } catch (error) {
       setMessage(error.message)
@@ -162,6 +150,7 @@ const AdminSellerMetricsPage = () => {
 
         {message && <p role="status" className="border border-[#111111] bg-[#111111] px-4 py-3 text-sm">{message}</p>}
 
+        {selectedSellerId && <AdminStoreDates key={selectedSellerId} userId={selectedSellerId} showDateHistory={false}/>}
         {selectedSellerId && <form onSubmit={saveMetrics} className="space-y-6">
           <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7">
             <div className="mb-5"><h2 className="text-lg font-semibold">Dashboard totals</h2><p className="mt-1 text-xs text-[#777777]">Leave a field blank to use live data where available.</p></div>
@@ -169,9 +158,6 @@ const AdminSellerMetricsPage = () => {
               {metricFields.map(({ key, label, integer, max, step, prefix }) => <label key={key} className="block text-xs text-[#a3a3a3]">{label}
                 <div className="mt-2 flex h-11 items-center border border-[#111111] bg-[#111111] focus-within:border-[#cccccc]">{prefix && <span className="pl-3 text-[#777777]">{prefix}</span>}<input type="number" min="0" max={max || 1000000000000} step={integer ? '1' : step || '0.01'} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm text-white outline-none" placeholder="Use live value" /></div>
               </label>)}
-              <label className="block text-xs text-[#a3a3a3]">Admin follower adjustment
-                <input type="number" min="0" max="1000000000" step="1" value={adminFollowerCount} onChange={(event) => setAdminFollowerCount(event.target.value)} className="mt-2 h-11 w-full border border-[#111111] bg-[#111111] px-3 text-sm text-white outline-none focus:border-[#cccccc]" />
-              </label>
             </div>
           </section>
 
