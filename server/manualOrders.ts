@@ -16,6 +16,23 @@ function matchesScreenshot(image: Buffer, type: unknown): type is 'image/png' | 
   return type === 'image/jpeg' && image[0] === 255 && image[1] === 216 && image[2] === 255
 }
 
+async function initialUsdRate(coin: string): Promise<string> {
+  const signal = AbortSignal.timeout(5000)
+  let usd: number
+  if (coin === 'TRX') {
+    const response = await fetch('https://api.kraken.com/0/public/Ticker?pair=TRXUSD', { signal })
+    if (!response.ok) return ''
+    const data = await response.json() as { result?: { TRXUSD?: { c?: string[] } } }
+    usd = Number(data.result?.TRXUSD?.c?.[0])
+  } else {
+    const response = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=USD', { signal })
+    if (!response.ok) return ''
+    const data = await response.json() as { data?: { rates?: Record<string, string> } }
+    usd = 1 / Number(data.data?.rates?.[coin])
+  }
+  return Number.isFinite(usd) && usd > 0 ? usd.toFixed(8).replace(/0+$/, '').replace(/\.$/, '') : ''
+}
+
 export async function registerManualOrders(app: Express, db: Database, auth: RequestHandler, role: (...roles: ('customer' | 'seller' | 'admin')[]) => RequestHandler) {
   await initializeOrderNumbers(db)
   registerShipmentTracking(app,db,auth)
@@ -128,9 +145,22 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     const coin = String(req.params.coin)
     const network = text(req.body?.network, 100)
     const address = text(req.body?.address, 500)
-    const rate = text(req.body?.usdRate, 30)
+    const explicitRate = req.body?.usdRate !== undefined
+    let rate = text(req.body?.usdRate, 30)
     const additional = req.body?.sellerNetwork === true
-    if (!(additional?sellerPaymentCoins:coins).includes(coin) || !network || !address || /[\r\n]/.test(network + address) || !validRate(rate)) return res.status(400).json({ error: 'Enter a supported coin, network, wallet address and positive USD-per-coin rate (up to 8 decimals).' })
+    if (!(additional?sellerPaymentCoins:coins).includes(coin) || !network || !address || /[\r\n]/.test(network + address) || (explicitRate&&!validRate(rate))) return res.status(400).json({ error: 'Enter a supported coin, network and wallet address. Any supplied rate must be positive with up to 8 decimals.' })
+    if (!explicitRate) {
+      const savedRates = await db.prepare(`
+        SELECT usd_rate, 0 AS priority, network FROM payment_wallets WHERE coin=?
+        UNION ALL
+        SELECT usd_rate, 1 AS priority, network FROM seller_payment_networks WHERE coin=?
+        ORDER BY priority, network
+      `).all(coin, coin) as Array<{usd_rate: string | null, network: string}>
+      const saved = savedRates.find(row => row.network.toLowerCase()===network.toLowerCase()&&validRate(row.usd_rate||''))
+        || savedRates.find(row => validRate(row.usd_rate||''))
+      rate = saved?.usd_rate || await initialUsdRate(coin).catch(() => '')
+      if (!validRate(rate)) return res.status(503).json({error:'The USD rate for this coin is temporarily unavailable. Try saving this wallet again shortly.'})
+    }
     let qrPath: string | null = null
     let qrType: string | null = null
     if (req.body?.qr !== undefined) {
@@ -152,7 +182,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       return db.prepare(`
       INSERT INTO ${table} (coin,network,address,usd_rate,qr_image,qr_content_type)
       VALUES (?,?,?,?,?,?)
-      ON CONFLICT(${conflictKey}) DO UPDATE SET network=excluded.network,address=excluded.address,usd_rate=excluded.usd_rate,
+      ON CONFLICT(${conflictKey}) DO UPDATE SET network=excluded.network,address=excluded.address,usd_rate=${explicitRate ? 'excluded.usd_rate' : `COALESCE(NULLIF(${table}.usd_rate, ''), excluded.usd_rate)`},
         qr_image=CASE WHEN excluded.qr_image IS NULL AND lower(${table}.network)=lower(excluded.network) AND ${table}.address=excluded.address
           THEN ${table}.qr_image ELSE excluded.qr_image END,
         qr_content_type=CASE WHEN excluded.qr_image IS NULL AND lower(${table}.network)=lower(excluded.network) AND ${table}.address=excluded.address

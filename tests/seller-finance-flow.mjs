@@ -105,4 +105,26 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  finance=(await req('/api/seller/finance',{},seller)).data
  check('deposit locks the selected network',r.status===201&&finance.requests.some(q=>q.id===extraId&&q.network===extra.network&&q.address===extra.address),r)
 
+ const withoutRate={sellerNetwork:true,network:'BNB Smart Chain (BEP20)',address:'test-bep20-address',qr:extra.qr}
+ r=await post('/api/admin/payment-wallets/USDT',withoutRate,cookie,'PUT')
+ check('new network saves without entering a rate when the coin has a saved rate',r.status===200&&r.data.wallet?.usdRate==='1',r)
+ const realFetch=globalThis.fetch
+ try {
+  let priceCalls=0
+  globalThis.fetch=(url,options)=>{
+   if(String(url)==='https://api.coinbase.com/v2/exchange-rates?currency=USD'){
+    priceCalls++
+    return Promise.resolve(Response.json({data:{rates:{AVAX:'0.05'}}}))
+   }
+   return realFetch(url,options)
+  }
+  const avax={sellerNetwork:true,network:'Avalanche C-Chain',address:'test-avax-address',qr:extra.qr}
+  r=await post('/api/admin/payment-wallets/AVAX',avax,cookie,'PUT')
+  check('first wallet uses a market rate when none is saved',r.status===200&&r.data.wallet?.usdRate==='20'&&priceCalls===1,r)
+  r=await post('/api/admin/payment-wallets/AVAX',{...avax,qr:undefined},cookie,'PUT')
+  check('saving an existing wallet keeps its rate and QR',r.status===200&&r.data.wallet?.usdRate==='20'&&r.data.wallet?.hasQr&&priceCalls===1,r)
+  r=await post('/api/admin/payment-wallets/ADA',{...avax,network:'Cardano'},cookie,'PUT')
+  check('missing market rate returns a retryable error',r.status===503,r)
+ }finally{globalThis.fetch=realFetch}
+
 }
