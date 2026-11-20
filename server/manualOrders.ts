@@ -119,7 +119,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
   })
   app.post('/api/purchases', auth, async (req, res) => {
     const { items, billing, coin, requestKey } = req.body ?? {}
-    const fields = ['fullName', 'email', 'phone', 'address', 'city', 'region', 'postalCode', 'country']
+    const fields = ['fullName', 'email', 'address', 'city', 'region', 'country']
     const useBalance = coin === 'BALANCE'
     if(!useBalance)return res.status(400).json({error:'Orders can only be paid from your account balance. Add funds to your account before checkout.'})
     if ((!useBalance && !coins.includes(coin)) || typeof requestKey !== 'string' || !/^[a-f0-9-]{36}$/i.test(requestKey) || !Array.isArray(items) || !items.length || items.length > 100 || !billing || !fields.every((field) => text(billing[field], 200))) return res.status(400).json({ error: 'Enter valid billing details, products and a supported payment method.' })

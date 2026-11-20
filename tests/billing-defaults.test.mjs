@@ -6,12 +6,14 @@ test('billing uses account details and the default address without overwriting e
   const user = { fullName: 'Buyer Name', email: 'account@example.test', phone: '555' }
   const address = { isDefault: 1, fullName: 'Delivery Name', phone: '123', address: '1 Main St', city: 'Town', region: 'State', postalCode: '123', country: 'Canada' }
   assert.deepEqual(mergeBillingDefaults({}, user, [address], new Set()), {
-    fullName: 'Delivery Name', email: 'account@example.test', phone: '123', address: '1 Main St', city: 'Town', region: 'State', postalCode: '123', country: 'Canada',
+    fullName: 'Delivery Name', email: 'account@example.test', address: '1 Main St', city: 'Town', region: 'State', country: 'Canada',
   })
   const edited = mergeBillingDefaults({ fullName: '', email: 'other@example.test' }, user, [address], new Set(['fullName']))
   assert.equal(edited.fullName, '')
   assert.equal(edited.email, 'other@example.test')
   assert.equal(edited.address, '1 Main St')
   assert.equal(mergeBillingDefaults({}, user, [], new Set()).fullName, 'Buyer Name')
+  assert.equal('phone' in edited,false)
+  assert.equal('postalCode' in edited,false)
   assert.equal(applyBillingAddress({ email: 'other@example.test' }, address).email, 'other@example.test')
 })

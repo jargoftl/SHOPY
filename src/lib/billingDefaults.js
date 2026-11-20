@@ -2,12 +2,10 @@ export const mergeBillingDefaults = (current, user, addresses, editedFields) => 
   const defaultAddress = addresses.find((address) => address.isDefault)
   const defaults = {
     fullName: defaultAddress?.fullName || user.fullName,
-    phone: defaultAddress?.phone || user.phone || '',
     email: user.email,
     address: defaultAddress?.address,
     city: defaultAddress?.city,
     region: defaultAddress?.region,
-    postalCode: defaultAddress?.postalCode,
     country: defaultAddress?.country,
   }
   const next = { ...current }
@@ -18,6 +16,6 @@ export const mergeBillingDefaults = (current, user, addresses, editedFields) => 
 }
 
 export const applyBillingAddress = (current, address) => {
-  const fields = ['fullName', 'phone', 'address', 'city', 'region', 'postalCode', 'country']
+  const fields = ['fullName', 'address', 'city', 'region', 'country']
   return { ...current, ...Object.fromEntries(fields.map((field) => [field, address[field] || ''])) }
 }

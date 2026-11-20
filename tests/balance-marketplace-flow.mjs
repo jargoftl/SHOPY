@@ -16,13 +16,14 @@ export async function testBalanceMarketplace({req,check,db,cookie,seller,sellerI
  check('verified deposit adds the full stated amount',(await req('/api/rewards',{},buyer)).data.balanceUnits===5000)
  r=await call('/api/admin/buyer-requests/'+depositId,{status:'confirmed',verified:true,transferReference:'fixture-funding'},cookie,'PATCH');check('deposit confirmation cannot credit twice',r.status===409)
  const product=(await db.query("INSERT INTO shop.products(name,category,price,image_url,seller_id,is_published,is_store_published) VALUES('Funded marketplace product','Home',10,'',$1,1,1) RETURNING id",[sellerId])).rows[0].id
- const orderBody={billing:{fullName:'Funded Buyer',email:'funded-buyer@example.test',phone:'123',address:'Fixture',city:'Fixture',region:'Fixture',postalCode:'00000',country:'US'},coin:'USDT',requestKey:randomUUID(),items:[{id:product,quantity:1,selectedColor:'',selectedSize:''}],expectedTotalCents:1030}
+ const orderBody={billing:{fullName:'Funded Buyer',email:'funded-buyer@example.test',address:'Fixture',city:'Fixture',region:'Fixture',country:'US'},coin:'USDT',requestKey:randomUUID(),items:[{id:product,quantity:1,selectedColor:'',selectedSize:''}],expectedTotalCents:1030}
  r=await call('/api/purchases',orderBody,buyer);check('buyer cannot select a coin at checkout',r.status===400)
  orderBody.coin='BALANCE'
  r=await call('/api/purchases',orderBody,buyer);check('funded balance pays order immediately',r.status===201,r);const orderId=r.data.id
  r=await call('/api/purchases',orderBody,buyer);check('checkout retries do not duplicate charges',r.status===200&&r.data.id===orderId)
  check('balance deducted once',(await req('/api/rewards',{},buyer)).data.balanceUnits===3970)
  const purchase=(await req('/api/purchases/'+orderId,{},buyer)).data.order
+ check('simplified billing is retained without phone or postal code',!('phone' in purchase.billing)&&!('postalCode' in purchase.billing))
  check('balance paid order has no external wallet quote',purchase.status==='paid'&&purchase.walletAddress===null&&purchase.accountBalancePayment)
  const sellerOrders=(await req('/api/seller/purchases',{},seller)).data.orders
  check('new paid purchase appears in seller orders immediately',sellerOrders.some(o=>o.id===orderId&&o.status==='paid'))

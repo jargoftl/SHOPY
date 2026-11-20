@@ -84,9 +84,9 @@ try{
  if(product){
   const image=await fetch(base+product.imageUrl);check('existing product image URL returns original bytes',image.ok&&Buffer.from(await image.arrayBuffer()).equals(png));
   check('database stores an object path, not image bytes',typeof (await db.query('SELECT image FROM shop.product_images')).rows[0].image==='string');
-  const body={billing:{fullName:'Buyer',email:'buyer@example.test',phone:'123',address:'Test',city:'Test',region:'Test',postalCode:'123',country:'Test'},coin:'BALANCE',requestKey:'11111111-1111-1111-1111-111111111111',expectedTotalCents:1030,items:[{id:product.id,quantity:1,selectedColor:'',selectedSize:''}]};
+  const body={billing:{fullName:'Buyer',email:'buyer@example.test',address:'Test',city:'Test',region:'Test',country:'Test'},coin:'BALANCE',requestKey:'11111111-1111-1111-1111-111111111111',expectedTotalCents:1030,items:[{id:product.id,quantity:1,selectedColor:'',selectedSize:''}]};
   await db.query('INSERT INTO shop.reward_balances (user_id,balance_units) VALUES ($1,5000)',[buyerId]);
-  r=await req('/api/purchases',{method:'POST',body:JSON.stringify(body)},buyer);check('balance purchase',r.status===201,r);const orderId=r.data.id;
+  r=await req('/api/purchases',{method:'POST',body:JSON.stringify(body)},buyer);check('balance purchase without phone or postal code',r.status===201,r);const orderId=r.data.id;
   r=await req('/api/purchases',{method:'POST',body:JSON.stringify(body)},buyer);check('idempotent purchase retry',r.status===200&&r.data.id===orderId,r);
   check('balance debited once',Number((await db.query('SELECT balance_units FROM shop.reward_balances WHERE user_id=$1',[buyerId])).rows[0].balance_units)===3970);
   for(const [path,userCookie] of [['/api/purchases',buyer],['/api/purchases/'+orderId,buyer],['/api/admin/purchases',cookie],['/api/seller/purchases',seller],['/api/stores/'+sellerId,buyer],['/api/stores/'+sellerId,buyer],['/api/admin/users/'+buyerId+'/details',cookie],['/api/admin/users/'+sellerId+'/details',cookie]]){

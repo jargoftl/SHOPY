@@ -1,3 +1,4 @@
+import {SellerLanguageProvider} from './context/SellerLanguageContext.jsx'
 import {applySiteTheme,readSiteTheme} from './lib/siteTheme.js'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -12,6 +13,6 @@ applySiteTheme(readSiteTheme())
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <SiteSettingsProvider><App /><ProgressToast /></SiteSettingsProvider>
+    <SiteSettingsProvider><SellerLanguageProvider><App /></SellerLanguageProvider><ProgressToast /></SiteSettingsProvider>
   </StrictMode>,
 )

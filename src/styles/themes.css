@@ -36,3 +36,6 @@
 .signup-primary:hover{background:var(--brand-hover)}
 .signup-primary:disabled{opacity:.5}
 .cart-footer :is(section>p,nav a){color:#fff}
+
+/* Keep the color picker clear of checkout fields and the country selector. */
+body:has(.buyer-billing-page) .theme-control{display:none}

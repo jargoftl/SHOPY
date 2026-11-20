@@ -36,7 +36,7 @@ const BillingPage = () => {
   const selectAddress = (id) => {
     const selected = addresses.find((address) => address.id === Number(id))
     if (!selected) return
-    const fields = ['fullName', 'phone', 'address', 'city', 'region', 'postalCode', 'country']
+    const fields = ['fullName', 'address', 'city', 'region', 'country']
     fields.forEach((field) => editedFields.current.add(field))
     setBilling((current) => applyBillingAddress(current, selected))
   }
@@ -63,7 +63,7 @@ const BillingPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white px-4 pb-24 text-[#171717] sm:px-7 md:pb-10">
+    <div className="buyer-billing-page min-h-screen bg-white px-4 pb-24 text-[#171717] sm:px-7 md:pb-10">
       <header className="mx-auto flex max-w-[1200px] items-center justify-between border-b border-[#e8e8e8] py-5"><Link to="/" className="text-[26px] font-black tracking-[-0.08em]"><SiteName logo /></Link><Link to="/cart" className="text-xs underline underline-offset-4">Back to cart</Link></header>
       <main className="mx-auto max-w-[1200px] py-9 sm:py-14">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9a5c46]">Checkout · Step 1 of 2</p>
@@ -75,12 +75,10 @@ const BillingPage = () => {
               <label className="block text-sm font-medium">Full name<input name="fullName" value={billing.fullName || ''} onChange={updateBilling} autoComplete="name" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
               <label className="block text-sm font-medium">Email<input name="email" value={billing.email || ''} onChange={updateBilling} type="email" autoComplete="email" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
             </div>
-            <label className="block text-sm font-medium">Phone<input name="phone" placeholder="+1 (202) 555-0123" value={billing.phone || ''} onChange={updateBilling} type="tel" autoComplete="tel" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
             <label className="block text-sm font-medium">详细地址 / Street address<input name="address" placeholder="请输入真实的街道、门牌号和房间号" value={billing.address || ''} onChange={updateBilling} autoComplete="street-address" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-sm font-medium">城市 / City<input name="city" value={billing.city || ''} onChange={updateBilling} autoComplete="address-level2" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
               <label className="block text-sm font-medium">省 / 自治区 / 直辖市<input name="region" value={billing.region || ''} onChange={updateBilling} autoComplete="address-level1" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
-              <label className="block text-sm font-medium">邮政编码 / Postal code<input name="postalCode" value={billing.postalCode || ''} onChange={updateBilling} autoComplete="postal-code" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
             </div>
             <label className="block text-sm font-medium">国家 / Country
               <select name="country" value={billing.country || 'United States'} onChange={updateBilling} autoComplete="country-name" required className="mt-2 h-12 w-full border border-[#cccccc] bg-white px-3 text-sm outline-none focus:border-black"><option value="">Choose country</option><option value="China">中国</option><option>United States</option><option>Canada</option><option>United Kingdom</option><option>Nigeria</option><option>Other</option>{billing.country && !['China', 'United States', 'Canada', 'United Kingdom', 'Nigeria', 'Other'].includes(billing.country) && <option>{billing.country}</option>}</select>
