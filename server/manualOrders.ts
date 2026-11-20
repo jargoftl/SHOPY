@@ -2,7 +2,7 @@ import {queueDeliveryEmail,kickDeliveryEmailWorker} from './deliveryEmails.ts'
 import type { Express, RequestHandler } from 'express'
 import express from 'express'
 import {recordShipmentEvent,registerShipmentTracking} from './shipmentTracking.ts'
-import { postSellerFunds, reverseSellerRelease } from './sellerFinance.ts'
+import { postSellerFunds, reverseSellerRelease, sellerPaymentCoins } from './sellerFinance.ts'
 import type { Database } from './database.ts'
 import { ObjectStorage } from './storage.ts'
 import { allocateOrderNumber, initializeOrderNumbers } from './orderNumbers.ts'
@@ -14,6 +14,23 @@ const text = (value: unknown, max: number): string =>
 function matchesScreenshot(image: Buffer, type: unknown): type is 'image/png' | 'image/jpeg' {
   if (type === 'image/png') return image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
   return type === 'image/jpeg' && image[0] === 255 && image[1] === 216 && image[2] === 255
+}
+
+async function initialUsdRate(coin: string): Promise<string> {
+  const signal = AbortSignal.timeout(5000)
+  let usd: number
+  if (coin === 'TRX') {
+    const response = await fetch('https://api.kraken.com/0/public/Ticker?pair=TRXUSD', { signal })
+    if (!response.ok) return ''
+    const data = await response.json() as { result?: { TRXUSD?: { c?: string[] } } }
+    usd = Number(data.result?.TRXUSD?.c?.[0])
+  } else {
+    const response = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=USD', { signal })
+    if (!response.ok) return ''
+    const data = await response.json() as { data?: { rates?: Record<string, string> } }
+    usd = 1 / Number(data.data?.rates?.[coin])
+  }
+  return Number.isFinite(usd) && usd > 0 ? usd.toFixed(8).replace(/0+$/, '').replace(/\.$/, '') : ''
 }
 
 export async function registerManualOrders(app: Express, db: Database, auth: RequestHandler, role: (...roles: ('customer' | 'seller' | 'admin')[]) => RequestHandler) {
@@ -112,10 +129,14 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
   const walletStorage = new ObjectStorage()
   app.get('/api/admin/payment-wallets', auth, role('admin'), async (_req, res) => {
     const wallets = await db.prepare('SELECT coin, network, address, usd_rate AS usdRate, qr_image IS NOT NULL AS hasQr FROM payment_wallets ORDER BY coin').all()
-    res.set('Cache-Control', 'no-store').json({ wallets })
+    const networkWallets = await db.prepare('SELECT coin, network, address, usd_rate AS usdRate, qr_image IS NOT NULL AS hasQr FROM seller_payment_networks ORDER BY coin,network').all()
+    res.set('Cache-Control', 'no-store').json({ wallets, networkWallets })
   })
   app.get('/api/admin/payment-wallets/:coin/qr', auth, role('admin'), async (req, res) => {
-    const wallet = await db.prepare('SELECT qr_image, qr_content_type FROM payment_wallets WHERE coin=?').get(req.params.coin) as { qr_image: string | null, qr_content_type: string | null } | undefined
+    const network = text(req.query.network, 100)
+    const wallet = (network
+      ? await db.prepare('SELECT qr_image, qr_content_type FROM seller_payment_networks WHERE coin=? AND lower(network)=lower(?)').get(req.params.coin, network)
+      : await db.prepare('SELECT qr_image, qr_content_type FROM payment_wallets WHERE coin=?').get(req.params.coin)) as { qr_image: string | null, qr_content_type: string | null } | undefined
     if (!wallet?.qr_image || !wallet.qr_content_type) return res.status(404).json({ error: 'No QR screenshot is saved for this wallet.' })
     const image = await walletStorage.get(wallet.qr_image)
     return res.set('Cache-Control', 'no-store').type(wallet.qr_content_type).send(image)
@@ -124,8 +145,22 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     const coin = String(req.params.coin)
     const network = text(req.body?.network, 100)
     const address = text(req.body?.address, 500)
-    const rate = text(req.body?.usdRate, 30)
-    if (!coins.includes(coin) || !network || !address || /[\r\n]/.test(network + address) || !validRate(rate)) return res.status(400).json({ error: 'Enter a supported coin, network, wallet address and positive USD-per-coin rate (up to 8 decimals).' })
+    const explicitRate = req.body?.usdRate !== undefined
+    let rate = text(req.body?.usdRate, 30)
+    const additional = req.body?.sellerNetwork === true
+    if (!(additional?sellerPaymentCoins:coins).includes(coin) || !network || !address || /[\r\n]/.test(network + address) || (explicitRate&&!validRate(rate))) return res.status(400).json({ error: 'Enter a supported coin, network and wallet address. Any supplied rate must be positive with up to 8 decimals.' })
+    if (!explicitRate) {
+      const savedRates = await db.prepare(`
+        SELECT usd_rate, 0 AS priority, network FROM payment_wallets WHERE coin=?
+        UNION ALL
+        SELECT usd_rate, 1 AS priority, network FROM seller_payment_networks WHERE coin=?
+        ORDER BY priority, network
+      `).all(coin, coin) as Array<{usd_rate: string | null, network: string}>
+      const saved = savedRates.find(row => row.network.toLowerCase()===network.toLowerCase()&&validRate(row.usd_rate||''))
+        || savedRates.find(row => validRate(row.usd_rate||''))
+      rate = saved?.usd_rate || await initialUsdRate(coin).catch(() => '')
+      if (!validRate(rate)) return res.status(503).json({error:'The USD rate for this coin is temporarily unavailable. Try saving this wallet again shortly.'})
+    }
     let qrPath: string | null = null
     let qrType: string | null = null
     if (req.body?.qr !== undefined) {
@@ -138,16 +173,24 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       qrPath = await walletStorage.put(image, type)
       qrType = type
     }
-    const wallet = await db.prepare(`
-      INSERT INTO payment_wallets (coin,network,address,usd_rate,qr_image,qr_content_type)
+    const wallet = await db.transaction(async()=>{
+      const table = additional ? 'seller_payment_networks' : 'payment_wallets'
+      const otherTable = additional ? 'payment_wallets' : 'seller_payment_networks'
+      const duplicate = await db.prepare(`SELECT coin FROM ${otherTable} WHERE coin=? AND lower(network)=lower(?)`).get(coin, network)
+      if (duplicate) return null
+      const conflictKey = additional ? 'coin, (lower(network))' : 'coin'
+      return db.prepare(`
+      INSERT INTO ${table} (coin,network,address,usd_rate,qr_image,qr_content_type)
       VALUES (?,?,?,?,?,?)
-      ON CONFLICT(coin) DO UPDATE SET network=excluded.network,address=excluded.address,usd_rate=excluded.usd_rate,
-        qr_image=CASE WHEN excluded.qr_image IS NULL AND payment_wallets.network=excluded.network AND payment_wallets.address=excluded.address
-          THEN payment_wallets.qr_image ELSE excluded.qr_image END,
-        qr_content_type=CASE WHEN excluded.qr_image IS NULL AND payment_wallets.network=excluded.network AND payment_wallets.address=excluded.address
-          THEN payment_wallets.qr_content_type ELSE excluded.qr_content_type END
+      ON CONFLICT(${conflictKey}) DO UPDATE SET network=excluded.network,address=excluded.address,usd_rate=${explicitRate ? 'excluded.usd_rate' : `COALESCE(NULLIF(${table}.usd_rate, ''), excluded.usd_rate)`},
+        qr_image=CASE WHEN excluded.qr_image IS NULL AND lower(${table}.network)=lower(excluded.network) AND ${table}.address=excluded.address
+          THEN ${table}.qr_image ELSE excluded.qr_image END,
+        qr_content_type=CASE WHEN excluded.qr_image IS NULL AND lower(${table}.network)=lower(excluded.network) AND ${table}.address=excluded.address
+          THEN ${table}.qr_content_type ELSE excluded.qr_content_type END
       RETURNING coin,network,address,usd_rate AS usdRate,qr_image IS NOT NULL AS hasQr
     `).get(coin, network, address, rate, qrPath, qrType)
+    })()
+    if (!wallet) return res.status(409).json({error:'A wallet for this coin and network already exists. Edit the saved wallet instead.'})
     return res.json({ ok: true, wallet })
   })
   app.get('/api/payment-coins', async (_req, res) => {

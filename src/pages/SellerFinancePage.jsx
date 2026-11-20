@@ -1,5 +1,6 @@
-import {Bitcoin, Copy, QrCode, X} from 'lucide-react'
+import {Copy, QrCode, X} from 'lucide-react'
 import {transactionActor,transactionType,transactionNote} from '../lib/transactionLabels.js'
+import CryptoWalletIcon,{coinNetworks} from '../components/CryptoWalletIcon.jsx'
 import SellerPaymentReceipt from '../components/SellerPaymentReceipt.jsx'
 import OrderStatusBadge from '../components/OrderStatusBadge.jsx'
 import {Link,useSearchParams} from 'react-router-dom'
@@ -10,7 +11,7 @@ import TransactionPinModal from '../components/TransactionPinModal.jsx'
 import { useCallback,useEffect,useState,useRef } from 'react'
 import { apiRequest } from '../lib/api.js'
 import SellerWorkspace,{money,panel,button,input} from '../components/SellerWorkspace.jsx'
-const coins=['BTC','ETH','USDT','USDC','BNB','SOL','XRP','DOGE','LTC']
+const coins=Object.keys(coinNetworks)
 function DepositInstructions({ request }) {
  const [copyStatus,setCopyStatus]=useState('')
  const [showQr,setShowQr]=useState(false)
@@ -21,9 +22,9 @@ function DepositInstructions({ request }) {
  }
  return <section className="mt-3 rounded-xl border border-blue-100 bg-[#f3f7ff] p-3 text-sm">
   <div className="flex flex-wrap items-center gap-2">
-   <span className="inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 font-bold text-blue-950">{request.coin==='BTC'&&<Bitcoin size={16} aria-hidden="true"/>}{request.coin}</span>
+   <span className="inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 font-bold text-blue-950"><CryptoWalletIcon coin={request.coin}/>{request.coin}</span>
    <span className="text-xs text-slate-600">Network</span>
-   <span className="rounded-md bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-950">{request.network}</span>
+   <span className="inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-xs font-semibold text-blue-950"><CryptoWalletIcon network={request.network}/>{request.network}</span>
   </div>
   {request.coin_amount&&<p className="mt-2 font-semibold">Send {request.coin_amount} {request.coin}</p>}
   <p className="mb-1 mt-3 text-xs font-medium text-slate-600">Receiving address</p>
@@ -66,6 +67,9 @@ function DepositAmount({wallet}){
 
 function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUploaded}){
  const [coin,setCoin]=useState(()=>!requestId&&wallets.some(wallet=>wallet.coin==='BTC')?'BTC':'')
+ const [network,setNetwork]=useState(()=>!requestId&&wallets.filter(wallet=>wallet.coin==='BTC').length===1?wallets.find(wallet=>wallet.coin==='BTC').network:'')
+ const networks=wallets.filter(wallet=>wallet.coin===coin)
+ const availableCoins=[...new Set(wallets.map(wallet=>wallet.coin))]
  const [wallet,setWallet]=useState(null)
  const [error,setError]=useState('')
  const [submitting,setSubmitting]=useState(false)
@@ -80,20 +84,21 @@ function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUplo
  },[])
  useEffect(()=>{heading.current?.focus()},[coin])
  useEffect(()=>{
-  if(!coin)return
+  if(!coin||!network)return
   const controller=new AbortController()
-  apiRequest(`/api/seller/finance/deposit-wallets/${encodeURIComponent(coin)}`,{signal:controller.signal})
+  apiRequest(`/api/seller/finance/deposit-wallets/${encodeURIComponent(coin)}?${new URLSearchParams({network})}`,{signal:controller.signal})
    .then(wallet=>{if(!controller.signal.aborted)setWallet(wallet)}).catch(error=>{if(!controller.signal.aborted)setError(error.message)})
   return()=>controller.abort()
- },[coin])
- const choose=next=>{
+ },[coin,network])
+ const choose=(next,chain)=>{
   setWallet(null)
   setError('')
   setRequestKey(crypto.randomUUID())
   setCoin(next)
+  setNetwork(chain)
  }
  const prepareRequest=fields=>apiRequest('/api/seller/finance/requests',{method:'POST',body:JSON.stringify({
-  kind:'deposit',requestKey,coin:wallet.coin,walletVersion:wallet.version,
+  kind:'deposit',requestKey,coin:wallet.coin,paymentNetwork:wallet.network,walletVersion:wallet.version,
   amountCents:Math.round(Number(fields.get('amount'))*100),transactionPin:fields.get('transactionPin')
  })})
  return <dialog ref={dialog} aria-labelledby="deposit-dialog-title" onCancel={event=>{event.preventDefault();if(!submitting)onClose()}} className={`${panel} m-auto max-h-[calc(100dvh-1.5rem)] w-[calc(100%-1.5rem)] max-w-md overflow-y-auto !p-4 backdrop:bg-black/40`}>
@@ -102,16 +107,28 @@ function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUplo
     <button type="button" onClick={onClose} disabled={submitting} aria-label="Close deposit" className="grid min-h-9 min-w-9 place-items-center rounded-full hover:bg-slate-100"><X size={20} aria-hidden="true"/></button>
    </div>
    {!coin&&!requestId&&<div className="mt-2 grid gap-2">
-    {wallets.length?wallets.map(wallet=><button type="button" key={wallet.coin} onClick={()=>choose(wallet.coin)} className="flex min-h-10 items-center justify-between gap-3 rounded-lg border px-3 text-left text-sm hover:bg-blue-50">
-     <strong>{wallet.coin}</strong><span>{wallet.network}</span>
-    </button>):<p className="text-sm text-gray-600">No deposit wallets are available yet.</p>}
+    {availableCoins.length?availableCoins.map(type=>{
+     const options=wallets.filter(wallet=>wallet.coin===type)
+     return <button type="button" key={type} onClick={()=>choose(type,options.length===1?options[0].network:'')} className="flex min-h-12 items-center gap-3 rounded-lg border px-3 text-left text-sm hover:bg-blue-50">
+      <CryptoWalletIcon coin={type}/><strong>{type}</strong><span className="ml-auto text-xs text-slate-600">{options.length===1?options[0].network:`${options.length} networks`}</span>
+     </button>
+    }):<p className="text-sm text-gray-600">No deposit wallets are available yet.</p>}
    </div>}
-   {coin&&<button type="button" disabled={submitting} onClick={()=>choose('')} className="mb-1 min-h-8 text-xs text-blue-700 underline">Choose another coin</button>}
-   {coin&&!wallet&&!error&&<p role="status" className="text-sm">Loading wallet…</p>}
+   {coin&&<button type="button" disabled={submitting} onClick={()=>choose('','')} className="mb-1 min-h-8 text-xs text-blue-700 underline">Choose another coin</button>}
+   {wallet&&networks.length>1&&<button type="button" disabled={submitting} onClick={()=>choose(coin,'')} className="ml-3 min-h-8 text-xs text-blue-700 underline">Change network</button>}
+   {coin&&!network&&networks.length>1&&<section className="mb-2">
+    <h3 className="mb-1 text-xs font-semibold text-slate-600">Choose a {coin} network</h3>
+    <div className="grid gap-1.5">
+     {networks.map(option=><button key={option.network} type="button" disabled={submitting} onClick={()=>choose(coin,option.network)} className="flex items-center gap-2 rounded-lg border border-slate-200 px-2 py-1.5 text-left text-sm hover:bg-blue-50">
+      <CryptoWalletIcon network={option.network}/>{option.network}
+     </button>)}
+    </div>
+   </section>}
+   {network&&!wallet&&!error&&<p role="status" className="text-sm">Loading wallet…</p>}
    {error&&<p role="alert" className="text-sm text-red-700">{error}</p>}
    {wallet&&<>
-    <DepositInstructions key={wallet.coin} request={wallet}/>
-    {hasPin?<SellerPaymentReceipt key={wallet.coin} prepareRequest={prepareRequest} onBusyChange={setSubmitting} onUploaded={onUploaded}>
+    <DepositInstructions request={wallet}/>
+    {hasPin?<SellerPaymentReceipt prepareRequest={prepareRequest} onBusyChange={setSubmitting} onUploaded={onUploaded}>
      <DepositAmount wallet={wallet}/>
      <label className="block text-xs font-medium">Transaction PIN
       <PasswordInput name="transactionPin" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" required className="mt-1 block w-full rounded border px-2 py-1.5 text-sm"/>
@@ -127,7 +144,7 @@ function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUplo
 }
 
 export default function SellerFinancePage({view='wallet'}){
- const [user,setUser]=useState(null),[data,setData]=useState(null),[analytics,setAnalytics]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[kind,setKind]=useState(''),[depositId,setDepositId]=useState(null),[pinSettingsOpen,setPinSettingsOpen]=useState(null),[filter,setFilter]=useState('all'),[from,setFrom]=useState(''),[to,setTo]=useState(''),[key,setKey]=useState(''),[period,setPeriod]=useState('30'),[today,setToday]=useState(()=>new Date().toISOString().slice(0,10))
+ const [user,setUser]=useState(null),[data,setData]=useState(null),[analytics,setAnalytics]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[kind,setKind]=useState(''),[depositId,setDepositId]=useState(null),[withdrawalCoin,setWithdrawalCoin]=useState('BTC'),[pinSettingsOpen,setPinSettingsOpen]=useState(null),[filter,setFilter]=useState('all'),[from,setFrom]=useState(''),[to,setTo]=useState(''),[key,setKey]=useState(''),[period,setPeriod]=useState('30'),[today,setToday]=useState(()=>new Date().toISOString().slice(0,10))
  const [params]=useSearchParams(),actionStarted=useRef(false)
  const refresh=useCallback(async()=>{const [u,d,a]=await Promise.all([apiRequest('/api/auth/me'),view==='statement'?Promise.resolve(null):apiRequest('/api/seller/finance'),view==='statement'?apiRequest('/api/seller/analytics'):Promise.resolve(null)]);setUser(u.user);setData(d);setAnalytics(a);setToday(new Date().toISOString().slice(0,10))},[view])
  useEffect(()=>{refresh().catch(e=>setError(e.message));const visibleRefresh=()=>{if(!document.hidden)refresh().catch(()=>{})};const timer=setInterval(visibleRefresh,30000);window.addEventListener('focus',visibleRefresh);return()=>{clearInterval(timer);window.removeEventListener('focus',visibleRefresh)}},[refresh])
@@ -166,5 +183,5 @@ export default function SellerFinancePage({view='wallet'}){
  {view==='statement'&&<><div className="mt-6 flex flex-wrap gap-2">{[['1','Today'],['7','This week'],['30','Last 30 days'],['all','All time']].map(([value,label])=><button className={`rounded-xl border px-4 py-2 text-sm ${period===value?'bg-[#111111] text-white':'bg-white'}`} key={value} onClick={()=>setPeriod(value)}>{label}</button>)}</div><div className="mt-5 grid gap-4 sm:grid-cols-3">{[['Paid product sales',daily.reduce((s,d)=>s+d.salesCents,0)],['Paid with store credit',daily.reduce((s,d)=>s+d.creditSalesCents,0)],['Estimated gross profit (15%)',Math.round(daily.reduce((s,d)=>s+d.salesCents,0)*.15)]].map(([label,v])=><section key={label} className={panel}><p className="text-xs text-[#555555]">{label}</p><p className="mt-4 text-2xl font-semibold">{money(v)}</p></section>)}</div><p className="mt-4 text-xs leading-6 text-[#555555]">Grouped by order creation date (UTC), including paid orders only in sales. Profit is an estimate, not a wallet credit. Shipping and tax are excluded. Refund status is shown in order history; gross sales above are before refunds.</p><div className={`${panel} mt-6 overflow-auto`}><table className="w-full min-w-[480px] text-left text-sm"><thead><tr className="border-b"><th className="py-3">Date (UTC)</th><th>Orders placed</th><th>Paid sales</th><th>Store credit sales</th></tr></thead><tbody>{daily.map(d=><tr key={d.day} className="border-b border-[#e5e5e5]"><td className="py-4">{d.day}</td><td>{d.orders}</td><td>{money(d.salesCents)}</td><td>{money(d.creditSalesCents)}</td></tr>)}</tbody></table>{!daily.length&&<p className="py-8 text-sm text-[#555555]">No orders in this period.</p>}</div></>}
  {view==='record'&&<><div className={`${panel} mt-7 flex flex-wrap items-end gap-3`}><label className="text-xs">Movement type<select className={input} value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All movements</option>{[...new Set(data?.records.map(r=>r.kind))].map(k=><option key={k} value={k}>{transactionType(k)}</option>)}</select></label><label className="text-xs">From<input className={input} type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label className="text-xs">To<input className={input} type="date" value={to} onChange={e=>setTo(e.target.value)}/></label><button className={button} onClick={download}>Export CSV</button></div><div className={`${panel} mt-5 overflow-auto`}><table className="w-full min-w-[850px] text-left text-xs"><thead><tr className="border-b">{['Movement','Reference','Change','Before','After','Held after','Action source','Note','Date (UTC)'].map(t=><th className="py-3" key={t}>{t}</th>)}</tr></thead><tbody>{records.map(r=><tr key={r.id} className="border-b border-[#e5e5e5]"><td className="py-4 capitalize">{transactionType(r.kind)}</td><td>{r.reference}</td><td className={r.delta_cents<0?'text-red-600':'text-green-700'}>{r.delta_cents>0?'+':''}{money(r.delta_cents)}</td><td>{money(r.before_cents)}</td><td>{money(r.after_cents)}</td><td>{money(r.reserved_after)}</td><td>{transactionActor(r.actorRole)}</td><td className="max-w-48 break-words">{transactionNote(r.note)}</td><td>{r.created_at}</td></tr>)}</tbody></table>{!records.length&&<p className="py-8 text-center text-sm text-[#555555]">No fund movements match these filters.</p>}<p className="mt-4 text-xs text-[#555555]">Most recent 1,000 movements. Holds reserve funds without changing the wallet balance.</p></div></>}
  {(kind==='deposit'||depositId)&&<DepositDialog wallets={depositWallets} request={activeDeposit} requestId={depositId} hasPin={data?.hasTransactionPin} onSetPin={()=>setPinSettingsOpen(true)} onClose={closePayment} onUploaded={refresh}/>}
- {kind==='withdrawal'&&<div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-5" role="dialog" aria-modal="true" aria-label="Withdraw funds"><form onSubmit={submit} className={`${panel} w-full max-w-lg`}><h2 className="font-serif text-3xl capitalize">Withdraw funds</h2><p className="mt-3 text-xs leading-6 text-[#555555]">Enter the coin, network, and wallet address where you want the admin to send your withdrawal.</p><label className="mt-4 block text-sm">Amount (USD)<input className={input} type="number" name="amount" min="0.01" max="1000000" step="0.01" required/></label><label className="mt-4 block text-sm">Coin<select name="coin" className={input}>{coins.map(c=><option key={c}>{c}</option>)}</select></label><label className="mt-4 block text-sm">Receiving network<input name="network" required maxLength={80} className={input}/></label><label className="mt-4 block text-sm">Your receiving wallet address<input name="address" required maxLength={200} className={input}/></label><label className="mt-4 block text-sm">Four-digit transaction PIN<PasswordInput name="transactionPin"  inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" required className={input}/></label><p className="mt-2 text-xs"><button type="button" onClick={()=>{setKind('');setPinSettingsOpen(true)}} className="underline">Set or reset your PIN in wallet security settings</button></p>{error&&<p className="mt-3 text-sm text-red-700">{error}</p>}<div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={closePayment} className="px-4 text-sm">Cancel</button><button disabled={busy} className={button}>{busy?'Submitting…':'Submit request'}</button></div></form></div>}</SellerWorkspace>
+ {kind==='withdrawal'&&<div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-5" role="dialog" aria-modal="true" aria-label="Withdraw funds"><form onSubmit={submit} className={`${panel} w-full max-w-lg`}><h2 className="font-serif text-3xl capitalize">Withdraw funds</h2><p className="mt-3 text-xs leading-6 text-[#555555]">Enter the coin, network, and wallet address where you want the admin to send your withdrawal.</p><label className="mt-4 block text-sm">Amount (USD)<input className={input} type="number" name="amount" min="0.01" max="1000000" step="0.01" required/></label><label className="mt-4 block text-sm">Coin<select name="coin" className={input} value={withdrawalCoin} onChange={event=>setWithdrawalCoin(event.target.value)}>{coins.map(c=><option key={c}>{c}</option>)}</select></label><label className="mt-4 block text-sm">Receiving network<input key={withdrawalCoin} name="network" list="withdrawal-networks" required maxLength={100} className={input}/></label><datalist id="withdrawal-networks">{[...new Set([...coinNetworks[withdrawalCoin],...depositWallets.filter(wallet=>wallet.coin===withdrawalCoin).map(wallet=>wallet.network)])].map(network=><option key={network} value={network}/>)}</datalist><label className="mt-4 block text-sm">Your receiving wallet address<input name="address" required maxLength={500} className={input}/></label><label className="mt-4 block text-sm">Four-digit transaction PIN<PasswordInput name="transactionPin"  inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" required className={input}/></label><p className="mt-2 text-xs"><button type="button" onClick={()=>{setKind('');setPinSettingsOpen(true)}} className="underline">Set or reset your PIN in wallet security settings</button></p>{error&&<p className="mt-3 text-sm text-red-700">{error}</p>}<div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={closePayment} className="px-4 text-sm">Cancel</button><button disabled={busy} className={button}>{busy?'Submitting…':'Submit request'}</button></div></form></div>}</SellerWorkspace>
 }
