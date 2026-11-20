@@ -6,6 +6,19 @@ import { rateLimit } from 'express-rate-limit'
 import type { Database } from './database.ts'
 import { ObjectStorage } from './storage.ts'
 
+// User history exposes the action source, not the personal staff/account name.
+// Full names and actor IDs remain in the private administration endpoints and ledger.
+const financialActorLabel=(role:unknown)=>role==='admin'?'Support team':role==='seller'?'Store account':role==='customer'?'Account holder':'System'
+const userFinanceEntry=(row:unknown)=>{
+ if(!row||typeof row!=='object'||Array.isArray(row))return row
+ const entry={...row} as Record<string,unknown>
+ if('actorName' in entry)entry.actorName=financialActorLabel(entry.actorRole)
+ if(entry.confirmedBy)entry.confirmedBy=financialActorLabel(entry.confirmedRole)
+ if('storeName' in entry)entry.storeName='Store account'
+ if(entry.note==='Administrator action')entry.note='Support adjustment'
+ return entry
+}
+const userActivityEntry=(row:unknown)=>row&&typeof row==='object'&&'kind' in row&&row.kind==='sale_confirmed'?{...row,details:'Paid sale proceeds confirmed.'}:row
 const coins = ['BTC','ETH','USDT','USDC','BNB','SOL','XRP','DOGE','LTC']
 const text = (v: unknown, max = 500) => typeof v === 'string' && v.trim().length <= max ? v.trim() : ''
 function fail(message: string): never { throw Object.assign(new Error(message), { status: 409 }) }
@@ -68,11 +81,11 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  products:await db.prepare(`SELECT i.product_id AS id,MAX(i.name) AS name,MAX(i.image_url) AS imageUrl,SUM(CASE WHEN o.status='paid' THEN i.quantity ELSE 0 END)::integer AS units,
  SUM(CASE WHEN o.status='paid' THEN i.price_cents*i.quantity ELSE 0 END)::bigint AS salesCents FROM purchase_items i JOIN purchase_orders o ON o.id=i.order_id WHERE i.seller_id=? AND o.status='paid' GROUP BY i.product_id ORDER BY "salesCents" DESC LIMIT 10`).all(seller)}
  }
- app.get('/api/seller/analytics',auth,role('seller','admin'),protectedRoute(async(req,res)=>{res.set('Cache-Control','no-store').json(await analytics(req.user!.id))}))
+ app.get('/api/seller/analytics',auth,role('seller','admin'),protectedRoute(async(req,res)=>{const data=await analytics(req.user!.id);res.set('Cache-Control','no-store').json({...data,orders:data.orders.map(userFinanceEntry),activity:data.activity.map(userActivityEntry)})}))
  app.get('/api/admin/sellers/:id/analytics',auth,role('admin'),protectedRoute(async(req,res)=>{res.json(await analytics(Number(req.params.id)))}))
  app.get('/api/seller/finance',auth,role('seller','admin'),protectedRoute(async(req,res)=>{
  const wallet=await db.prepare('SELECT balance_cents AS balanceCents,reserved_cents AS reservedCents FROM seller_wallets WHERE seller_id=?').get(req.user!.id)||{balanceCents:0,reservedCents:0}
- res.set('Cache-Control','no-store').json({wallet,sales:await sales(req.user!.id),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:await requests(req.user!.id),records:await db.prepare("SELECT f.*,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? ORDER BY f.id DESC LIMIT 1000").all(req.user!.id)})
+ res.set('Cache-Control','no-store').json({wallet,sales:(await sales(req.user!.id)).map(userFinanceEntry),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:(await requests(req.user!.id)).map(userFinanceEntry),records:(await db.prepare("SELECT f.*,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? ORDER BY f.id DESC LIMIT 1000").all(req.user!.id)).map(userFinanceEntry)})
  }))
  app.post('/api/seller/finance/requests',auth,role('seller'),rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many wallet attempts. Please try again later.'}}),protectedRoute(async(req,res)=>{
  const {kind,coin,amountCents,requestKey}=req.body||{}

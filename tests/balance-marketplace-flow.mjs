@@ -53,7 +53,12 @@ export async function testBalanceMarketplace({req,check,db,cookie,seller,sellerI
  r=await call('/api/buyer/requests',{kind:'deposit',coin:'USDT',amountCents:5000,transactionPin:'0123'},buyer);const duplicateDeposit=r.data.id
  await req(`/api/buyer/requests/${duplicateDeposit}/receipt`,{method:'POST',headers:{'Content-Type':'image/png'},body:png},buyer)
  r=await call('/api/admin/buyer-requests/'+duplicateDeposit,{status:'confirmed',verified:true,transferReference:'fixture-funding'},cookie,'PATCH');check('same incoming transfer cannot fund a second request',r.status===409&&(await req('/api/rewards',{},buyer)).data.balanceUnits===2970)
- check('seller fund history identifies confirming account',finance.records.some(r=>r.kind==='sale_release'&&r.actorName===sale.confirmedBy&&r.actorRole===sale.confirmedRole))
+ check('user history retains the generic action source',finance.records.some(r=>r.kind==='sale_release'&&r.actorName===sale.confirmedBy&&r.actorRole===sale.confirmedRole))
+ const realActor=(await db.query("SELECT u.full_name,f.actor_id FROM shop.seller_fund_records f JOIN shop.users u ON u.id=f.actor_id WHERE f.seller_id=$1 AND f.kind='sale_release' AND f.reference=$2",[sellerId,`${orderId}:${sellerId}`])).rows[0]
+ const privateFinance=(await req('/api/admin/seller-finance',{},cookie)).data
+ const privateSale=privateFinance.sales.find(s=>s.orderId===orderId&&s.sellerId===sellerId)
+ check('private admin audit retains actual confirming identity',privateSale.confirmedBy===realActor.full_name&&Number.isInteger(realActor.actor_id))
+ check('seller response hides personal attribution names',sale.confirmedBy!==realActor.full_name&&['Support team','Store account'].includes(sale.confirmedBy))
  // Display overrides never modify real orders, recorded visits or financial balances.
  const analyticsBefore=(await req('/api/seller/analytics',{},seller)).data
  r=await call(`/api/admin/sellers/${sellerId}/display-stats`,{values:{visits:999999,salesCents:50000000,followers:5000},reason:'Fixture labeled display adjustment'},seller,'PUT');check('seller cannot adjust own statistics',r.status===403)

@@ -1,6 +1,7 @@
 export const sellerLanguages=[{code:'en',name:'English'},{code:'zh',name:'中文'},{code:'es',name:'Español'},{code:'fr',name:'Français'},{code:'de',name:'Deutsch'},{code:'ja',name:'日本語'}]
 // Human-written interface translations; product names and stored records remain unchanged.
 const rows=[
+['Transaction history','交易记录','Historial de transacciones','Historique des transactions','Transaktionsverlauf','取引履歴'],
 ['Store overview','店铺概览','Resumen de la tienda','Aperçu de la boutique','Shop-Übersicht','ストア概要'],
 ['Total sales','销售总额','Ventas totales','Ventes totales','Gesamtumsatz','総売上'],
 ['Released proceeds','已结算收入','Ingresos liquidados','Recettes versées','Freigegebene Erlöse','確定済み売上'],
