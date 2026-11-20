@@ -47,7 +47,7 @@ export default function AdminWarehouse() {
       <div className="flex gap-2"><button disabled={busy || isReadingImages} className="rounded bg-[#cccccc] px-4 py-2 text-sm font-semibold text-[#111111] disabled:opacity-60">{editing ? 'Save changes' : 'Add to warehouse'}</button>{editing && <button type="button" onClick={() => { setEditing(null); setForm(blank); setImageFormVersion((version) => version + 1); setImageUploads({ primary: null, gallery: [] }); setIsReadingImages(false) }} className="px-3 text-sm underline">Cancel</button>}</div>
     </form>
     {message && <p role="status" className="mt-3 text-sm">{message}</p>}
-    <WarehouseBrowser dark reloadKey={reloadKey} onCategoryChange={(category) => { if (!editing) setForm((current) => ({ ...current, category })) }} onRemove={remove} onEdit={async (product) => {
+    <WarehouseBrowser dark showInventoryCounts reloadKey={reloadKey} onCategoryChange={(category) => { if (!editing) setForm((current) => ({ ...current, category })) }} onRemove={remove} onEdit={async (product) => {
       const { product: p } = await apiRequest(`/api/warehouse/${product.id}`)
       setEditing(p.id); setImageFormVersion((version) => version + 1); setImageUploads({ primary: null, gallery: [] }); setIsReadingImages(false)
       setForm({ ...p, sourceDetails: undefined, source: undefined, imageUrls: (p.imageUrls || []).filter((url) => url !== p.imageUrl), price: String(p.price) })
