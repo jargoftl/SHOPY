@@ -8,7 +8,7 @@ Keep your existing project folder and SQLite database as a backup. Work in a sep
 
 Your existing free `shopy` project can be used. You do not need Supabase Auth or a GitHub integration: your existing Express login, sessions, roles and APIs remain in use.
 
-1. In **Storage**, create a bucket named **shop-uploads**. Keep **Public bucket OFF**. Allow PNG, JPEG and WebP files and a maximum size of 2 MB. Do not add public read/write policies for receipts.
+1. In **Storage**, create a bucket named **shop-uploads**. Keep **Public bucket OFF**. Allow PNG, JPEG, WebP and PDF files (`image/png`, `image/jpeg`, `image/webp`, `application/pdf`) and a maximum size of 2 MB. If the bucket already restricts MIME types, add `application/pdf` to the existing list for seller deposit receipts. Do not add public read/write policies for receipts.
 2. Click **Connect** at the top of the Supabase project. Choose the **Session pooler** PostgreSQL URI (normally port **5432**). Session pooling avoids common IPv4/direct-connection problems. Copy the actual URI shown for your project, not the example below.
 3. Replace the password placeholder in that URI with your database password. URL-encode special password characters. This is your database password, not your GitHub password or API key.
 4. Copy the project URL from project settings.

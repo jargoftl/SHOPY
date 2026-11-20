@@ -54,7 +54,7 @@ ObjectStorage.prototype.getVerification=async(path)=>{if(!verificationObjects.ha
 ObjectStorage.prototype.deleteVerification=async(path)=>{verificationObjects.delete(path)};
 const {httpServer}=await import('../dist-server/index.js');
 const base='http://127.0.0.1:4311';
-async function req(path,options={},cookie){const res=await fetch(base+path,{...options,headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...options.headers}});const txt=await res.text();let data;try{data=JSON.parse(txt)}catch{data=txt}return {status:res.status,data,cookie:res.headers.get('set-cookie')?.split(';')[0]};}
+async function req(path,options={},cookie){const res=await fetch(base+path,{...options,headers:{'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{}),...options.headers}});const txt=await res.text();let data;try{data=JSON.parse(txt)}catch{data=txt}return {status:res.status,data,headers:res.headers,cookie:res.headers.get('set-cookie')?.split(';')[0]};}
 let failures=0,checks=0;
 function check(name,condition,detail=''){checks++;if(!condition){failures++;console.error('FAIL',name,detail)}else console.log('PASS',name)}
 try{

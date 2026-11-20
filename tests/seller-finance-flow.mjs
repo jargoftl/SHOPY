@@ -76,4 +76,18 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  r=await req('/api/seller/analytics',{},seller);check('dashboard activity is recorded from real fund and order changes',r.status===200&&r.data.activity.some(a=>a.kind==='sale_refund'))
  const balances=finance.records;check('fund record stores before and after amounts',balances.every(r=>r.after_cents-r.before_cents===r.delta_cents))
  r=await req('/api/admin/seller-finance',{},cookie);check('admin finance review returns real sale and wallet rows',r.status===200&&r.data.sales.some(s=>s.orderId===o)&&r.data.wallets.some(w=>w.seller_id===sellerId))
+ r=await post('/api/seller/finance/requests',{...deposit,requestKey:randomUUID()})
+ const pdfRequest=r.data.id
+ const pdfPath=`/api/seller/finance/requests/${pdfRequest}/receipt`
+ const uploadPdf=body=>req(pdfPath,{method:'POST',body,headers:{'Content-Type':'application/pdf'}},seller)
+ r=await uploadPdf(png);check('PNG bytes declared as PDF are rejected',r.status===400,r)
+ const pdf=Buffer.from('%PDF-1.4\n%%EOF\n')
+ r=await uploadPdf(pdf);check('seller uploads PDF proof',r.status===200,r)
+ const pdfReview=(await req('/api/admin/seller-finance',{},cookie)).data.requests.find(request=>request.id===pdfRequest)
+ check('PDF proof is available for admin review',pdfReview?.status==='awaiting_review'&&pdfReview.receiptId,pdfReview)
+ const receiptUrl='/api/seller/finance/receipts/'+pdfReview.receiptId
+ const download=await req(receiptUrl,{},cookie)
+ check('admin downloads original PDF as an attachment',download.status===200&&download.data===pdf.toString()&&download.headers.get('content-disposition')?.startsWith('attachment;'),download.status)
+ r=await req(receiptUrl,{},buyer);check('buyer cannot download seller PDF',r.status===404,r)
+
 }

@@ -143,22 +143,25 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  const image=await new ObjectStorage().get(wallet.qr_image)
  res.set('Cache-Control','no-store').type(wallet.qr_content_type).send(image)
  }))
- app.post('/api/seller/finance/requests/:id/receipt',auth,role('seller'),express.raw({type:['image/png','image/jpeg'],limit:'2mb'}),protectedRoute(async(req,res)=>{
+ app.post('/api/seller/finance/requests/:id/receipt',auth,role('seller'),express.raw({type:['image/png','image/jpeg','application/pdf'],limit:'2mb'}),protectedRoute(async(req,res)=>{
  const image=req.body as Buffer
- const png=Buffer.isBuffer(image)&&image.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
- const jpeg=Buffer.isBuffer(image)&&image[0]===255&&image[1]===216&&image[2]===255
- if((!png&&!jpeg)||(png&&!req.is('image/png'))||(jpeg&&!req.is('image/jpeg'))) return void res.status(400).json({error:'Upload a PNG or JPEG receipt up to 2 MB.'})
+ const contentType=req.is(['image/png','image/jpeg','application/pdf'])
+ const png=contentType==='image/png'&&Buffer.isBuffer(image)&&image.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
+ const jpeg=contentType==='image/jpeg'&&Buffer.isBuffer(image)&&image[0]===255&&image[1]===216&&image[2]===255
+ const pdf=contentType==='application/pdf'&&Buffer.isBuffer(image)&&/^%PDF-[12]\.\d(?:\r|\n)/.test(image.toString('ascii',0,12))
+ if(!png&&!jpeg&&!pdf) return void res.status(400).json({error:'Upload a PDF, PNG or JPEG receipt up to 2 MB.'})
  const rawReference=req.get('X-Payment-Reference')
  let reference:string|null=null
  if(rawReference!==undefined){
   try {reference=text(decodeURIComponent(rawReference),300)||null} catch {return void res.status(400).json({error:'Enter a valid transaction reference.'})}
   if(!reference||/[\r\n]/.test(reference)) return void res.status(400).json({error:'Enter a valid transaction reference.'})
  }
- await new ObjectStorage().verifyBucket()
+ const storage=new ObjectStorage()
+ await storage.verifyBucket()
  await db.transaction(async()=>{
  const request=await db.prepare('SELECT * FROM seller_wallet_requests WHERE id=? AND seller_id=?').get(Number(req.params.id),req.user!.id) as WalletRequest|undefined
  if(!request||request.kind!=='deposit'||request.status!=='awaiting_receipt') fail('This deposit is not awaiting a receipt.')
- await db.prepare('INSERT INTO seller_wallet_receipts(request_id,content_type,image) VALUES(?,?,?)').run(request.id,png?'image/png':'image/jpeg',image)
+ await db.prepare('INSERT INTO seller_wallet_receipts(request_id,content_type,image) VALUES(?,?,?)').run(request.id,contentType,await storage.put(image,String(contentType)))
  await db.prepare("UPDATE seller_wallet_requests SET status='awaiting_review',submitted_reference=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(reference,request.id)
  await adminNotice('A seller submitted a deposit receipt. Independently verify the transfer before confirming.')
  })()
@@ -167,7 +170,9 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  app.get('/api/seller/finance/receipts/:id',auth,protectedRoute(async(req,res)=>{
  const row=await db.prepare('SELECT r.image,r.content_type,q.seller_id FROM seller_wallet_receipts r JOIN seller_wallet_requests q ON q.id=r.request_id WHERE r.id=?').get(Number(req.params.id)) as {image:Buffer,content_type:string,seller_id:number}|undefined
  if(!row||(req.user!.role!=='admin'&&row.seller_id!==req.user!.id)) return void res.status(404).json({error:'Receipt not found.'})
- res.set('Cache-Control','no-store').set('X-Content-Type-Options','nosniff').type(row.content_type).send(row.image)
+ res.set('Cache-Control','no-store').set('X-Content-Type-Options','nosniff').type(row.content_type)
+ if(row.content_type==='application/pdf')res.attachment(`deposit-receipt-${Number(req.params.id)}.pdf`)
+ res.send(row.image)
  }))
  app.get('/api/admin/seller-finance',auth,role('admin'),protectedRoute(async(_req,res)=>{
  res.set('Cache-Control','no-store').json({requests:await requests(),sales:await sales(),wallets:await db.prepare('SELECT w.*,u.public_id AS publicId,u.full_name AS name FROM seller_wallets w JOIN users u ON u.id=w.seller_id ORDER BY seller_id').all(),paymentWallets:await db.prepare('SELECT coin,network,address,usd_rate FROM payment_wallets').all()})
