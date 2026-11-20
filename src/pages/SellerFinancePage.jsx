@@ -1,3 +1,4 @@
+import {Bitcoin, Copy, QrCode, X} from 'lucide-react'
 import {transactionActor,transactionType,transactionNote} from '../lib/transactionLabels.js'
 import SellerPaymentReceipt from '../components/SellerPaymentReceipt.jsx'
 import OrderStatusBadge from '../components/OrderStatusBadge.jsx'
@@ -12,26 +13,37 @@ import SellerWorkspace,{money,panel,button,input} from '../components/SellerWork
 const coins=['BTC','ETH','USDT','USDC','BNB','SOL','XRP','DOGE','LTC']
 function DepositInstructions({ request }) {
  const [copyStatus,setCopyStatus]=useState('')
+ const [showQr,setShowQr]=useState(false)
  const qrUrl=request.qrUrl||(request.hasQr?sessionUrl(`/api/seller/finance/requests/${request.id}/qr`):null)
  async function copyAddress(){
   try {await navigator.clipboard.writeText(request.address);setCopyStatus('Address copied.')}
   catch {setCopyStatus('Could not copy. Select the address to copy it manually.')}
  }
- return <section className="mt-2 space-y-2 rounded-lg bg-[#f7f7f7] p-3 text-sm">
-  <p className="font-semibold">{request.coin_amount?`Send ${request.coin_amount} ${request.coin} on ${request.network}`:`${request.coin} · ${request.network}`}</p>
-  {qrUrl&&<div className="flex items-center gap-3">
-   <img src={qrUrl} alt={`${request.coin} deposit QR code`} className="h-24 w-24 rounded bg-white object-contain"/>
-   <a href={qrUrl} download={`${request.coin}-deposit-qr`} className="text-sm underline">Save QR code</a>
-  </div>}
-  <div>
-   <p className="mb-1 text-xs font-medium">Deposit address</p>
-   <div className="flex items-center gap-3 rounded border bg-white px-3 py-2">
-    <code className="min-w-0 flex-1 break-all">{request.address}</code>
-    <button type="button" onClick={copyAddress} className="min-h-11 shrink-0 px-2 text-sm font-semibold text-blue-700">Copy</button>
-   </div>
-   <p role="status" className="text-xs">{copyStatus}</p>
+ return <section className="mt-3 rounded-xl border border-blue-100 bg-[#f3f7ff] p-3 text-sm">
+  <div className="flex flex-wrap items-center gap-2">
+   <span className="inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 font-bold text-blue-950">{request.coin==='BTC'&&<Bitcoin size={16} aria-hidden="true"/>}{request.coin}</span>
+   <span className="text-xs text-slate-600">Network</span>
+   <span className="rounded-md bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-950">{request.network}</span>
   </div>
-  {request.amount_cents&&<p className="text-xs">Expected wallet credit {money(request.amount_cents)} after verification.</p>}
+  {request.coin_amount&&<p className="mt-2 font-semibold">Send {request.coin_amount} {request.coin}</p>}
+  <p className="mb-1 mt-3 text-xs font-medium text-slate-600">Receiving address</p>
+  <div className="flex items-center gap-2 rounded-lg border border-blue-100 bg-white px-2.5 py-1">
+   <code className="min-w-0 flex-1 select-all break-all text-xs">{request.address}</code>
+   <button type="button" onClick={copyAddress} className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded px-1 text-xs font-semibold text-blue-700">
+    <Copy size={15} aria-hidden="true"/>Copy
+   </button>
+  </div>
+  <p role="status" className="text-xs text-blue-800">{copyStatus}</p>
+  {qrUrl&&<div className="mt-2">
+   <button type="button" aria-expanded={showQr} onClick={()=>setShowQr(visible=>!visible)} className="inline-flex min-h-9 items-center gap-1.5 text-xs font-semibold text-blue-700">
+    <QrCode size={17} aria-hidden="true"/>{showQr?'Hide QR code':'Show QR code'}
+   </button>
+   {showQr&&<div className="mt-1 flex items-center gap-3">
+    <img src={qrUrl} alt={`${request.coin} deposit QR code`} className="h-28 w-28 rounded bg-white object-contain"/>
+    <a href={qrUrl} download={`${request.coin}-deposit-qr`} className="text-xs underline">Save QR code</a>
+   </div>}
+  </div>}
+  {request.amount_cents&&<p className="mt-2 text-xs">Expected wallet credit {money(request.amount_cents)} after verification.</p>}
  </section>
 }
 function DepositAmount({wallet}){
@@ -48,17 +60,17 @@ function DepositAmount({wallet}){
   <label className="block text-xs font-medium">Deposit amount (USD)
    <input name="amount" value={amount} onChange={event=>setAmount(event.target.value)} type="number" min="0.01" max="1000000" step="0.01" required className="mt-1 block w-full rounded border px-2 py-1.5 text-sm"/>
   </label>
-  {payment&&<p className="mt-1 text-xs font-semibold">Send {payment} {wallet.coin} on {wallet.network}</p>}
+  {payment&&<div className="mt-2 rounded-lg bg-slate-50 px-2.5 py-2"><p className="text-xs text-slate-600">Amount to send</p><p className="break-all text-lg font-semibold">{payment} {wallet.coin}</p></div>}
  </div>
 }
 
 function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUploaded}){
- const [coin,setCoin]=useState('')
+ const [coin,setCoin]=useState(()=>!requestId&&wallets.some(wallet=>wallet.coin==='BTC')?'BTC':'')
  const [wallet,setWallet]=useState(null)
  const [error,setError]=useState('')
  const [submitting,setSubmitting]=useState(false)
  const dialog=useRef(null)
- const requestKey=useRef('')
+ const [requestKey,setRequestKey]=useState(()=>crypto.randomUUID())
  const heading=useRef(null)
  useEffect(()=>{
   const node=dialog.current
@@ -77,17 +89,17 @@ function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUplo
  const choose=next=>{
   setWallet(null)
   setError('')
-  requestKey.current=crypto.randomUUID()
+  setRequestKey(crypto.randomUUID())
   setCoin(next)
  }
  const prepareRequest=fields=>apiRequest('/api/seller/finance/requests',{method:'POST',body:JSON.stringify({
-  kind:'deposit',requestKey:requestKey.current,coin:wallet.coin,walletVersion:wallet.version,
+  kind:'deposit',requestKey,coin:wallet.coin,walletVersion:wallet.version,
   amountCents:Math.round(Number(fields.get('amount'))*100),transactionPin:fields.get('transactionPin')
  })})
- return <dialog ref={dialog} aria-labelledby="deposit-dialog-title" onCancel={event=>{event.preventDefault();if(!submitting)onClose()}} className={`${panel} m-auto max-h-[calc(100dvh-1.5rem)] w-[calc(100%-1.5rem)] max-w-sm overflow-y-auto !p-4 backdrop:bg-black/40`}>
-   <div className="flex items-center justify-between gap-3">
-    <h2 ref={heading} tabIndex={-1} id="deposit-dialog-title" className="text-lg font-semibold">{coin?`${coin} deposit`:'Deposit funds'}</h2>
-    <button type="button" onClick={onClose} disabled={submitting} className="min-h-9 px-2 text-sm">Close</button>
+ return <dialog ref={dialog} aria-labelledby="deposit-dialog-title" onCancel={event=>{event.preventDefault();if(!submitting)onClose()}} className={`${panel} m-auto max-h-[calc(100dvh-1.5rem)] w-[calc(100%-1.5rem)] max-w-md overflow-y-auto !p-4 backdrop:bg-black/40`}>
+   <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
+    <h2 ref={heading} tabIndex={-1} id="deposit-dialog-title" className="text-lg font-bold text-slate-900">{coin?`${coin} deposit`:'Deposit funds'}</h2>
+    <button type="button" onClick={onClose} disabled={submitting} aria-label="Close deposit" className="grid min-h-9 min-w-9 place-items-center rounded-full hover:bg-slate-100"><X size={20} aria-hidden="true"/></button>
    </div>
    {!coin&&!requestId&&<div className="mt-2 grid gap-2">
     {wallets.length?wallets.map(wallet=><button type="button" key={wallet.coin} onClick={()=>choose(wallet.coin)} className="flex min-h-10 items-center justify-between gap-3 rounded-lg border px-3 text-left text-sm hover:bg-blue-50">
@@ -110,7 +122,7 @@ function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUplo
     <DepositInstructions request={request}/>
     <SellerPaymentReceipt requestId={request.id} onBusyChange={setSubmitting} onUploaded={onUploaded}/>
    </>}
-   {request&&request.status!=='awaiting_receipt'&&<p role="status" className="mt-2 text-sm">{request.status==='awaiting_review'?'Payment screenshot submitted for review.':`Deposit ${request.status.replaceAll('_',' ')}.`}</p>}
+   {request&&request.status!=='awaiting_receipt'&&<p role="status" className="mt-2 text-sm">{request.status==='awaiting_review'?'Payment proof submitted for review.':`Deposit ${request.status.replaceAll('_',' ')}.`}</p>}
  </dialog>
 }
 
@@ -150,7 +162,7 @@ export default function SellerFinancePage({view='wallet'}){
  const download=()=>{const rows=[['Type','Reference','Change USD','Before USD','After USD','Held before USD','Held after USD','Action source','Note','UTC'],...records.map(r=>[transactionType(r.kind),r.reference,r.delta_cents/100,r.before_cents/100,r.after_cents/100,r.reserved_before/100,r.reserved_after/100,transactionActor(r.actorRole),transactionNote(r.note),r.created_at])];const blob=new Blob([rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(',')).join('\n')],{type:'text/csv'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='account-transactions.csv';a.click();URL.revokeObjectURL(url)}
  return <SellerWorkspace user={user}><p className="text-xs font-bold tracking-[.18em] text-[#555555]">{view==='wallet'?'MY WALLET':view==='statement'?'FINANCIAL STATEMENT':'TRANSACTION HISTORY'}</p><h1 className="mt-2 font-serif text-4xl">{title}</h1>{error&&<p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
  {view==='wallet'&&<><div className="mt-7 grid gap-4 md:grid-cols-3">{[['Available to withdraw',Math.max(0,(data?.wallet.balanceCents||0)-(data?.wallet.reservedCents||0))],['Wallet balance',data?.wallet.balanceCents],['Pending withdrawal holds',data?.wallet.reservedCents]].map(([label,v],i)=><section key={label} className={`${panel} ${i===0?'!bg-[#111111] !text-white':''}`}><p className="text-sm opacity-70">{label}</p><p className="mt-5 text-3xl font-semibold">{data?money(v):'—'}</p></section>)}</div><div className="mt-5 flex flex-wrap items-center justify-between gap-4"><p className="max-w-2xl text-xs leading-6 text-[#555555]">Deposits and withdrawals require verification. Paid sales are credited after confirmation. Refunds can reduce your balance.</p><div className="flex gap-2">{['deposit','withdrawal'].map(k=><button key={k} className={button} disabled={!data} onClick={()=>{if(k==='withdrawal'&&!data.hasTransactionPin){setPinSettingsOpen(true);setError('');return}setError('');setKind(k);setKey(crypto.randomUUID())}}>{k==='deposit'?'Deposit funds':'Withdraw'}</button>)}</div></div>
- {pendingDeposit&&<button type="button" className="portal-receipt-callout" onClick={()=>{setError('');setDepositId(pendingDeposit.id)}}>Continue pending deposit</button>}<Link className="mt-5 inline-block text-sm text-blue-700 underline" to="/seller/fund-record">View transaction history</Link><SaleConfirmations sales={data?.sales||[]} onConfirmed={refresh}/><section className={`${panel} mt-6`}><h2 className="font-semibold">Confirmed sale history</h2>{data?.sales.filter(s=>s.releaseStatus).slice(0,20).map(s=><div key={s.orderId} className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm"><div><strong>Order #{s.orderNumber}</strong><p className="mt-1 text-xs text-gray-500">Confirmed by {transactionActor(s.confirmedRole)} · {s.confirmedAt}</p></div><span>{money(s.amountCents)} · {s.releaseStatus}</span></div>)}{data&&!data.sales.some(s=>s.releaseStatus)&&<p className="mt-4 text-sm text-gray-500">Confirmed sales and their credited amounts will appear here.</p>}</section><button type="button" className="mt-6 min-h-11 text-sm font-semibold underline" onClick={()=>setPinSettingsOpen(true)}>Set or reset transaction PIN</button><TransactionPinModal open={Boolean(pinSettingsOpen)} onClose={()=>setPinSettingsOpen(false)} onSaved={async()=>{setError('');await refresh()}}/><section id="wallet-requests" className={`${panel} mt-7`}><h2 className="font-semibold">Deposit & withdrawal history</h2><div className="mt-5 space-y-4">{data?.requests.map(q=><article key={q.id} className="rounded-xl border border-[#e5e5e5] p-4"><div className="flex flex-wrap justify-between gap-3"><div><p className="font-semibold capitalize">{q.kind} #{q.public_id}</p><p className="mt-1 text-xs text-[#555555]">{q.created_at} UTC · {q.coin} · <OrderStatusBadge status={q.status} label={q.status==='awaiting_review'?'Under review':q.status.replaceAll('_',' ')}/></p></div><strong>{money(q.amount_cents)}</strong></div>{q.network&&(q.kind!=='deposit'||q.status!=='awaiting_receipt')&&<div className="mt-4 rounded-lg bg-[#f7f7f7] p-3 text-xs leading-6"><p>{q.kind==='deposit'?'Check the payment instructions before sending:':'Your receiving wallet:'}</p><p className="font-semibold">{q.coin_amount&&`${q.coin_amount} ${q.coin} · `}{q.network}</p><p className="break-all">{q.address}</p>{q.usd_rate&&<p>Rate: ${q.usd_rate} USD / {q.coin}</p>}</div>}{q.instructions&&<p className="mt-3 text-sm">{q.instructions}</p>}{q.submitted_reference&&<p className="mt-3 break-all text-xs">Submitted transaction reference: {q.submitted_reference}</p>}{q.transfer_reference&&<p className="mt-3 break-all text-xs">Transfer reference: {q.transfer_reference}</p>}{q.kind==='deposit'&&q.status==='awaiting_receipt'&&<button type="button" className="mt-3 text-sm text-blue-700 underline" onClick={()=>{setError('');setDepositId(q.id)}}>Open payment instructions</button>}{q.receiptId&&<a target="_blank" rel="noreferrer" href={sessionUrl(`/api/seller/finance/receipts/${q.receiptId}`)} className="mt-3 inline-block text-xs underline">View private receipt</a>}</article>)}{data&&!data.requests.length&&<p className="py-10 text-center text-sm text-[#555555]">Your wallet requests will appear here.</p>}</div></section></>}
+ {pendingDeposit&&<button type="button" className="portal-receipt-callout" onClick={()=>{setError('');setDepositId(pendingDeposit.id)}}>Continue pending deposit</button>}<Link className="mt-5 inline-block text-sm text-blue-700 underline" to="/seller/fund-record">View transaction history</Link><SaleConfirmations sales={data?.sales||[]} onConfirmed={refresh}/><section className={`${panel} mt-6`}><h2 className="font-semibold">Confirmed sale history</h2>{data?.sales.filter(s=>s.releaseStatus).slice(0,20).map(s=><div key={s.orderId} className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm"><div><strong>Order #{s.orderNumber}</strong><p className="mt-1 text-xs text-gray-500">Confirmed by {transactionActor(s.confirmedRole)} · {s.confirmedAt}</p></div><span>{money(s.amountCents)} · {s.releaseStatus}</span></div>)}{data&&!data.sales.some(s=>s.releaseStatus)&&<p className="mt-4 text-sm text-gray-500">Confirmed sales and their credited amounts will appear here.</p>}</section><button type="button" className="mt-6 min-h-11 text-sm font-semibold underline" onClick={()=>setPinSettingsOpen(true)}>Set or reset transaction PIN</button><TransactionPinModal open={Boolean(pinSettingsOpen)} onClose={()=>setPinSettingsOpen(false)} onSaved={async()=>{setError('');await refresh()}}/><section id="wallet-requests" className={`${panel} mt-7`}><h2 className="font-semibold">Deposit & withdrawal history</h2><div className="mt-5 space-y-4">{data?.requests.map(q=><article key={q.id} className="rounded-xl border border-[#e5e5e5] p-4"><div className="flex flex-wrap justify-between gap-3"><div><p className="font-semibold capitalize">{q.kind} #{q.public_id}</p><p className="mt-1 text-xs text-[#555555]">{q.created_at} UTC · {q.coin} · <OrderStatusBadge status={q.status} label={q.status==='awaiting_review'?'Under review':q.status.replaceAll('_',' ')}/></p></div><strong>{money(q.amount_cents)}</strong></div>{q.network&&(q.kind!=='deposit'||q.status!=='awaiting_receipt')&&<div className="mt-4 rounded-lg bg-[#f7f7f7] p-3 text-xs leading-6"><p>{q.kind==='deposit'?'Check the payment instructions before sending:':'Your receiving wallet:'}</p><p className="font-semibold">{q.coin_amount&&`${q.coin_amount} ${q.coin} · `}{q.network}</p><p className="break-all">{q.address}</p>{q.usd_rate&&<p>Rate: ${q.usd_rate} USD / {q.coin}</p>}</div>}{q.instructions&&<p className="mt-3 text-sm">{q.instructions}</p>}{q.submitted_reference&&<p className="mt-3 break-all text-xs">Submitted transaction reference: {q.submitted_reference}</p>}{q.transfer_reference&&<p className="mt-3 break-all text-xs">Transfer reference: {q.transfer_reference}</p>}{q.kind==='deposit'&&q.status==='awaiting_receipt'&&<button type="button" className="mt-3 text-sm text-blue-700 underline" onClick={()=>{setError('');setDepositId(q.id)}}>Open payment instructions</button>}{q.receiptId&&<a target="_blank" rel="noreferrer" href={sessionUrl(`/api/seller/finance/receipts/${q.receiptId}`)} className="mt-3 inline-block text-xs underline">Open payment proof</a>}</article>)}{data&&!data.requests.length&&<p className="py-10 text-center text-sm text-[#555555]">Your wallet requests will appear here.</p>}</div></section></>}
  {view==='statement'&&<><div className="mt-6 flex flex-wrap gap-2">{[['1','Today'],['7','This week'],['30','Last 30 days'],['all','All time']].map(([value,label])=><button className={`rounded-xl border px-4 py-2 text-sm ${period===value?'bg-[#111111] text-white':'bg-white'}`} key={value} onClick={()=>setPeriod(value)}>{label}</button>)}</div><div className="mt-5 grid gap-4 sm:grid-cols-3">{[['Paid product sales',daily.reduce((s,d)=>s+d.salesCents,0)],['Paid with store credit',daily.reduce((s,d)=>s+d.creditSalesCents,0)],['Estimated gross profit (15%)',Math.round(daily.reduce((s,d)=>s+d.salesCents,0)*.15)]].map(([label,v])=><section key={label} className={panel}><p className="text-xs text-[#555555]">{label}</p><p className="mt-4 text-2xl font-semibold">{money(v)}</p></section>)}</div><p className="mt-4 text-xs leading-6 text-[#555555]">Grouped by order creation date (UTC), including paid orders only in sales. Profit is an estimate, not a wallet credit. Shipping and tax are excluded. Refund status is shown in order history; gross sales above are before refunds.</p><div className={`${panel} mt-6 overflow-auto`}><table className="w-full min-w-[480px] text-left text-sm"><thead><tr className="border-b"><th className="py-3">Date (UTC)</th><th>Orders placed</th><th>Paid sales</th><th>Store credit sales</th></tr></thead><tbody>{daily.map(d=><tr key={d.day} className="border-b border-[#e5e5e5]"><td className="py-4">{d.day}</td><td>{d.orders}</td><td>{money(d.salesCents)}</td><td>{money(d.creditSalesCents)}</td></tr>)}</tbody></table>{!daily.length&&<p className="py-8 text-sm text-[#555555]">No orders in this period.</p>}</div></>}
  {view==='record'&&<><div className={`${panel} mt-7 flex flex-wrap items-end gap-3`}><label className="text-xs">Movement type<select className={input} value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All movements</option>{[...new Set(data?.records.map(r=>r.kind))].map(k=><option key={k} value={k}>{transactionType(k)}</option>)}</select></label><label className="text-xs">From<input className={input} type="date" value={from} onChange={e=>setFrom(e.target.value)}/></label><label className="text-xs">To<input className={input} type="date" value={to} onChange={e=>setTo(e.target.value)}/></label><button className={button} onClick={download}>Export CSV</button></div><div className={`${panel} mt-5 overflow-auto`}><table className="w-full min-w-[850px] text-left text-xs"><thead><tr className="border-b">{['Movement','Reference','Change','Before','After','Held after','Action source','Note','Date (UTC)'].map(t=><th className="py-3" key={t}>{t}</th>)}</tr></thead><tbody>{records.map(r=><tr key={r.id} className="border-b border-[#e5e5e5]"><td className="py-4 capitalize">{transactionType(r.kind)}</td><td>{r.reference}</td><td className={r.delta_cents<0?'text-red-600':'text-green-700'}>{r.delta_cents>0?'+':''}{money(r.delta_cents)}</td><td>{money(r.before_cents)}</td><td>{money(r.after_cents)}</td><td>{money(r.reserved_after)}</td><td>{transactionActor(r.actorRole)}</td><td className="max-w-48 break-words">{transactionNote(r.note)}</td><td>{r.created_at}</td></tr>)}</tbody></table>{!records.length&&<p className="py-8 text-center text-sm text-[#555555]">No fund movements match these filters.</p>}<p className="mt-4 text-xs text-[#555555]">Most recent 1,000 movements. Holds reserve funds without changing the wallet balance.</p></div></>}
  {(kind==='deposit'||depositId)&&<DepositDialog wallets={depositWallets} request={activeDeposit} requestId={depositId} hasPin={data?.hasTransactionPin} onSetPin={()=>setPinSettingsOpen(true)} onClose={closePayment} onUploaded={refresh}/>}
