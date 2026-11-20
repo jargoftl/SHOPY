@@ -93,6 +93,22 @@ try{
    r=await req(path,{},userCookie);check('populated '+path,r.status===200,r);check('no serialized Promise placeholders '+path,!JSON.stringify(r.data).includes('"receipts":{}'),r);
   }
   r=await req('/api/admin/payment-wallets/USDT',{method:'PUT',body:JSON.stringify({network:'Test',address:'test-address',usdRate:'1'})},cookie);check('wallet configuration',r.status===200,r);
+  const qrWallets = [['USDT', 'Test', 'test-address', '1'], ['BTC', 'Bitcoin', 'test-btc', '50000'], ['ETH', 'Ethereum', 'test-eth', '2000']];
+  for (const [coin,network,address,usdRate] of qrWallets) {
+   const qr = { type: 'image/png', data: png.toString('base64') };
+   r=await req('/api/admin/payment-wallets/'+coin,{method:'PUT',body:JSON.stringify({network,address,usdRate,qr})},cookie);
+   check('save '+coin+' wallet and QR screenshot',r.status===200&&r.data.wallet?.hasQr===true,r);
+  }
+  r=await req('/api/admin/payment-wallets',{},cookie);
+  check('all three wallet types persist independently',qrWallets.every(([coin,network,address])=>r.data.wallets?.some(wallet=>wallet.coin===coin&&wallet.network===network&&wallet.address===address&&wallet.hasQr)),r);
+  const qrPath='/api/admin/payment-wallets/USDT/qr';
+  const savedQr=await fetch(base+qrPath,{headers:{Cookie:cookie}});
+  check('admin can retrieve stored QR screenshot',savedQr.ok&&savedQr.headers.get('content-type')==='image/png'&&Buffer.from(await savedQr.arrayBuffer()).equals(png));
+  r=await req(qrPath,{},buyer);check('buyer cannot retrieve admin QR screenshot',r.status===403,r);
+  r=await req('/api/admin/payment-wallets/USDT',{method:'PUT',body:JSON.stringify({network:'Test',address:'test-address',usdRate:'1',qr:{type:'image/png',data:'aGVsbG8='}})},cookie);
+  check('invalid QR rejected',r.status===400,r);
+  r=await req('/api/admin/payment-wallets/USDT',{method:'PUT',body:JSON.stringify({network:'Test',address:'test-address',usdRate:'1'})},cookie);
+  check('legacy wallet update preserves QR for the same destination',r.status===200&&r.data.wallet?.hasQr===true,r);
   body.coin='USDT';body.requestKey='22222222-2222-2222-2222-222222222222';delete body.expectedTotalCents;
   r=await req('/api/purchases',{method:'POST',body:JSON.stringify(body)},buyer);check('new direct coin checkout is rejected',r.status===400,r);
   // Existing historical coin orders remain reviewable; new checkout uses only account balance.

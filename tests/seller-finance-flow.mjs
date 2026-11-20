@@ -10,19 +10,30 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  r=await req('/api/admin/seller-finance',{},seller);check('seller cannot review funds',r.status===403)
  r=await req('/api/seller/analytics',{},seller);check('actual dashboard has real daily sales and visits',r.status===200&&Array.isArray(r.data.daily)&&Array.isArray(r.data.visits))
  let setup=await post('/api/account/transaction-pin',{pin:'0456',confirmPin:'0456',loginPassword:'long-test-password-123'},seller,'PUT');check('seller can set four-digit transaction PIN',setup.status===200,setup)
+ const available=(await req('/api/seller/finance',{},seller)).data.depositWallets
+ check('seller sees admin-configured deposit wallets', ['BTC','ETH','USDT'].every(coin=>available.some(wallet=>wallet.coin===coin&&wallet.network))&&!available.some(wallet=>wallet.coin==='DOGE'))
  const deposit={kind:'deposit',coin:'USDT',amountCents:20000,requestKey:randomUUID()}
- r=await post('/api/seller/finance/requests',deposit);check('seller requests deposit',r.status===201,r)
- await post('/api/seller/finance/requests',deposit)
+ r=await post('/api/seller/finance/requests',{...deposit,coin:'DOGE'});check('unconfigured deposit wallet is rejected',r.status===409,r)
+ r=await post('/api/seller/finance/requests',{...deposit,address:'ignored-address'});check('seller requests deposit',r.status===201,r)
+ const depositId=r.data.id
+ r=await post('/api/seller/finance/requests',deposit);check('deposit retry returns original request ID',r.status===201&&r.data.id===depositId,r)
  let finance=(await req('/api/seller/finance',{},seller)).data;const q=finance.requests[0]
  check('deposit retries do not duplicate',finance.requests.length===1&&finance.wallet.balanceCents===0)
  const adminPath='/api/admin/seller-finance/requests/'+q.id
  r=await post(adminPath,{action:'confirm',verified:true,transferReference:'fixture-deposit'},cookie,'PATCH');check('deposit cannot credit before receipt',r.status===409)
- r=await post(adminPath,{action:'quote',network:'TRC20',address:'fixture-admin-address',usdRate:'1'},cookie,'PATCH');check('admin sends coin payment quote',r.status===200,r)
- r=await req('/api/seller/finance',{},seller);check('exact quoted coin amount',r.data.requests[0].coin_amount==='200.00000000')
+ check('configured deposit is ready and uses the admin destination',q.id===depositId&&q.status==='awaiting_receipt'&&q.network==='Test'&&q.address==='test-address'&&q.coin_amount==='200.00000000'&&q.hasQr&&!('qr_image' in q),q)
  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jF9kAAAAASUVORK5CYII=','base64')
- check('buyers cannot submit seller payment receipts',(await req(`/api/seller/finance/requests/${q.id}/receipt`,{method:'POST',body:png,headers:{'Content-Type':'image/png'}},buyer)).status===403)
- r=await req(`/api/seller/finance/requests/${q.id}/receipt`,{method:'POST',body:png,headers:{'Content-Type':'image/png'}},seller);check('private seller deposit receipt uploaded',r.status===200,r)
+ r=await post('/api/admin/payment-wallets/USDT',{network:'New network',address:'new-address',usdRate:'2'},cookie,'PUT');check('admin can update wallet after a deposit starts',r.status===200,r)
  finance=(await req('/api/seller/finance',{},seller)).data
+ check('pending deposit keeps original wallet and rate after admin update',finance.requests[0].address===q.address&&finance.requests[0].usd_rate===q.usd_rate&&finance.requests[0].hasQr)
+ r=await req(`/api/seller/finance/requests/${q.id}/qr`,{},seller);check('seller can load locked wallet QR screenshot',r.status===200,r)
+ r=await req(`/api/seller/finance/requests/${q.id}/qr`,{},buyer);check('buyer cannot access seller deposit QR screenshot',r.status===403,r)
+ r=await post('/api/admin/payment-wallets/USDT',{network:'Test',address:'test-address',usdRate:'1',qr:{type:'image/png',data:png.toString('base64')}},cookie,'PUT');check('restore configured wallet fixture',r.status===200,r)
+ check('buyers cannot submit seller payment receipts',(await req(`/api/seller/finance/requests/${q.id}/receipt`,{method:'POST',body:png,headers:{'Content-Type':'image/png'}},buyer)).status===403)
+ r=await req(`/api/seller/finance/requests/${q.id}/receipt`,{method:'POST',body:png,headers:{'Content-Type':'image/png','X-Payment-Reference':'fixture-deposit'}},seller);check('private seller deposit receipt uploaded',r.status===200,r)
+ finance=(await req('/api/seller/finance',{},seller)).data
+ const review=(await req('/api/admin/seller-finance',{},cookie)).data.requests.find(request=>request.id===q.id)
+ check('admin sees screenshot and submitted reference without crediting seller',review.status==='awaiting_review'&&review.receiptId&&review.submitted_reference==='fixture-deposit'&&!review.transfer_reference&&finance.wallet.balanceCents===0,review)
  r=await req('/api/seller/finance/receipts/'+finance.requests[0].receiptId,{},buyer);check('another buyer cannot read receipt',r.status===404)
  r=await post(adminPath,{action:'confirm',verified:false,transferReference:'fixture-deposit'},cookie,'PATCH');check('admin must independently verify payment',r.status===409)
  r=await post(adminPath,{action:'confirm',verified:true,transferReference:'fixture-deposit'},cookie,'PATCH');check('verified deposit credits wallet',r.status===200,r)
