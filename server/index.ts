@@ -1524,10 +1524,28 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
     FROM notifications WHERE user_id = ?
     ORDER BY id DESC LIMIT 100
   `, req.user!.id)).map((notification) => {
-    if (notification.type === 'wallet' && notification.link === '/seller/wallet' && notification.title === 'Admin funding added') {
-      const amount = notification.body.match(/^\$[0-9]+\.[0-9]{2}(?= credited to your seller wallet\.)/)?.[0]
+    if (notification.type === 'wallet' && ['/seller/wallet', '/profile/wallet'].includes(notification.link) && notification.title === 'Admin funding added') {
+      const amount = notification.body.match(/^\$[0-9]+\.[0-9]{2}(?= credited to your (?:seller wallet|account balance)\.)/)?.[0]
       notification.title = 'Credited to wallet'
       notification.body = amount ? `${amount} credited to your wallet.` : 'The amount has been credited to your wallet.'
+    }
+    if (notification.type === 'wallet' && notification.link === '/seller/wallet' && notification.title === 'Wallet request updated') {
+      notification.body = 'Open My wallet to see the current status.'
+    }
+    if (notification.type === 'wallet' && notification.link === '/admin#seller-finance' && notification.title === 'Seller wallet request') {
+      if (notification.body.includes('deposit receipt')) {
+        notification.title = 'Deposit proof received'
+        notification.body = 'A deposit is ready for verification.'
+      } else if (notification.body.toLowerCase().startsWith('withdrawal')) {
+        notification.title = 'Withdrawal requested'
+        notification.body = 'A withdrawal is ready for review.'
+      }
+    }
+    if (notification.type === 'balance' && notification.link === '/profile/wallet' && notification.title === 'Account balance updated') {
+      notification.body = 'Your wallet balance was updated.'
+    }
+    if (notification.type === 'buyer_request' && notification.link === '/profile/wallet' && /^Request #\d+ (pending|rejected)$/.test(notification.title)) {
+      notification.body = 'Open your wallet to see the request status.'
     }
     return {
       id: notification.id,
@@ -1951,7 +1969,12 @@ app.patch('/api/admin/buyers/:id/balance', requireAuth, requireRole('admin'), as
     await database.prepare('INSERT INTO reward_balances(user_id,balance_units) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET balance_units=excluded.balance_units').run(userId,next)
     await database.prepare('INSERT INTO buyer_balance_history(user_id,admin_id,old_cents,new_cents,reason) VALUES(?,?,?,?,?)').run(userId,req.user!.id,wallet.balance_cents,next,reason)
     await database.prepare('INSERT INTO reward_history(user_id,admin_id,adjustment_units,balance_units,reason) VALUES(?,?,?,?,?)').run(userId,req.user!.id,next-wallet.balance_cents,next,reason)
-    await database.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'balance','Account balance updated',?,'/profile/wallet')").run(userId,reason)
+    const difference=next-wallet.balance_cents
+    if(difference!==0){
+      const credit=difference>0
+      await database.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'balance',?,?,'/profile/wallet')")
+        .run(userId,credit?'Wallet credited':'Wallet debited',`$${(Math.abs(difference)/100).toFixed(2)} ${credit?'credited to':'debited from'} your wallet.`)
+    }
     return next
   })()
   if(newBalance===null)return res.status(400).json({error:'Buyer not found or resulting balance is invalid. Pending withdrawal holds must stay covered.'})
@@ -1991,7 +2014,11 @@ app.patch('/api/admin/buyer-requests/:id',requireAuth,requireRole('admin'),async
   }
   if(status!=='pending'&&request.reserved_cents)await database.prepare('UPDATE buyer_wallet_holds SET amount_cents=amount_cents-? WHERE user_id=?').run(request.reserved_cents,request.user_id)
   await database.prepare('UPDATE buyer_wallet_requests SET status=?,instructions=?,payment_coin=?,network=?,wallet_address=? WHERE id=?').run(status,instructions,paymentCoin,network,wallet,id)
-  await database.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'buyer_request',?,?, '/profile/wallet')").run(request.user_id,`Request #${id} ${status}`,status==='confirmed'?`${request.kind==='deposit'?'Funds added to':'Funds withdrawn from'} your account balance.`:instructions||'Your request status changed.')
+  const deposit=request.kind==='deposit'
+  const title=status==='confirmed'?(deposit?'Wallet credited':'Wallet debited'):status==='rejected'?(deposit?'Deposit declined':'Withdrawal declined'):(deposit?'Deposit instructions ready':'Withdrawal details ready')
+  const body=status==='confirmed'?`$${(request.amount_cents!/100).toFixed(2)} ${deposit?'credited to':'debited from'} your wallet.`
+    :status==='rejected'?(deposit?'Your deposit was declined.':'Your withdrawal was declined.'):(deposit?'View your payment details in your wallet.':'Your withdrawal is awaiting transfer.')
+  await database.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'buyer_request',?,?, '/profile/wallet')").run(request.user_id,title,body)
  })()}catch(error){const e=error as Error&{status?:number};if(e.status)return res.status(e.status).json({error:e.message});throw error}
  return res.json({ok:true})
 })

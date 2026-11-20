@@ -65,7 +65,7 @@ export async function reverseSellerRelease(db: Database, order: number, seller: 
 export function registerSellerFinance(app: Express, db: Database, auth: RequestHandler, role: (...roles: ('customer'|'seller'|'admin')[])=>RequestHandler) {
  const protectedRoute=(handler: RequestHandler): RequestHandler => async(req,res,next)=>{try {await handler(req,res,next)} catch(error) {if((error as {status?:number}).status) res.status(409).json({error:(error as Error).message});else next(error)}}
  const notify=async(user:number,title:string,body:string)=>{await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'wallet',?,?, '/seller/wallet')").run(user,title,body)}
- const adminNotice=async(body:string)=>{await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) SELECT id,'wallet','Seller wallet request',?,'/admin#seller-finance' FROM users WHERE role='admin'").run(body)}
+ const reviewNotice=async(title:string,body:string)=>{await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) SELECT id,'wallet',?,?,'/admin#seller-finance' FROM users WHERE role='admin'").run(title,body)}
  const requests=async(seller?:number)=>{
  const rows=await db.prepare(`SELECT r.*,u.public_id AS sellerPublicId,COALESCE(p.store_name,u.full_name) AS storeName,
  (SELECT id FROM seller_wallet_receipts WHERE request_id=r.id) AS receiptId FROM seller_wallet_requests r JOIN users u ON u.id=r.seller_id LEFT JOIN seller_profiles p ON p.user_id=r.seller_id ${seller===undefined?'':'WHERE r.seller_id=?'} ORDER BY r.id DESC LIMIT 200`).all(...(seller===undefined?[]:[seller]))
@@ -149,7 +149,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  }
  const result=await db.prepare("INSERT INTO seller_wallet_requests(seller_id,request_key,kind,coin,amount_cents,status,network,address) VALUES(?,?,?,?,?,'awaiting_transfer',?,?)").run(req.user!.id,requestKey,kind,coin,amountCents,network,address)
  await postSellerFunds(db,req.user!.id,'withdrawal_hold',String(result.lastInsertRowid),0,amountCents,req.user!.id)
- await adminNotice('Withdrawal request submitted for review.')
+ await reviewNotice('Withdrawal requested','A withdrawal is ready for review.')
  return {id:result.lastInsertRowid,status:'awaiting_transfer'}
  })()
  res.status(201).json({ok:true,...result})
@@ -180,7 +180,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  if(!request||request.kind!=='deposit'||request.status!=='awaiting_receipt') fail('This deposit is not awaiting a receipt.')
  await db.prepare('INSERT INTO seller_wallet_receipts(request_id,content_type,image) VALUES(?,?,?)').run(request.id,contentType,await storage.put(image,String(contentType)))
  await db.prepare("UPDATE seller_wallet_requests SET status='awaiting_review',submitted_reference=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(reference,request.id)
- await adminNotice('A seller submitted a deposit receipt. Independently verify the transfer before confirming.')
+ await reviewNotice('Deposit proof received','A deposit is ready for verification.')
  })()
  res.json({ok:true})
  }))
@@ -216,7 +216,11 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  await postSellerFunds(db,request.seller_id,request.kind,String(request.id),request.kind==='deposit'?request.amount_cents:-request.amount_cents,request.kind==='withdrawal'?-request.amount_cents:0,req.user!.id)
  await db.prepare("UPDATE seller_wallet_requests SET status='confirmed',transfer_reference=?,reviewed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(reference,req.user!.id,request.id)
  } else fail('Choose quote, confirm or reject.')
- await notify(request.seller_id,'Wallet request updated','Open My wallet to see the administrator’s response.')
+ const deposit=request.kind==='deposit'
+ const amount=`$${(request.amount_cents/100).toFixed(2)}`
+ if(action==='confirm') await notify(request.seller_id,deposit?'Wallet credited':'Wallet debited',`${amount} ${deposit?'credited to':'debited from'} your wallet.`)
+ else if(action==='reject') await notify(request.seller_id,deposit?'Deposit declined':'Withdrawal declined',deposit?'Your deposit was declined.':'Your withdrawal was declined and the hold was released.')
+ else await notify(request.seller_id,deposit?'Deposit instructions ready':'Withdrawal details ready',deposit?'View your payment details in My wallet.':'Your withdrawal is awaiting transfer.')
  })()
  res.json({ok:true})
  }))
