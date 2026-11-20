@@ -18,7 +18,7 @@ import bcrypt from 'bcryptjs'
 import cookieParser from 'cookie-parser'
 import helmet from 'helmet'
 import { rateLimit } from 'express-rate-limit'
-import { createHash, randomBytes, randomInt } from 'node:crypto'
+import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { isEmailConfigured, sendAuthNotifications, sendPasswordResetEmail, sendSellerVerificationCode } from './email.ts'
 import { prepareVerificationPhotos, optionalSsnLast4, verificationPhone, uploadVerificationPhotos, insertApplicationPhotos, queuePhotoCleanup, registerSellerVerification, type StoredVerificationPhoto } from './sellerVerification.ts'
@@ -1438,37 +1438,6 @@ app.put('/api/seller/products/:id/stock', requireAuth, requireRole('seller', 'ad
   return res.json({ quantity })
 })
 
-const getConversationMessages = async (sellerId: number, currentUserId: number) => {
-  await database.prepare(`
-    UPDATE messages SET read_at = CURRENT_TIMESTAMP
-    WHERE conversation_seller_id = ? AND recipient_id = ? AND read_at IS NULL
-  `).run(sellerId, currentUserId)
-  return (await getRows<{
-    id: number
-    sender_id: number
-    sender_name: string
-    sender_role: UserRole
-    body: string
-    created_at: string
-    read_at: string | null
-  }>(`
-    SELECT messages.id, messages.sender_id, users.full_name AS sender_name,
-      users.role AS sender_role, messages.body, messages.created_at, messages.read_at
-    FROM messages
-    JOIN users ON users.id = messages.sender_id
-    WHERE messages.conversation_seller_id = ?
-    ORDER BY messages.id
-  `, sellerId)).map((message) => ({
-    id: message.id,
-    body: message.body,
-    senderName: message.sender_name,
-    senderRole: message.sender_role,
-    isMine: message.sender_id === currentUserId,
-    isRead: Boolean(message.read_at),
-    createdAt: message.created_at,
-  }))
-}
-
 app.get('/api/rewards', requireAuth, requireRole('customer','seller'),async(req,res)=>{
  const credit=(await getRow<{amount:number}>('SELECT balance_units AS amount FROM reward_balances WHERE user_id=?',req.user!.id))?.amount||0
  const hold=(await getRow<{amount:number}>('SELECT amount_cents AS amount FROM buyer_wallet_holds WHERE user_id=?',req.user!.id))?.amount||0
@@ -1503,7 +1472,7 @@ app.patch('/api/admin/users/:id/rewards', requireAuth, requireRole('admin'), asy
 })
 
 app.get('/api/notifications/summary',requireAuth,async(req,res)=>{
- const count=(await getRow<{count:number}>('SELECT COUNT(*) AS count FROM notifications WHERE user_id=? AND read_at IS NULL',req.user!.id))?.count||0
+ const count=(await getRow<{count:number}>("SELECT COUNT(*) AS count FROM notifications WHERE user_id=? AND read_at IS NULL AND type<>'message'",req.user!.id))?.count||0
  res.set('Cache-Control','no-store').json({unreadCount:count})
 })
 app.get('/api/admin/overview',requireAuth,requireRole('admin'),async(req,res)=>{
@@ -1521,7 +1490,7 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
     created_at: string
   }>(`
     SELECT id, type, title, body, link, read_at, created_at
-    FROM notifications WHERE user_id = ?
+    FROM notifications WHERE user_id = ? AND type<>'message'
     ORDER BY id DESC LIMIT 100
   `, req.user!.id)).map((notification) => {
     if (notification.type === 'wallet' && ['/seller/wallet', '/profile/wallet'].includes(notification.link) && notification.title === 'Admin funding added') {
@@ -1557,7 +1526,7 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
       createdAt: notification.created_at,
     }
   })
-  const unreadCount = (await getRow<{ count: number }>('SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL', req.user!.id))!.count
+  const unreadCount = (await getRow<{ count: number }>("SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL AND type<>'message'", req.user!.id))!.count
   return res.json({ notifications, unreadCount })
 })
 
@@ -1577,87 +1546,76 @@ app.patch('/api/notifications/:id/read', requireAuth, async (req, res) => {
   return res.json({ ok: true })
 })
 
-app.get('/api/messages', requireAuth, async (req, res) => {
-  if (req.user!.role === 'admin') {
-    const conversations = (await getRows<{
-      seller_id: number
-      full_name: string
-      email: string
-      store_name: string | null
-      last_body: string | null
-      last_created_at: string | null
-      unread_count: number
-    }>(`
-      SELECT users.id AS seller_id, users.full_name, users.email, seller_profiles.store_name,
-        (SELECT body FROM messages WHERE conversation_seller_id = users.id ORDER BY id DESC LIMIT 1) AS last_body,
-        (SELECT created_at FROM messages WHERE conversation_seller_id = users.id ORDER BY id DESC LIMIT 1) AS last_created_at,
-        (SELECT COUNT(*) FROM messages WHERE conversation_seller_id = users.id AND recipient_id = ? AND read_at IS NULL) AS unread_count
-      FROM users
-      LEFT JOIN seller_profiles ON seller_profiles.user_id = users.id
-      WHERE users.role IN ('seller', 'customer')
-      ORDER BY (SELECT MAX(id) FROM messages WHERE conversation_seller_id = users.id) DESC, users.id DESC
-    `, req.user!.id)).map((conversation) => ({
-      sellerId: conversation.seller_id,
-      sellerName: conversation.full_name,
-      email: conversation.email,
-      storeName: conversation.store_name,
-      lastMessage: conversation.last_body,
-      lastMessageAt: conversation.last_created_at,
-      unreadCount: conversation.unread_count,
-    }))
-    return res.json({ conversations })
+// Pending delivery stays in process memory and is discarded after receipt or expiry.
+type LiveMessage = {id:string;body:string;senderName:string;createdAt:string;isMine:boolean}
+const supportMailbox = new Map<number, LiveMessage[]>()
+const accountMailbox = new Map<number, LiveMessage[]>()
+const messageLifetimeMs = 5 * 60 * 1000
+function expireLiveMessages(){
+  const cutoff = Date.now() - messageLifetimeMs
+  for(const mailbox of [supportMailbox,accountMailbox]){
+    for(const [id,messages] of mailbox){
+      const fresh=messages.filter(message=>Date.parse(message.createdAt)>cutoff)
+      if(fresh.length)mailbox.set(id,fresh)
+      else mailbox.delete(id)
+    }
   }
+}
+setInterval(expireLiveMessages,30000).unref()
+function takeLiveMessages(mailbox:Map<number,LiveMessage[]>,accountId:number){
+  expireLiveMessages()
+  const messages=mailbox.get(accountId)??[]
+  mailbox.delete(accountId)
+  return messages
+}
 
-  const messages = (await getConversationMessages(req.user!.id, req.user!.id))
-  return res.json({ messages })
+app.get('/api/messages', requireAuth, async (req, res) => {
+  res.set('Cache-Control','private, no-store')
+  if(req.user!.role !== 'admin') return res.json({messages:takeLiveMessages(accountMailbox,req.user!.id)})
+  expireLiveMessages()
+  const accounts=await getRows<{sellerId:number;sellerName:string;email:string;storeName:string|null}>(`
+    SELECT users.id AS sellerId,users.full_name AS sellerName,users.email,seller_profiles.store_name AS storeName
+    FROM users LEFT JOIN seller_profiles ON seller_profiles.user_id=users.id
+    WHERE users.role IN ('seller','customer') AND users.suspended=0 AND users.deleted_at IS NULL
+    ORDER BY users.id DESC
+  `)
+  const conversations=accounts.map(account=>({...account,unreadCount:supportMailbox.get(account.sellerId)?.length??0}))
+    .sort((first,second)=>second.unreadCount-first.unreadCount)
+  return res.json({conversations})
 })
 
 app.get('/api/messages/:sellerId', requireAuth, async (req, res) => {
-  const sellerId = Number(req.params.sellerId)
-  if (!Number.isSafeInteger(sellerId)) return res.status(404).json({ error: 'Conversation not found.' })
-  if (req.user!.role !== 'admin' && sellerId !== req.user!.id) return res.status(403).json({ error: 'You can only view your own conversation.' })
-  const seller = (await getRow<{ id: number }>("SELECT id FROM users WHERE id = ? AND role IN ('seller', 'customer')", sellerId))
-  if (!seller) return res.status(404).json({ error: 'Seller not found.' })
-  return res.json({ messages: (await getConversationMessages(sellerId, req.user!.id)) })
+  const accountId=Number(req.params.sellerId)
+  if(!Number.isSafeInteger(accountId)||accountId<1)return res.status(404).json({error:'Conversation not found.'})
+  if(req.user!.role!=='admin'&&accountId!==req.user!.id)return res.status(403).json({error:'You can only view your own conversation.'})
+  if(req.user!.role==='admin'&&!await getRow("SELECT id FROM users WHERE id=? AND role IN ('seller','customer') AND suspended=0 AND deleted_at IS NULL",accountId)){
+    return res.status(404).json({error:'Conversation not found.'})
+  }
+  return res.set('Cache-Control','private, no-store').json({
+    messages:takeLiveMessages(req.user!.role==='admin'?supportMailbox:accountMailbox,accountId),
+  })
 })
 
-app.post('/api/messages', requireAuth, async (req, res) => {
-  const body = typeof req.body.body === 'string' ? req.body.body.trim() : ''
-  if (!body || body.length > 4000) return res.status(400).json({ error: 'Message must be between 1 and 4000 characters.' })
-
-  let sellerId: number
-  let recipientId: number
-  let recipient: UserRow | undefined
-  if (req.user!.role === 'admin') {
-    sellerId = Number(req.body.sellerId)
-    recipient = (await getRow<UserRow>("SELECT * FROM users WHERE id = ? AND role IN ('seller', 'customer')", sellerId))
-    if (!recipient) return res.status(404).json({ error: 'Seller not found.' })
-    recipientId = recipient.id
-  } else {
-    sellerId = req.user!.id
-    recipient = (await getRow<UserRow>("SELECT * FROM users WHERE role = 'admin' ORDER BY id LIMIT 1"))
-    if (!recipient) return res.status(503).json({ error: 'The admin inbox is not available yet.' })
-    recipientId = recipient.id
+const liveMessageLimiter=rateLimit({windowMs:60000,limit:30,standardHeaders:'draft-8',legacyHeaders:false})
+app.post('/api/messages', requireAuth, liveMessageLimiter, async (req, res) => {
+  const body=typeof req.body?.body==='string'?req.body.body.trim():''
+  if(!body||body.length>4000)return res.status(400).json({error:'Message must be between 1 and 4000 characters.'})
+  const isSupport=req.user!.role==='admin'
+  const accountId=isSupport?Number(req.body.sellerId):req.user!.id
+  if(isSupport){
+    if(!Number.isSafeInteger(accountId)||!await getRow("SELECT id FROM users WHERE id=? AND role IN ('seller','customer') AND suspended=0 AND deleted_at IS NULL",accountId)){
+      return res.status(404).json({error:'Conversation not found.'})
+    }
+  }else if(!await getRow("SELECT id FROM users WHERE role='admin' AND suspended=0 AND deleted_at IS NULL LIMIT 1")){
+    return res.status(503).json({error:'Support chat is unavailable.'})
   }
-
-  const result = (await database.prepare(`
-    INSERT INTO messages (conversation_seller_id, sender_id, recipient_id, body)
-    VALUES (?, ?, ?, ?)
-  `).run(sellerId, req.user!.id, recipientId, body))
-  await database.prepare(`
-    INSERT INTO notifications (user_id, type, title, body, link)
-    VALUES (?, 'message', ?, ?, ?)
-  `).run(recipientId, `New message from ${req.user!.full_name}`, body.slice(0, 180), req.user!.role === 'admin' ? '/messages' : `/messages?user=${sellerId}`)
-  return res.status(201).json({
-    message: {
-      id: Number(result.lastInsertRowid),
-      body,
-      senderName: req.user!.full_name,
-      senderRole: req.user!.role,
-      isMine: true,
-      createdAt: new Date().toISOString(),
-    },
-  })
+  expireLiveMessages()
+  const mailbox=isSupport?accountMailbox:supportMailbox
+  const pending=mailbox.get(accountId)??[]
+  if(pending.length>=40||(!pending.length&&mailbox.size>=500))return res.status(429).json({error:'The chat is busy. Try sending again shortly.'})
+  const message={id:randomUUID(),body,senderName:isSupport?'Support':req.user!.full_name,createdAt:new Date().toISOString(),isMine:false}
+  mailbox.set(accountId,[...pending,message])
+  return res.status(201).set('Cache-Control','private, no-store').json({message:{...message,isMine:true}})
 })
 
 const buyerCoins = ['BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'SOL', 'XRP', 'DOGE', 'LTC']

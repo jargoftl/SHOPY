@@ -69,4 +69,34 @@ export async function testBalanceMarketplace({req,check,db,cookie,seller,sellerI
  await call(`/api/admin/sellers/${sellerId}/display-stats`,{values:{},reason:'Restore actual fixture figures'},cookie,'PUT')
  // Sellers can shop as themselves with merchant funds; no second email is required.
  r=await call('/api/purchases',{...orderBody,requestKey:randomUUID()},seller);check('seller can buy from marketplace with existing account balance',r.status===201,r)
+ r=await call('/api/purchases',{...orderBody,requestKey:randomUUID()},buyer)
+ const directOrder=r.data.id
+ const payout={orderId:directOrder,sellerId,amountCents:1000,verified:true,destination:'crypto',coin:'USDT',network:'TRC20',address:'fixture-payout-wallet'}
+ r=await call('/api/seller/finance/releases',payout,seller);check('direct crypto payout requires transaction PIN',r.status===403,r)
+ const beforePayout=(await req('/api/seller/finance',{},seller)).data.wallet
+ r=await call('/api/seller/finance/releases',{...payout,transactionPin:'0456'},seller)
+ check('seller can request direct crypto payout for a paid sale',r.status===200,r)
+ const pending=(await req('/api/admin/seller-finance',{},cookie)).data.requests.find(q=>q.address===payout.address)
+ const held=(await req('/api/seller/finance',{},seller)).data.wallet
+ check('direct payout holds the full proceeds and preserves spendable balance',pending?.amount_cents===1000&&pending.status==='awaiting_transfer'&&held.balanceCents===beforePayout.balanceCents+1000&&held.reservedCents===beforePayout.reservedCents+1000,pending)
+ r=await call('/api/seller/finance/releases',{...payout,transactionPin:'0456'},seller);check('direct sale payout cannot be requested twice',r.status===409,r)
+ const reviewPath='/api/admin/seller-finance/requests/'+pending.id
+ r=await call(reviewPath,{action:'quote',usdRate:'1'},cookie,'PATCH');check('direct payout can be prepared for manual transfer',r.status===200,r)
+ r=await call(reviewPath,{action:'confirm',verified:true,transferReference:'fixture-sale-payout'},cookie,'PATCH')
+ const afterPayout=(await req('/api/seller/finance',{},seller)).data.wallet
+ check('confirmed direct payout debits held proceeds exactly once',r.status===200&&afterPayout.balanceCents===beforePayout.balanceCents&&afterPayout.reservedCents===beforePayout.reservedCents,r)
+
+ r=await call('/api/purchases',{...orderBody,requestKey:randomUUID()},buyer)
+ const refundOrder=r.data.id
+ r=await call('/api/seller/finance/releases',{...payout,orderId:refundOrder,address:'fixture-refunded-payout',transactionPin:'0456'},seller)
+ check('second sale can be queued for direct payout',r.status===200,r)
+ const pendingRefund=(await req('/api/admin/seller-finance',{},cookie)).data.requests.find(q=>q.address==='fixture-refunded-payout')
+ const refundId=(await db.query("INSERT INTO shop.purchase_refunds(order_id,seller_id,buyer_id,reason,status) VALUES($1,$2,$3,'Fixture pending payout refund','approved') RETURNING id",[refundOrder,sellerId,buyerId])).rows[0].id
+ r=await call('/api/admin/seller-finance/requests/'+pendingRefund.id,{action:'quote',usdRate:'1'},cookie,'PATCH')
+ r=await call('/api/admin/seller-finance/requests/'+pendingRefund.id,{action:'confirm',verified:true,transferReference:'fixture-blocked-payout'},cookie,'PATCH')
+ check('refund blocks pending direct payout',r.status===409&&r.data.error.includes('refund'),r)
+ r=await call('/api/admin/refunds/'+refundId+'/complete',{verified:true,transferReference:'fixture-direct-payout-refund'},cookie,'PATCH')
+ const refunded=(await req('/api/seller/finance',{},seller)).data
+ check('completed refund cancels the direct payout and frees its hold',r.status===200&&refunded.requests.some(q=>q.id===pendingRefund.id&&q.status==='rejected')&&refunded.wallet.balanceCents===afterPayout.balanceCents&&refunded.wallet.reservedCents===afterPayout.reservedCents,r)
+
 }

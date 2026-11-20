@@ -30,7 +30,7 @@ const MessageCenterPage = () => {
         }
         const [notificationData, inboxData] = await Promise.all([
           apiRequest('/api/notifications'),
-          apiRequest('/api/messages'),
+          account.role === 'admin' ? apiRequest('/api/messages') : Promise.resolve(null),
         ])
         if (!isCurrent) return
         setUser(account)
@@ -39,8 +39,6 @@ const MessageCenterPage = () => {
           setConversations(inboxData.conversations)
           const requestedId = Number(new URLSearchParams(location.search).get('user'))
           setSelectedSellerId((current) => current || inboxData.conversations.find((item) => item.sellerId === requestedId)?.sellerId || inboxData.conversations[0]?.sellerId || null)
-        } else {
-          setMessages(inboxData.messages)
         }
         setMessage('')
         setIsLoading(false)
@@ -58,17 +56,49 @@ const MessageCenterPage = () => {
   }, [navigate, refreshKey, location.search])
 
   useEffect(() => {
-    if (user?.role !== 'admin' || !selectedSellerId) return
-    let isCurrent = true
-    apiRequest(`/api/messages/${selectedSellerId}`)
-      .then(({ messages: threadMessages }) => {
-        if (isCurrent) setMessages(threadMessages)
-      })
-      .catch((error) => {
-        if (isCurrent) setMessage(error.message)
-      })
-    return () => { isCurrent = false }
-  }, [user?.role, selectedSellerId, refreshKey])
+    setActiveTab(new URLSearchParams(location.search).get('view') === 'notifications' ? 'notifications' : 'messages')
+  }, [location.key, location.search])
+
+  useEffect(() => {
+    setMessages([])
+    setDraft('')
+  }, [user?.id, selectedSellerId])
+
+  useEffect(() => {
+    if (!user || activeTab !== 'messages') return
+    const support = user.role === 'admin'
+    if (support && !selectedSellerId) return
+    let active = true
+    let timer
+    const path = support ? `/api/messages/${selectedSellerId}` : '/api/messages'
+    async function receive() {
+      try {
+        const { messages: incoming } = await apiRequest(path)
+        if (active && incoming.length) {
+          setMessages(current => [...current, ...incoming].slice(-100))
+          if (support) setConversations(current => current.map(item =>
+            item.sellerId === selectedSellerId ? { ...item, unreadCount: 0 } : item))
+        }
+      } catch (error) {
+        if (active) setMessage(error.message)
+      } finally {
+        if (active) timer = setTimeout(receive, 2500)
+      }
+    }
+    receive()
+    return () => { active = false; clearTimeout(timer) }
+  }, [user?.id, user?.role, activeTab, selectedSellerId])
+
+  useEffect(() => {
+    if (user?.role !== 'admin' || activeTab !== 'messages') return
+    let active = true
+    const timer = setInterval(() => {
+      apiRequest('/api/messages').then(data => {
+        if (active) setConversations(data.conversations)
+      }).catch(() => {})
+    }, 8000)
+    return () => { active = false; clearInterval(timer) }
+  }, [user?.role, activeTab])
 
   const selectedConversation = conversations.find((conversation) => conversation.sellerId === selectedSellerId)
   const unreadNotifications = notifications.filter((notification) => !notification.isRead).length
@@ -99,12 +129,12 @@ const MessageCenterPage = () => {
     setIsSending(true)
     setMessage('')
     try {
-      await apiRequest('/api/messages', {
+      const { message: sent } = await apiRequest('/api/messages', {
         method: 'POST',
         body: JSON.stringify({ body: draft, ...(user.role === 'admin' ? { sellerId: selectedSellerId } : {}) }),
       })
       setDraft('')
-      setRefreshKey((current) => current + 1)
+      setMessages(current => [...current, sent].slice(-100))
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -186,9 +216,9 @@ const MessageCenterPage = () => {
                 <div className={`border-b px-4 py-4 ${isAdmin ? 'border-[#111111]' : 'border-[#e5e5e5]'}`}><h2 className="text-sm font-semibold">Buyer and seller conversations</h2><p className="mt-1 text-xs text-[#777777]">{conversations.length} accounts</p></div>
                 <div className="max-h-[520px] overflow-y-auto">
                   {conversations.map((conversation) => (
-                    <button key={conversation.sellerId} type="button" onClick={() => setSelectedSellerId(conversation.sellerId)} className={`w-full border-b px-4 py-4 text-left ${selectedSellerId === conversation.sellerId ? 'bg-[#111111]' : 'border-[#111111] hover:bg-[#111111]'}`}>
+                    <button key={conversation.sellerId} type="button" disabled={isSending} onClick={() => setSelectedSellerId(conversation.sellerId)} className={`w-full border-b px-4 py-4 text-left ${selectedSellerId === conversation.sellerId ? 'bg-[#111111]' : 'border-[#111111] hover:bg-[#111111]'}`}>
                       <div className="flex items-center justify-between gap-3"><span className="truncate text-sm font-semibold">{conversation.storeName || conversation.sellerName}</span>{conversation.unreadCount > 0 && <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[#cccccc] text-[10px] font-bold text-[#111111]">{conversation.unreadCount}</span>}</div>
-                      <p className="mt-1 truncate text-xs text-[#777777]">{conversation.lastMessage || conversation.email}</p>
+                      <p className="mt-1 truncate text-xs text-[#777777]">{conversation.email}</p>
                     </button>
                   ))}
                   {!conversations.length && <p className="px-4 py-8 text-sm text-[#777777]">No buyer or seller accounts yet.</p>}
@@ -199,20 +229,20 @@ const MessageCenterPage = () => {
             <section className="flex min-h-[520px] min-w-0 flex-col">
               <div className={`border-b px-5 py-4 ${isAdmin ? 'border-[#111111]' : 'border-[#e5e5e5]'}`}>
                 <h2 className="text-sm font-semibold">{isAdmin ? selectedConversation?.storeName || selectedConversation?.sellerName || 'Choose an account' : <>Message <SiteName /> support</>}</h2>
-                <p className={`mt-1 text-xs ${isAdmin ? 'text-[#777777]' : 'text-[#555555]'}`}>{isAdmin ? selectedConversation?.email || 'Select a conversation to reply.' : 'Send a message about your store or account.'}</p>
+                <p className={`mt-1 text-xs ${isAdmin ? 'text-[#777777]' : 'text-[#555555]'}`}>{isAdmin ? selectedConversation?.email || 'Select a conversation to reply.' : 'Messages stay in this chat until you leave. Pending delivery expires after five minutes.'}</p>
               </div>
               <div className="flex-1 space-y-3 overflow-y-auto px-4 py-5 sm:px-6">
                 {messages.map((item) => (
                   <article key={item.id} className={`max-w-[85%] border px-4 py-3 ${item.isMine ? `ml-auto ${isAdmin ? 'border-[#111111] bg-[#111111]' : 'border-[#cccccc] bg-[#f7f7f7]'}` : isAdmin ? 'border-[#111111] bg-[#111111]' : 'border-[#e5e5e5] bg-[#fafaf8]'}`}>
                     <p className={`mb-1 text-[10px] font-semibold ${isAdmin ? 'text-[#cccccc]' : 'text-[#111111]'}`}>{item.isMine ? 'You' : item.senderName}</p>
                     <p className="whitespace-pre-wrap break-words text-sm leading-6">{item.body}</p>
-                    <time className={`mt-2 block text-right text-[10px] ${isAdmin ? 'text-[#777777]' : 'text-[#888]'}`}>{new Date(`${item.createdAt.replace(' ', 'T')}${item.createdAt.includes('Z') ? '' : 'Z'}`).toLocaleString()}</time>
+                    <time className={`mt-2 block text-right text-[10px] ${isAdmin ? 'text-[#777777]' : 'text-[#888]'}`}>{new Date(item.createdAt).toLocaleString()}</time>
                   </article>
                 ))}
-                {!messages.length && <p className={`py-16 text-center text-sm ${isAdmin ? 'text-[#777777]' : 'text-[#555555]'}`}>No messages in this conversation yet.</p>}
+                {!messages.length && <p className={`py-16 text-center text-sm ${isAdmin ? 'text-[#777777]' : 'text-[#555555]'}`}>No messages in this session.</p>}
               </div>
               <form onSubmit={sendMessage} className={`flex items-end gap-3 border-t p-4 ${isAdmin ? 'border-[#111111]' : 'border-[#e5e5e5]'}`}>
-                <textarea value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={4000} rows={2} placeholder={isAdmin ? 'Write a reply…' : 'Write a message to the admin…'} disabled={isAdmin && !selectedSellerId} className={`min-h-12 flex-1 resize-y border bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-50 ${isAdmin ? 'border-[#111111] focus:border-[#cccccc]' : 'border-[#cccccc] focus:border-black'}`} />
+                <textarea value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={4000} rows={2} placeholder={isAdmin ? 'Write a reply…' : 'Write a message to support…'} disabled={isAdmin && !selectedSellerId} className={`min-h-12 flex-1 resize-y border bg-transparent px-3 py-2 text-sm outline-none disabled:opacity-50 ${isAdmin ? 'border-[#111111] focus:border-[#cccccc]' : 'border-[#cccccc] focus:border-black'}`} />
                 <button type="submit" disabled={isSending || !draft.trim() || (isAdmin && !selectedSellerId)} aria-label="Send message" title="Send message" className={`grid size-11 shrink-0 place-items-center disabled:opacity-50 ${isAdmin ? 'bg-[#cccccc] text-[#111111]' : 'bg-[#111111] text-white'}`}><Send size={17} /></button>
               </form>
             </section>

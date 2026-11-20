@@ -505,6 +505,8 @@ CREATE TABLE IF NOT EXISTS seller_sale_releases (
  admin_id BIGINT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  PRIMARY KEY(order_id,seller_id)
 );
+ALTER TABLE seller_sale_releases ADD COLUMN IF NOT EXISTS withdrawal_request_id BIGINT REFERENCES seller_wallet_requests(id);
+CREATE UNIQUE INDEX IF NOT EXISTS seller_sale_payout_request ON seller_sale_releases(withdrawal_request_id) WHERE withdrawal_request_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS store_daily_visits (
  seller_id BIGINT NOT NULL REFERENCES users(id), day TEXT NOT NULL, visits BIGINT NOT NULL DEFAULT 0,
  PRIMARY KEY(seller_id,day)
