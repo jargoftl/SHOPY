@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { apiRequest, trackedFetch } from '../lib/api.js'
+import CryptoWalletIcon, { coinNetworks } from './CryptoWalletIcon.jsx'
 
-const coins = ['USDT', 'BTC', 'ETH', 'USDC', 'BNB', 'SOL', 'XRP', 'DOGE', 'LTC']
+const coins = Object.keys(coinNetworks)
+const buyerCoins = new Set(['BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'SOL', 'XRP', 'DOGE', 'LTC'])
 const walletApi = '/api/admin/payment-wallets'
 const inputClass = 'mt-2 block w-full border p-3 text-sm'
 
@@ -22,12 +24,12 @@ async function readScreenshot(file) {
   return { type: file.type, data: url.split(',')[1] }
 }
 
-function WalletQr({ coin }) {
+function WalletQr({ coin, network }) {
   const [preview, setPreview] = useState('')
   const [error, setError] = useState('')
   useEffect(() => {
     const controller = new AbortController()
-    trackedFetch(`${walletApi}/${coin}/qr`, { signal: controller.signal })
+    trackedFetch(`${walletApi}/${coin}/qr${network ? `?${new URLSearchParams({network})}` : ''}`, { signal: controller.signal })
       .then(response => {
         if (!response.ok) throw new Error('Could not load the saved QR screenshot.')
         return response.blob()
@@ -40,7 +42,7 @@ function WalletQr({ coin }) {
         if (!controller.signal.aborted) setError('Could not load the saved QR screenshot.')
       })
     return () => controller.abort()
-  }, [coin])
+  }, [coin, network])
 
   return preview ? <img src={preview} alt={`${coin} wallet QR screenshot`} className="mt-3 max-h-44 max-w-full object-contain" /> :
     <p className="mt-3 text-sm">{error || 'Loading saved QR screenshot…'}</p>
@@ -49,15 +51,20 @@ function WalletQr({ coin }) {
 export default function CoinWalletSettings() {
   const [wallets, setWallets] = useState(null)
   const [coin, setCoin] = useState('USDT')
+  const [extraWallets, setExtraWallets] = useState([])
+  const [selection, setSelection] = useState('primary')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [revision, setRevision] = useState(0)
   useEffect(() => {
-    apiRequest(walletApi).then(data => setWallets(data.wallets)).catch(error => setError(error.message))
+    apiRequest(walletApi).then(data => { setWallets(data.wallets); setExtraWallets(data.networkWallets ?? []) }).catch(error => setError(error.message))
   }, [])
 
-  const wallet = wallets?.find(wallet => wallet.coin === coin)
+  const primary = wallets?.find(wallet => wallet.coin === coin)
+  const additional = extraWallets.filter(wallet => wallet.coin === coin)
+  const isPrimary = selection === 'primary' && buyerCoins.has(coin)
+  const wallet = isPrimary ? primary : additional.find(wallet => `network:${wallet.network}` === selection)
   async function save(event) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -72,10 +79,15 @@ export default function CoinWalletSettings() {
       if (!body.qr && (body.network.trim() !== wallet?.network || body.address.trim() !== wallet?.address)) {
         throw new Error('Upload the QR screenshot for this network and receiving address.')
       }
+      body.sellerNetwork = !isPrimary
       const { wallet: saved } = await apiRequest(`${walletApi}/${coin}`, { method: 'PUT', body: JSON.stringify(body) })
-      setWallets(previous => [...previous.filter(wallet => wallet.coin !== coin), saved])
+      if (isPrimary) setWallets(previous => [...previous.filter(wallet => wallet.coin !== coin), saved])
+      else {
+        setExtraWallets(previous => [...previous.filter(wallet => wallet.coin !== coin || wallet.network.toLowerCase() !== saved.network.toLowerCase()), saved])
+        setSelection(`network:${saved.network}`)
+      }
       setRevision(value => value + 1)
-      setNotice(`${coin} wallet saved.`)
+      setNotice(`${coin} on ${saved.network} saved.`)
     } catch (error) {
       setError(error.message)
     } finally {
@@ -83,21 +95,30 @@ export default function CoinWalletSettings() {
     }
   }
 
-  return <section className="border bg-white p-5">
-    <p className="text-sm text-gray-600">Configure receiving wallets for buyer deposits. Each coin has its own network, receiving address and QR screenshot.</p>
-    {wallets && <form key={`${coin}:${revision}`} className="mt-4" onSubmit={save}>
+  return <section className="rounded-2xl border border-slate-200 bg-white p-5">
+    <p className="text-sm text-gray-600">Choose a coin and save a receiving address, rate, and QR code for each network. Additional networks are available for seller deposits.</p>
+    {wallets && <form key={`${coin}:${selection}:${revision}`} className="mt-4" onSubmit={save}>
       <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2">
-        <label className="text-sm">Wallet type
+        <label className="text-sm"><span className="flex items-center gap-2 font-semibold"><CryptoWalletIcon coin={coin}/>Coin</span>
           <select className={inputClass} value={coin} onChange={event => {
             setCoin(event.target.value)
+            setSelection(buyerCoins.has(event.target.value)?'primary':'new')
             setError('')
             setNotice('')
           }}>
-            {coins.map(type => <option key={type} value={type}>{type}{wallets.some(wallet => wallet.coin === type) ? ' (saved)' : ''}</option>)}
+            {coins.map(type => <option key={type} value={type}>{type}{[...wallets,...extraWallets].some(wallet => wallet.coin === type) ? ' (saved)' : ''}</option>)}
+          </select>
+        </label>
+        <label className="text-sm"><span className="flex items-center gap-2 font-semibold"><CryptoWalletIcon network={wallet?.network||'network'}/>Wallet to edit</span>
+          <select className={inputClass} value={selection} onChange={event=>{setSelection(event.target.value);setError('');setNotice('')}}>
+            {buyerCoins.has(coin)&&<option value="primary">{primary?.network?`${primary.network} (primary)`:'Set primary wallet'}</option>}
+            {additional.map(wallet=><option key={wallet.network} value={`network:${wallet.network}`}>{wallet.network}</option>)}
+            <option value="new">Add seller network</option>
           </select>
         </label>
         <label className="text-sm">Network
-          <input className={inputClass} name="network" defaultValue={wallet?.network ?? ''} required maxLength={100} />
+          <input className={inputClass} name="network" list="wallet-network-options" defaultValue={wallet?.network ?? ''} readOnly={!isPrimary&&Boolean(wallet)} required maxLength={100} />
+          <datalist id="wallet-network-options">{coinNetworks[coin].map(network=><option key={network} value={network}/>)}</datalist>
         </label>
         <label className="text-sm">Receiving wallet address
           <input className={inputClass} name="address" defaultValue={wallet?.address ?? ''} required maxLength={500} />
@@ -109,7 +130,7 @@ export default function CoinWalletSettings() {
           <label className="text-sm">QR code screenshot (PNG or JPEG, up to 2 MB)
             <input className={inputClass} name="qr" type="file" accept="image/png,image/jpeg" required={!wallet?.hasQr} />
           </label>
-          {wallet?.hasQr && <WalletQr coin={coin} />}
+          {wallet?.hasQr && <WalletQr coin={coin} network={isPrimary?undefined:wallet.network} />}
         </div>
         <button className="w-fit bg-black px-5 py-3 text-sm text-white disabled:opacity-50" type="submit">
           {busy ? 'Saving…' : 'Save wallet'}

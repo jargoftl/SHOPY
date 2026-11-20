@@ -20,7 +20,7 @@ const userFinanceEntry=(row:unknown)=>{
  return entry
 }
 const userActivityEntry=(row:unknown)=>row&&typeof row==='object'&&'kind' in row&&row.kind==='sale_confirmed'?{...row,details:'Paid sale proceeds confirmed.'}:row
-const coins = ['BTC','ETH','USDT','USDC','BNB','SOL','XRP','DOGE','LTC']
+export const sellerPaymentCoins = ['BTC','ETH','USDT','USDC','BNB','SOL','XRP','DOGE','LTC','TRX','TON','POL','AVAX','ADA']
 const text = (v: unknown, max = 500) => typeof v === 'string' && v.trim().length <= max ? v.trim() : ''
 function fail(message: string): never { throw Object.assign(new Error(message), { status: 409 }) }
 const rateValid = (v: string) => /^(?:0|[1-9]\d{0,11})(?:\.\d{1,8})?$/.test(v) && /[1-9]/.test(v)
@@ -88,15 +88,20 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  app.get('/api/seller/analytics',auth,role('seller','admin'),protectedRoute(async(req,res)=>{const data=await analytics(req.user!.id);res.set('Cache-Control','no-store').json({...data,orders:data.orders.map(userFinanceEntry),activity:data.activity.map(userActivityEntry)})}))
  app.get('/api/admin/sellers/:id/analytics',auth,role('admin'),protectedRoute(async(req,res)=>{res.json(await analytics(Number(req.params.id)))}))
  const configuredWallets = async () => {
- const rows = await db.prepare('SELECT coin,network,address,usd_rate,qr_image,qr_content_type FROM payment_wallets ORDER BY coin').all() as Array<{
+ const rows = await db.prepare(`
+  SELECT coin,network,address,usd_rate,qr_image,qr_content_type,0 AS priority FROM payment_wallets
+  UNION ALL
+  SELECT coin,network,address,usd_rate,qr_image,qr_content_type,1 AS priority FROM seller_payment_networks
+  ORDER BY priority,coin,network
+ `).all() as Array<{
   coin:string,network:string,address:string,usd_rate:string,qr_image:string|null,qr_content_type:string|null
  }>
- return rows.filter(wallet=>coins.includes(wallet.coin)&&wallet.network&&wallet.address&&rateValid(wallet.usd_rate||''))
+ return rows.filter(wallet=>sellerPaymentCoins.includes(wallet.coin)&&wallet.network&&wallet.address&&rateValid(wallet.usd_rate||''))
  }
  const walletVersion=(wallet:Awaited<ReturnType<typeof configuredWallets>>[number])=>
   createHash('sha256').update(JSON.stringify([wallet.coin,wallet.network,wallet.address,wallet.usd_rate,wallet.qr_image,wallet.qr_content_type])).digest('hex')
  app.get('/api/seller/finance/deposit-wallets/:coin',auth,role('seller'),protectedRoute(async(req,res)=>{
-  const wallet=(await configuredWallets()).find(wallet=>wallet.coin===req.params.coin)
+  const wallet=(await configuredWallets()).find(wallet=>wallet.coin===req.params.coin&&(req.query.network===undefined||wallet.network===req.query.network))
   if(!wallet)return void res.status(404).json({error:'This deposit wallet is unavailable.'})
   const qrUrl=wallet.qr_image&&wallet.qr_content_type
    ? `data:${wallet.qr_content_type};base64,${(await new ObjectStorage().get(wallet.qr_image)).toString('base64')}`
@@ -109,19 +114,19 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  }))
  app.post('/api/seller/finance/requests',auth,role('seller'),rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many wallet attempts. Please try again later.'}}),protectedRoute(async(req,res)=>{
  const {kind,coin,amountCents,requestKey}=req.body||{}
- if(!['deposit','withdrawal'].includes(kind)||!coins.includes(coin)||!Number.isSafeInteger(amountCents)||amountCents<1||amountCents>100000000||!/^[-a-f0-9]{36}$/i.test(requestKey||'')) return void res.status(400).json({error:'Enter a valid amount (up to $1,000,000), coin and request key.'})
- const network=text(req.body.network,80),address=text(req.body.address,200)
+ if(!['deposit','withdrawal'].includes(kind)||!sellerPaymentCoins.includes(coin)||!Number.isSafeInteger(amountCents)||amountCents<1||amountCents>100000000||!/^[-a-f0-9]{36}$/i.test(requestKey||'')) return void res.status(400).json({error:'Enter a valid amount (up to $1,000,000), coin and request key.'})
+ const network=text(req.body.network,100),address=text(req.body.address,500)
  if(kind==='withdrawal'&&(!network||!address)) return void res.status(400).json({error:'Enter your receiving network and wallet address.'})
  const pinError=await checkTransactionPin(db,req.user!.id,req.body.transactionPin)
  if(pinError) return void res.status(403).json({error:pinError})
  const result=await db.transaction(async()=>{
  const existing=await db.prepare('SELECT * FROM seller_wallet_requests WHERE seller_id=? AND request_key=?').get(req.user!.id,requestKey) as WalletRequest|undefined
  if(existing) {
-  if(existing.kind!==kind||existing.coin!==coin||existing.amount_cents!==amountCents||(kind==='withdrawal'&&(existing.address!==address||existing.network!==network))) fail('Request key already used for different details.')
+  if(existing.kind!==kind||existing.coin!==coin||existing.amount_cents!==amountCents||(kind==='deposit'&&req.body.paymentNetwork!==undefined&&existing.network!==req.body.paymentNetwork)||(kind==='withdrawal'&&(existing.address!==address||existing.network!==network))) fail('Request key already used for different details.')
   return {id:existing.id,status:existing.status}
  }
  if(kind==='deposit'){
-  const wallet=(await configuredWallets()).find(wallet=>wallet.coin===coin)
+  const wallet=(await configuredWallets()).find(wallet=>wallet.coin===coin&&(req.body.paymentNetwork===undefined||wallet.network===req.body.paymentNetwork))
   if(!wallet) fail('This deposit wallet is unavailable. Choose a configured wallet.')
   if(req.body.walletVersion!==undefined&&req.body.walletVersion!==walletVersion(wallet)){
    fail('The receiving wallet changed. If you already sent funds, contact support before sending again.')
@@ -175,7 +180,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  res.send(row.image)
  }))
  app.get('/api/admin/seller-finance',auth,role('admin'),protectedRoute(async(_req,res)=>{
- res.set('Cache-Control','no-store').json({requests:await requests(),sales:await sales(),wallets:await db.prepare('SELECT w.*,u.public_id AS publicId,u.full_name AS name FROM seller_wallets w JOIN users u ON u.id=w.seller_id ORDER BY seller_id').all(),paymentWallets:await db.prepare('SELECT coin,network,address,usd_rate FROM payment_wallets').all()})
+ res.set('Cache-Control','no-store').json({requests:await requests(),sales:await sales(),wallets:await db.prepare('SELECT w.*,u.public_id AS publicId,u.full_name AS name FROM seller_wallets w JOIN users u ON u.id=w.seller_id ORDER BY seller_id').all(),paymentWallets:(await configuredWallets()).map(({coin,network,address,usd_rate})=>({coin,network,address,usd_rate}))})
  }))
  app.patch('/api/admin/seller-finance/requests/:id',auth,role('admin'),protectedRoute(async(req,res)=>{
  await db.transaction(async()=>{
