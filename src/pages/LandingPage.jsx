@@ -1,3 +1,4 @@
+import StoreStats from '../components/StoreStats.jsx'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import StoreAccountMenu from '../components/StoreAccountMenu.jsx'
 import { useEffect, useState } from 'react'
@@ -537,7 +538,7 @@ const LandingPage = () => {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {stores.slice(0, 4).map((store) => <Link key={store.id} to={`/stores/${store.id}`} className="group overflow-hidden border border-[#e5e5e5] bg-white transition-colors hover:border-[#111111]">
               <img src={store.imageUrl || store.logoUrl || 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80'} alt={store.storeName} loading="lazy" className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-[1.025]" />
-              <div className="p-3 sm:p-4"><h3 className="truncate text-sm font-semibold">{store.storeName}</h3><p className="mt-1 truncate text-xs text-[#555555]">{store.ownerName} · {store.productCount} products</p><p className="mt-2 line-clamp-2 text-xs leading-5 text-[#111111]">{store.storeDescription}</p></div>
+              <div className="p-3 sm:p-4"><h3 className="text-sm font-semibold">{store.storeName}</h3><div className="mt-2 border-t border-[#e5e5e5] pt-2 text-[#444]"><StoreStats store={store}/></div><p className="mt-2 line-clamp-2 text-xs leading-5 text-[#111111]">{store.storeDescription}</p></div>
             </Link>)}
           </div>
         </section>}

@@ -10,3 +10,8 @@ test('store business dates are real calendar dates with explicit future labeling
  assert.equal(formatStoreDate('2020-01-01'),'1 January 2020')
  assert.ok(formatTimestamp('2020-01-01 23:30:00').includes('2 Jan 2020'))
 })
+
+test('wallet timestamps with PostgreSQL UTC offsets display the date and time in Lagos',()=>{
+ assert.equal(formatTimestamp('2026-11-20 17:09:32.434156+00'),formatTimestamp('2026-11-20T17:09:32.434156Z'))
+ assert.match(formatTimestamp('2026-11-20 17:09:32.434156+00'),/20 Nov 2026.*18:09:32/)
+})

@@ -13,13 +13,25 @@ const financialActorLabel=(role:unknown)=>role==='admin'?'Support team':role==='
 const userFinanceEntry=(row:unknown)=>{
  if(!row||typeof row!=='object'||Array.isArray(row))return row
  const entry={...row} as Record<string,unknown>
+ if(entry.kind==='admin_funding'){
+  delete entry.actor_id
+  delete entry.actorName
+  delete entry.actorRole
+  entry.note=''
+  return entry
+ }
  if('actorName' in entry)entry.actorName=financialActorLabel(entry.actorRole)
  if(entry.confirmedBy)entry.confirmedBy=financialActorLabel(entry.confirmedRole)
  if('storeName' in entry)entry.storeName='Store account'
  if(entry.note==='Administrator action')entry.note='Support adjustment'
  return entry
 }
-const userActivityEntry=(row:unknown)=>row&&typeof row==='object'&&'kind' in row&&row.kind==='sale_confirmed'?{...row,details:'Paid sale proceeds confirmed.'}:row
+const userActivityEntry=(row:unknown)=>{
+ if(!row||typeof row!=='object'||!('kind' in row)) return row
+ if(row.kind==='admin_funding') return {...row,kind:'wallet_credit',details:'Credited to wallet'}
+ if(row.kind==='sale_confirmed') return {...row,details:'Paid sale proceeds confirmed.'}
+ return row
+}
 export const sellerPaymentCoins = ['BTC','ETH','USDT','USDC','BNB','SOL','XRP','DOGE','LTC','TRX','TON','POL','AVAX','ADA']
 const text = (v: unknown, max = 500) => typeof v === 'string' && v.trim().length <= max ? v.trim() : ''
 function fail(message: string): never { throw Object.assign(new Error(message), { status: 409 }) }

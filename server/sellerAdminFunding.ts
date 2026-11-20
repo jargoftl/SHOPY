@@ -16,7 +16,7 @@ export function registerSellerAdminFunding(app:Express,db:Database,auth:RequestH
    const old=await db.prepare("SELECT seller_id,delta_cents,note,actor_id FROM seller_fund_records WHERE kind='admin_funding' AND reference=?").get(requestKey) as {seller_id:number,delta_cents:number,note:string,actor_id:number}|undefined
    if(old){if(old.seller_id!==sellerId||old.delta_cents!==amountCents||old.note!==reason||old.actor_id!==req.user!.id)throw Object.assign(new Error('That request key has already been used for a different funding action.'),{status:409});return}
    await postSellerFunds(db,sellerId,'admin_funding',requestKey,amountCents,0,req.user!.id,reason)
-   await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'wallet','Admin funding added',?,'/seller/wallet')").run(sellerId,`$${(amountCents/100).toFixed(2)} credited to your seller wallet. ${reason}`)
+   await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'wallet','Credited to wallet',?,'/seller/wallet')").run(sellerId,`$${(amountCents/100).toFixed(2)} credited to your wallet.`)
   })()}catch(error){const e=error as Error&{status?:number};if(e.status)return res.status(e.status).json({error:e.message});throw error}
   res.json({ok:true})
  })
