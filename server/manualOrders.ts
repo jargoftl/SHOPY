@@ -4,11 +4,17 @@ import express from 'express'
 import {recordShipmentEvent,registerShipmentTracking} from './shipmentTracking.ts'
 import { postSellerFunds, reverseSellerRelease } from './sellerFinance.ts'
 import type { Database } from './database.ts'
+import { ObjectStorage } from './storage.ts'
 import { allocateOrderNumber, initializeOrderNumbers } from './orderNumbers.ts'
 
 const coins = ['BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'SOL', 'XRP', 'DOGE', 'LTC']
 const text = (value: unknown, max: number): string =>
   typeof value === 'string' && value.trim().length <= max ? value.trim() : ''
+
+function matchesScreenshot(image: Buffer, type: unknown): type is 'image/png' | 'image/jpeg' {
+  if (type === 'image/png') return image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
+  return type === 'image/jpeg' && image[0] === 255 && image[1] === 216 && image[2] === 255
+}
 
 export async function registerManualOrders(app: Express, db: Database, auth: RequestHandler, role: (...roles: ('customer' | 'seller' | 'admin')[]) => RequestHandler) {
   await initializeOrderNumbers(db)
@@ -103,15 +109,46 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     })()
     return res.json({ ok: true })
   })
-  app.get('/api/admin/payment-wallets', auth, role('admin'), async (_req, res) => res.json({ wallets: (await db.prepare('SELECT coin, network, address, usd_rate AS usdRate FROM payment_wallets ORDER BY coin').all()) }))
+  const walletStorage = new ObjectStorage()
+  app.get('/api/admin/payment-wallets', auth, role('admin'), async (_req, res) => {
+    const wallets = await db.prepare('SELECT coin, network, address, usd_rate AS usdRate, qr_image IS NOT NULL AS hasQr FROM payment_wallets ORDER BY coin').all()
+    res.set('Cache-Control', 'no-store').json({ wallets })
+  })
+  app.get('/api/admin/payment-wallets/:coin/qr', auth, role('admin'), async (req, res) => {
+    const wallet = await db.prepare('SELECT qr_image, qr_content_type FROM payment_wallets WHERE coin=?').get(req.params.coin) as { qr_image: string | null, qr_content_type: string | null } | undefined
+    if (!wallet?.qr_image || !wallet.qr_content_type) return res.status(404).json({ error: 'No QR screenshot is saved for this wallet.' })
+    const image = await walletStorage.get(wallet.qr_image)
+    return res.set('Cache-Control', 'no-store').type(wallet.qr_content_type).send(image)
+  })
   app.put('/api/admin/payment-wallets/:coin', auth, role('admin'), async (req, res) => {
     const coin = String(req.params.coin)
     const network = text(req.body?.network, 100)
     const address = text(req.body?.address, 500)
     const rate = text(req.body?.usdRate, 30)
     if (!coins.includes(coin) || !network || !address || /[\r\n]/.test(network + address) || !validRate(rate)) return res.status(400).json({ error: 'Enter a supported coin, network, wallet address and positive USD-per-coin rate (up to 8 decimals).' })
-    await db.prepare('INSERT INTO payment_wallets (coin,network,address,usd_rate) VALUES (?,?,?,?) ON CONFLICT(coin) DO UPDATE SET network=excluded.network,address=excluded.address,usd_rate=excluded.usd_rate').run(coin, network, address, rate)
-    return res.json({ ok: true })
+    let qrPath: string | null = null
+    let qrType: string | null = null
+    if (req.body?.qr !== undefined) {
+      const { type, data } = req.body.qr ?? {}
+      const image = typeof data === 'string' && data.length <= 2796204
+        ? Buffer.from(data, 'base64') : Buffer.alloc(0)
+      if (image.length > 2 * 1024 * 1024 || !matchesScreenshot(image, type)) {
+        return res.status(400).json({ error: 'Upload a PNG or JPEG QR screenshot up to 2 MB.' })
+      }
+      qrPath = await walletStorage.put(image, type)
+      qrType = type
+    }
+    const wallet = await db.prepare(`
+      INSERT INTO payment_wallets (coin,network,address,usd_rate,qr_image,qr_content_type)
+      VALUES (?,?,?,?,?,?)
+      ON CONFLICT(coin) DO UPDATE SET network=excluded.network,address=excluded.address,usd_rate=excluded.usd_rate,
+        qr_image=CASE WHEN excluded.qr_image IS NULL AND payment_wallets.network=excluded.network AND payment_wallets.address=excluded.address
+          THEN payment_wallets.qr_image ELSE excluded.qr_image END,
+        qr_content_type=CASE WHEN excluded.qr_image IS NULL AND payment_wallets.network=excluded.network AND payment_wallets.address=excluded.address
+          THEN payment_wallets.qr_content_type ELSE excluded.qr_content_type END
+      RETURNING coin,network,address,usd_rate AS usdRate,qr_image IS NOT NULL AS hasQr
+    `).get(coin, network, address, rate, qrPath, qrType)
+    return res.json({ ok: true, wallet })
   })
   app.get('/api/payment-coins', async (_req, res) => {
     const available = (await db.prepare("SELECT coin FROM payment_wallets WHERE usd_rate IS NOT NULL AND usd_rate != '' ORDER BY coin").all())
@@ -214,11 +251,10 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     if (!order || order.buyer_id !== req.user!.id) return res.status(404).json({ error: 'Order not found.' })
     if (order.status !== 'awaiting_receipt') return res.status(409).json({ error: 'This order is not awaiting a receipt.' })
     const image = req.body
-    const png = Buffer.isBuffer(image) && image.length >= 8 && image.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
-    const jpeg = Buffer.isBuffer(image) && image.length >= 3 && image[0] === 255 && image[1] === 216 && image[2] === 255
-    if ((!png && !jpeg) || (png && !req.is('image/png')) || (jpeg && !req.is('image/jpeg'))) return res.status(400).json({ error: 'Upload a PNG or JPEG screenshot up to 2 MB.' })
+    const contentType = req.is(['image/png', 'image/jpeg'])
+    if (!Buffer.isBuffer(image) || !matchesScreenshot(image, contentType)) return res.status(400).json({ error: 'Upload a PNG or JPEG screenshot up to 2 MB.' })
     await db.transaction(async () => {
-      await db.prepare('INSERT INTO purchase_receipts (order_id,content_type,image) VALUES (?,?,?)').run(order.id, png ? 'image/png' : 'image/jpeg', image)
+      await db.prepare('INSERT INTO purchase_receipts (order_id,content_type,image) VALUES (?,?,?)').run(order.id, contentType, image)
       await db.prepare("UPDATE purchase_orders SET status='awaiting_review' WHERE id=?").run(order.id)
       await notify.run(order.buyer_id, 'purchase', `Order #${(await orderNumber(order.id))} payment pending`, 'Your screenshot was submitted. The administrator must verify the transfer before confirming payment.', `/purchase/${order.id}`)
       const sellers = (await db.prepare('SELECT seller_id FROM purchase_sellers WHERE order_id=?').all(order.id)) as { seller_id: number }[]
