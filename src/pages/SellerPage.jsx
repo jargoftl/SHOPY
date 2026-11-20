@@ -309,7 +309,7 @@ const SellerPage = () => {
 
         <section id="seller-catalog" className="min-w-0">
           <div className="mb-5 flex items-end justify-between gap-4">
-            <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#111111]">Your catalog</p><h2 className="mt-2 text-2xl font-semibold">Products <span className="text-base font-normal text-[#777]">({products.length})</span></h2></div>
+            <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#111111]">Your catalog</p><h2 className="mt-2 text-2xl font-semibold">Products</h2></div>
             <div className="flex flex-wrap gap-4 text-xs">{user.role==='seller'&&<Link to={`/stores/${user.id}`} className="underline underline-offset-4">View my store</Link>}<Link to="/" className="underline underline-offset-4">View homepage</Link></div>
           </div>
 
