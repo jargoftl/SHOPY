@@ -53,8 +53,11 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  const protectedRoute=(handler: RequestHandler): RequestHandler => async(req,res,next)=>{try {await handler(req,res,next)} catch(error) {if((error as {status?:number}).status) res.status(409).json({error:(error as Error).message});else next(error)}}
  const notify=async(user:number,title:string,body:string)=>{await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'wallet',?,?, '/seller/wallet')").run(user,title,body)}
  const adminNotice=async(body:string)=>{await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) SELECT id,'wallet','Seller wallet request',?,'/admin#seller-finance' FROM users WHERE role='admin'").run(body)}
- const requests=async(seller?:number)=>db.prepare(`SELECT r.*,u.public_id AS sellerPublicId,COALESCE(p.store_name,u.full_name) AS storeName,
+ const requests=async(seller?:number)=>{
+ const rows=await db.prepare(`SELECT r.*,u.public_id AS sellerPublicId,COALESCE(p.store_name,u.full_name) AS storeName,
  (SELECT id FROM seller_wallet_receipts WHERE request_id=r.id) AS receiptId FROM seller_wallet_requests r JOIN users u ON u.id=r.seller_id LEFT JOIN seller_profiles p ON p.user_id=r.seller_id ${seller===undefined?'':'WHERE r.seller_id=?'} ORDER BY r.id DESC LIMIT 200`).all(...(seller===undefined?[]:[seller]))
+ return (rows as Array<WalletRequest & {qr_image: string | null, qr_content_type: string | null}>).map(({qr_image,qr_content_type,...request})=>({...request,hasQr:Boolean(qr_image&&qr_content_type)}))
+ }
  const sales=async(seller?:number)=>db.prepare(`SELECT o.id AS orderId,n.number AS orderNumber,i.seller_id AS sellerId,u.public_id AS sellerPublicId,
  COALESCE(p.store_name,u.full_name) AS storeName,o.coin,o.status AS paymentStatus,s.status AS deliveryStatus,o.created_at AS createdAt,
  SUM(i.price_cents*i.quantity)::bigint AS amountCents,MAX(r.status) AS releaseStatus,MAX(f.status) AS refundStatus,MAX(r.confirmed_role) AS confirmedRole,MAX(actor.full_name) AS confirmedBy,MAX(r.created_at) AS confirmedAt,MAX(o.account_balance_payment) AS accountBalancePayment
@@ -83,9 +86,15 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  }
  app.get('/api/seller/analytics',auth,role('seller','admin'),protectedRoute(async(req,res)=>{const data=await analytics(req.user!.id);res.set('Cache-Control','no-store').json({...data,orders:data.orders.map(userFinanceEntry),activity:data.activity.map(userActivityEntry)})}))
  app.get('/api/admin/sellers/:id/analytics',auth,role('admin'),protectedRoute(async(req,res)=>{res.json(await analytics(Number(req.params.id)))}))
+ const configuredWallets = async () => {
+ const rows = await db.prepare('SELECT coin,network,address,usd_rate,qr_image,qr_content_type FROM payment_wallets ORDER BY coin').all() as Array<{
+  coin:string,network:string,address:string,usd_rate:string,qr_image:string|null,qr_content_type:string|null
+ }>
+ return rows.filter(wallet=>coins.includes(wallet.coin)&&wallet.network&&wallet.address&&rateValid(wallet.usd_rate||''))
+ }
  app.get('/api/seller/finance',auth,role('seller','admin'),protectedRoute(async(req,res)=>{
  const wallet=await db.prepare('SELECT balance_cents AS balanceCents,reserved_cents AS reservedCents FROM seller_wallets WHERE seller_id=?').get(req.user!.id)||{balanceCents:0,reservedCents:0}
- res.set('Cache-Control','no-store').json({wallet,sales:(await sales(req.user!.id)).map(userFinanceEntry),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:(await requests(req.user!.id)).map(userFinanceEntry),records:(await db.prepare("SELECT f.*,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? ORDER BY f.id DESC LIMIT 1000").all(req.user!.id)).map(userFinanceEntry)})
+ res.set('Cache-Control','no-store').json({wallet,depositWallets:(await configuredWallets()).map(({coin,network})=>({coin,network})),sales:(await sales(req.user!.id)).map(userFinanceEntry),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:(await requests(req.user!.id)).map(userFinanceEntry),records:(await db.prepare("SELECT f.*,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? ORDER BY f.id DESC LIMIT 1000").all(req.user!.id)).map(userFinanceEntry)})
  }))
  app.post('/api/seller/finance/requests',auth,role('seller'),rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many wallet attempts. Please try again later.'}}),protectedRoute(async(req,res)=>{
  const {kind,coin,amountCents,requestKey}=req.body||{}
@@ -94,26 +103,49 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  if(kind==='withdrawal'&&(!network||!address)) return void res.status(400).json({error:'Enter your receiving network and wallet address.'})
  const pinError=await checkTransactionPin(db,req.user!.id,req.body.transactionPin)
  if(pinError) return void res.status(403).json({error:pinError})
- await db.transaction(async()=>{
+ const id=await db.transaction(async()=>{
  const existing=await db.prepare('SELECT * FROM seller_wallet_requests WHERE seller_id=? AND request_key=?').get(req.user!.id,requestKey) as WalletRequest|undefined
- if(existing) {if(existing.kind!==kind||existing.coin!==coin||existing.amount_cents!==amountCents||existing.address!==address||existing.network!==network) fail('Request key already used for different details.');return}
- const result=await db.prepare('INSERT INTO seller_wallet_requests(seller_id,request_key,kind,coin,amount_cents,status,network,address) VALUES(?,?,?,?,?,?,?,?)').run(req.user!.id,requestKey,kind,coin,amountCents,kind==='deposit'?'requested':'awaiting_transfer',network,address)
- if(kind==='withdrawal') await postSellerFunds(db,req.user!.id,'withdrawal_hold',String(result.lastInsertRowid),0,amountCents,req.user!.id)
- await adminNotice(`${kind} request submitted for review.`)
+ if(existing) {
+  if(existing.kind!==kind||existing.coin!==coin||existing.amount_cents!==amountCents||(kind==='withdrawal'&&(existing.address!==address||existing.network!==network))) fail('Request key already used for different details.')
+  return existing.id
+ }
+ if(kind==='deposit'){
+  const wallet=(await configuredWallets()).find(wallet=>wallet.coin===coin)
+  if(!wallet) fail('This deposit wallet is unavailable. Choose a configured wallet.')
+  const result=await db.prepare("INSERT INTO seller_wallet_requests(seller_id,request_key,kind,coin,amount_cents,status,network,address,usd_rate,coin_amount,qr_image,qr_content_type) VALUES(?,?,?,?,?,'awaiting_receipt',?,?,?,?,?,?)")
+   .run(req.user!.id,requestKey,kind,coin,amountCents,wallet.network,wallet.address,wallet.usd_rate,coinAmount(amountCents,wallet.usd_rate),wallet.qr_image,wallet.qr_content_type)
+  return result.lastInsertRowid
+ }
+ const result=await db.prepare("INSERT INTO seller_wallet_requests(seller_id,request_key,kind,coin,amount_cents,status,network,address) VALUES(?,?,?,?,?,'awaiting_transfer',?,?)").run(req.user!.id,requestKey,kind,coin,amountCents,network,address)
+ await postSellerFunds(db,req.user!.id,'withdrawal_hold',String(result.lastInsertRowid),0,amountCents,req.user!.id)
+ await adminNotice('Withdrawal request submitted for review.')
+ return result.lastInsertRowid
  })()
- res.status(201).json({ok:true})
+ res.status(201).json({ok:true,id})
+ }))
+ app.get('/api/seller/finance/requests/:id/qr',auth,role('seller'),protectedRoute(async(req,res)=>{
+ const wallet=await db.prepare("SELECT qr_image,qr_content_type FROM seller_wallet_requests WHERE id=? AND seller_id=? AND kind='deposit'").get(Number(req.params.id),req.user!.id) as {qr_image:string|null,qr_content_type:string|null}|undefined
+ if(!wallet?.qr_image||!wallet.qr_content_type) return void res.status(404).json({error:'No QR screenshot is available for this deposit.'})
+ const image=await new ObjectStorage().get(wallet.qr_image)
+ res.set('Cache-Control','no-store').type(wallet.qr_content_type).send(image)
  }))
  app.post('/api/seller/finance/requests/:id/receipt',auth,role('seller'),express.raw({type:['image/png','image/jpeg'],limit:'2mb'}),protectedRoute(async(req,res)=>{
  const image=req.body as Buffer
  const png=Buffer.isBuffer(image)&&image.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
  const jpeg=Buffer.isBuffer(image)&&image[0]===255&&image[1]===216&&image[2]===255
- if(!png&&!jpeg) return void res.status(400).json({error:'Upload a PNG or JPEG receipt up to 2 MB.'})
+ if((!png&&!jpeg)||(png&&!req.is('image/png'))||(jpeg&&!req.is('image/jpeg'))) return void res.status(400).json({error:'Upload a PNG or JPEG receipt up to 2 MB.'})
+ const rawReference=req.get('X-Payment-Reference')
+ let reference:string|null=null
+ if(rawReference!==undefined){
+  try {reference=text(decodeURIComponent(rawReference),300)||null} catch {return void res.status(400).json({error:'Enter a valid transaction reference.'})}
+  if(!reference||/[\r\n]/.test(reference)) return void res.status(400).json({error:'Enter a valid transaction reference.'})
+ }
  await new ObjectStorage().verifyBucket()
  await db.transaction(async()=>{
  const request=await db.prepare('SELECT * FROM seller_wallet_requests WHERE id=? AND seller_id=?').get(Number(req.params.id),req.user!.id) as WalletRequest|undefined
  if(!request||request.kind!=='deposit'||request.status!=='awaiting_receipt') fail('This deposit is not awaiting a receipt.')
  await db.prepare('INSERT INTO seller_wallet_receipts(request_id,content_type,image) VALUES(?,?,?)').run(request.id,png?'image/png':'image/jpeg',image)
- await db.prepare("UPDATE seller_wallet_requests SET status='awaiting_review',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(request.id)
+ await db.prepare("UPDATE seller_wallet_requests SET status='awaiting_review',submitted_reference=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(reference,request.id)
  await adminNotice('A seller submitted a deposit receipt. Independently verify the transfer before confirming.')
  })()
  res.json({ok:true})
@@ -124,7 +156,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  res.set('Cache-Control','no-store').set('X-Content-Type-Options','nosniff').type(row.content_type).send(row.image)
  }))
  app.get('/api/admin/seller-finance',auth,role('admin'),protectedRoute(async(_req,res)=>{
- res.set('Cache-Control','no-store').json({requests:await requests(),sales:await sales(),wallets:await db.prepare('SELECT w.*,u.public_id AS publicId,u.full_name AS name FROM seller_wallets w JOIN users u ON u.id=w.seller_id ORDER BY seller_id').all(),paymentWallets:await db.prepare('SELECT * FROM payment_wallets').all()})
+ res.set('Cache-Control','no-store').json({requests:await requests(),sales:await sales(),wallets:await db.prepare('SELECT w.*,u.public_id AS publicId,u.full_name AS name FROM seller_wallets w JOIN users u ON u.id=w.seller_id ORDER BY seller_id').all(),paymentWallets:await db.prepare('SELECT coin,network,address,usd_rate FROM payment_wallets').all()})
  }))
  app.patch('/api/admin/seller-finance/requests/:id',auth,role('admin'),protectedRoute(async(req,res)=>{
  await db.transaction(async()=>{
