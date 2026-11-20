@@ -12,11 +12,17 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  let setup=await post('/api/account/transaction-pin',{pin:'0456',confirmPin:'0456',loginPassword:'long-test-password-123'},seller,'PUT');check('seller can set four-digit transaction PIN',setup.status===200,setup)
  const available=(await req('/api/seller/finance',{},seller)).data.depositWallets
  check('seller sees admin-configured deposit wallets', ['BTC','ETH','USDT'].every(coin=>available.some(wallet=>wallet.coin===coin&&wallet.network))&&!available.some(wallet=>wallet.coin==='DOGE'))
- const deposit={kind:'deposit',coin:'USDT',amountCents:20000,requestKey:randomUUID()}
+ const walletPath='/api/seller/finance/deposit-wallets/USDT'
+ const wallet=(await req(walletPath,{},seller)).data
+ check('seller can preview configured address and QR before starting a deposit',wallet.address==='test-address'&&wallet.network==='Test'&&wallet.usdRate==='1'&&wallet.qrUrl?.startsWith('data:image/png;base64,')&&wallet.version)
+ r=await req(walletPath,{},buyer);check('buying account cannot preview seller deposit wallet',r.status===403,r)
+ r=await req('/api/seller/finance/deposit-wallets/DOGE',{},seller);check('unconfigured wallet preview is unavailable',r.status===404,r)
+ const deposit={kind:'deposit',coin:'USDT',amountCents:20000,requestKey:randomUUID(),walletVersion:wallet.version}
  r=await post('/api/seller/finance/requests',{...deposit,coin:'DOGE'});check('unconfigured deposit wallet is rejected',r.status===409,r)
+ r=await post('/api/seller/finance/requests',{...deposit,walletVersion:'stale-wallet'});check('deposit rejects changed wallet details',r.status===409,r)
  r=await post('/api/seller/finance/requests',{...deposit,address:'ignored-address'});check('seller requests deposit',r.status===201,r)
  const depositId=r.data.id
- r=await post('/api/seller/finance/requests',deposit);check('deposit retry returns original request ID',r.status===201&&r.data.id===depositId,r)
+ r=await post('/api/seller/finance/requests',deposit);check('deposit retry returns original request ID',r.status===201&&r.data.id===depositId&&r.data.status==='awaiting_receipt',r)
  let finance=(await req('/api/seller/finance',{},seller)).data;const q=finance.requests[0]
  check('deposit retries do not duplicate',finance.requests.length===1&&finance.wallet.balanceCents===0)
  const adminPath='/api/admin/seller-finance/requests/'+q.id
