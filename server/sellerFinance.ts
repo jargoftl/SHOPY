@@ -17,7 +17,6 @@ const userFinanceEntry=(row:unknown)=>{
   delete entry.actor_id
   delete entry.actorName
   delete entry.actorRole
-  delete entry.reference
   entry.note=''
   return entry
  }

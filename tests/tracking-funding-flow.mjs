@@ -23,7 +23,7 @@ export async function testTrackingFunding({req,check,db,cookie,buyer,buyerId,sel
  check('funding retries succeed idempotently',concurrent.every(r=>r.status===200))
  const finance=(await req('/api/seller/finance',{},seller)).data
  check('seller funding credits once',finance.wallet.balanceCents===before+12345)
- check('seller funding history shows the credit without source or reason',finance.records.some(r=>r.kind==='admin_funding'&&r.note===''&&!('actorRole' in r)&&!('actor_id' in r)&&!('reference' in r)&&r.delta_cents===12345))
+ check('seller funding history shows the credit without source or reason',finance.records.some(r=>r.kind==='admin_funding'&&r.note===''&&!('actorRole' in r)&&!('actor_id' in r)&&r.reference===funding.requestKey&&r.delta_cents===12345))
  await db.query("INSERT INTO shop.notifications(user_id,type,title,body,link) VALUES($1,'wallet','Admin funding added',$2,'/seller/wallet')",[sellerId,'$1.25 credited to your seller wallet. Historical private reason.'])
  r=await req('/api/notifications',{},seller)
  const credits=r.data.notifications.filter(n=>n.title==='Credited to wallet')
