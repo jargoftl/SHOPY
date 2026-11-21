@@ -40,13 +40,13 @@ const logisticsBadge = shipment => shipment
 function OrderFilter({label,value,onChange,options}){
  return <label className="min-w-0 text-xs font-medium text-slate-700">
   {label}
-  <span className="relative mt-1.5 block">
-   <select value={value} onChange={event=>onChange(event.target.value)} style={{appearance:'none'}}
-    className="block h-11 w-full rounded-lg border border-slate-200 bg-white py-0 pl-3 pr-8 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-600">
+  <span className="relative mt-1 block">
+   <select value={value} onChange={event=>onChange(event.target.value)} style={{appearance:'none',height:36,minHeight:36}}
+    className="block w-full rounded-full border border-slate-200 bg-slate-50 py-0 pl-3 pr-7 text-xs font-medium text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-600">
     <option value="all">All</option>
     {options.map(([key,text])=><option key={key} value={key}>{text}</option>)}
    </select>
-   <ChevronDown aria-hidden="true" size={16} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500"/>
+   <ChevronDown aria-hidden="true" size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500"/>
   </span>
  </label>
 }
@@ -117,7 +117,7 @@ const SellerOrdersPage = () => {
       options={['paid','awaiting_quote','awaiting_receipt','awaiting_review','rejected'].map(value=>[value,paymentStatusLabel(value)])}/>
      <OrderFilter label="Shipment status" value={filter} onChange={setFilter} options={fulfillmentOptions}/>
      <button type="button" onClick={()=>{setSearch('');setFilter('all');setPaymentFilter('all');setOrderTab('all');setReload(value=>value+1)}}
-      className="col-span-2 min-h-11 justify-self-end rounded-lg px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50 lg:col-span-1">Reset filters</button>
+      className="col-span-2 min-h-11 justify-self-end rounded-lg px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50 lg:col-span-1">Clear filters</button>
     </div>
     {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
     {loading ? <ContentPlaceholder/> : <ul className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-2" aria-label="Shop orders">
