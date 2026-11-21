@@ -42,7 +42,7 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  check('admin sees screenshot and submitted reference without crediting seller',review.status==='awaiting_review'&&review.receiptId&&review.submitted_reference==='fixture-deposit'&&!review.transfer_reference&&finance.wallet.balanceCents===0,review)
  r=await req('/api/seller/finance/receipts/'+finance.requests[0].receiptId,{},buyer);check('another buyer cannot read receipt',r.status===404)
  r=await post(adminPath,{action:'confirm',verified:false,transferReference:'fixture-deposit'},cookie,'PATCH');check('admin must independently verify payment',r.status===409)
- r=await post(adminPath,{action:'confirm',verified:true,transferReference:'fixture-deposit'},cookie,'PATCH');check('verified deposit credits wallet',r.status===200,r)
+ r=await post(adminPath,{action:'confirm',verified:true},cookie,'PATCH');check('verified deposit credits wallet without a manual reference',r.status===200,r)
  r=await post(adminPath,{action:'confirm',verified:true,transferReference:'fixture-deposit'},cookie,'PATCH');check('repeat confirmation is refused',r.status===409)
  finance=(await req('/api/seller/finance',{},seller)).data;check('deposit ledger credits once',finance.wallet.balanceCents===20000&&finance.records.length===1)
  const withdrawal={kind:'withdrawal',coin:'USDT',amountCents:15000,requestKey:randomUUID(),network:'TRC20',address:'fixture-seller-address',transactionPin:'0456'}
@@ -174,5 +174,12 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  check('clearing releases the pending hold and keeps accepted payment history',afterArchive.wallet.balanceCents===acceptedFinance.wallet.balanceCents&&afterArchive.wallet.reservedCents===acceptedFinance.wallet.reservedCents&&afterArchive.requests.some(request=>request.id===approvalId)&&!afterArchive.requests.some(request=>request.id===pendingId))
  const audit=(await db.query('SELECT status,archived_at FROM shop.seller_wallet_requests WHERE id=$1',[pendingId])).rows[0]
  check('archived request is retained for the financial audit',audit.status==='rejected'&&Boolean(audit.archived_at))
+
+ r=await post('/api/seller/finance/requests',{...deposit,requestKey:randomUUID()})
+ const duplicateProofId=r.data.id
+ r=await req(`/api/seller/finance/requests/${duplicateProofId}/receipt`,{method:'POST',body:png,headers:{'Content-Type':'image/png'}},seller)
+ check('duplicate screenshot reaches review without crediting funds',r.status===200,r)
+ r=await post('/api/admin/seller-finance/requests/'+duplicateProofId,{action:'confirm',verified:true},cookie,'PATCH')
+ check('the same proof cannot credit a second deposit without a transfer reference',r.status===409&&r.data.error.includes('already been credited'),r)
 
 }

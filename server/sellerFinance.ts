@@ -263,7 +263,9 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  } else if(action==='confirm'||action==='accept') {
  const simple=action==='accept'
  if(simple&&request.kind!=='withdrawal')fail('This request cannot be accepted here.')
- if(!simple&&(req.body.verified!==true||!text(req.body.transferReference,300))) fail('Independently verify the transfer and enter its transaction reference.')
+ if(!simple&&req.body.verified!==true)fail('Verify the transfer before accepting this payment.')
+ const reference=simple?null:text(req.body.transferReference,300)||null
+ if(!simple&&request.kind==='withdrawal'&&!reference)fail('Enter the transaction reference for this transfer.')
  const rate=request.usd_rate||(!simple?text(req.body.usdRate,30):'')
  if((!simple&&!rateValid(rate))||request.status!==(request.kind==='deposit'?'awaiting_review':'awaiting_transfer')||
     (request.kind==='deposit'&&!request.usd_rate)) fail('This request is not ready to confirm.')
@@ -282,8 +284,16 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
   const wallet=await db.prepare('SELECT balance_cents,reserved_cents FROM seller_wallets WHERE seller_id=?').get(request.seller_id) as Wallet|undefined
   if(!wallet||wallet.reserved_cents<request.amount_cents||wallet.balance_cents<wallet.reserved_cents)fail('The wallet no longer covers this withdrawal.')
  }
- const reference=simple?null:text(req.body.transferReference,300)
  if(reference&&await db.prepare('SELECT id FROM seller_wallet_requests WHERE coin=? AND network=? AND transfer_reference=?').get(request.coin,request.network,reference)) fail('That transfer has already been recorded.')
+ if(request.kind==='deposit'&&!reference){
+  const proof=await db.prepare('SELECT image AS proof FROM seller_wallet_receipts WHERE request_id=?').get(request.id) as {proof:string}|undefined
+  if(!proof)fail('Payment proof is required.')
+  if(await db.prepare(`SELECT 1 FROM seller_wallet_receipts receipt
+   JOIN seller_wallet_requests previous ON previous.id=receipt.request_id
+   WHERE receipt.image=? AND previous.kind='deposit' AND previous.status='confirmed' LIMIT 1`).get(proof.proof)){
+   fail('This payment proof has already been credited.')
+  }
+ }
  await postSellerFunds(db,request.seller_id,request.kind,String(request.id),request.kind==='deposit'?request.amount_cents:-request.amount_cents,request.kind==='withdrawal'?-request.amount_cents:0,req.user!.id)
  await db.prepare("UPDATE seller_wallet_requests SET status='confirmed',transfer_reference=?,usd_rate=?,coin_amount=?,resolved_at=?,reviewed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(reference,rate||null,request.coin_amount||(rate?coinAmount(request.amount_cents,rate):null),resolvedAt,req.user!.id,request.id)
  } else fail('Choose accept, confirm, quote or reject.')
