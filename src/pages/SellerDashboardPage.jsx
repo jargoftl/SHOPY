@@ -22,7 +22,7 @@ export default function SellerDashboardPage(){
  const stats=[[Users,'Today’s visitors',visits(1),'#ff9857'],[CalendarDays,'Last 7 days',visits(7),'#5a8fff'],[CalendarRange,'Last 30 days',visits(30),'#21bf93'],[ShoppingBag,'Orders today',todayData?.orders||0,'#fc8c55'],[TrendingUp,'Sales today',money(todayData?.salesCents||0),'#ff8a57'],[Wallet,'Released to wallet',money(data?.overview.releasedCents||0),'#e5a526']]
  return <SellerWorkspace user={user}><h1 className="portal-title">{t("Store overview")}</h1>{error&&<p role="alert" className="portal-error">{error}</p>}
  {data?.dates&&<section className="portal-card" aria-label={t("Account and store dates")}>
-  <dl className="grid gap-3 sm:grid-cols-2">
+  <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
    <div className="flex items-center gap-3">
     <CalendarDays className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
     <div><dt className="text-xs text-slate-600">{t("Account created")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.accountCreatedAt)}</dd></div>
@@ -31,6 +31,10 @@ export default function SellerDashboardPage(){
     <Store className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
     <div><dt className="text-xs text-slate-600">{t("Store created")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.storeCreatedAt)}</dd></div>
    </div>
+   {data.dates.approvedAt&&<div className="flex items-center gap-3">
+    <BadgeCheck className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
+    <div><dt className="text-xs text-slate-600">{t("Seller approved")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.approvedAt)}</dd></div>
+   </div>}
   </dl>
  </section>}
  <section className="portal-card portal-totals"><div><strong>{data?money(data.overview.salesCents):'—'}</strong><span><TrendingUp size={16}/>{t("Total sales")}</span></div><div><strong>{data?money(data.overview.releasedCents):'—'}</strong><span><Wallet size={16}/>{t("Released proceeds")}</span></div></section><section className="portal-card"><h2>{t("Today’s data")}</h2><div className="portal-stat-grid">{stats.map(([Icon,label,value,color])=><div key={t(label)}><div><strong>{data?value:'—'}</strong><span>{t(label)}</span></div><i style={{color,background:color+'18'}}><Icon size={20}/></i></div>)}</div></section>

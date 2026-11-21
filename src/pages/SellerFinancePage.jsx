@@ -145,7 +145,14 @@ function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUplo
 
 const paymentHistoryTime=request=>request.resolved_at||(['confirmed','rejected'].includes(request.status)?request.updated_at:request.created_at)
 const ledgerHistoryTime=record=>record.resolvedAt||record.created_at
-const compareHistory=(getTime)=>(first,second)=>timestampMillis(getTime(first))-timestampMillis(getTime(second))||first.id-second.id
+const compareHistory=(getTime)=>(first,second)=>{
+ const a=timestampMillis(getTime(first)),b=timestampMillis(getTime(second))
+ if(a===b)return second.id-first.id
+ if(!Number.isFinite(a))return 1
+ if(!Number.isFinite(b))return -1
+ return b-a
+}
+
 
 function PaymentHistory({requests,onOpenDeposit}){
  const [filter,setFilter]=useState('withdrawals')

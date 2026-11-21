@@ -42,7 +42,17 @@ export async function testSellerVerification({req,check,cookie,seller,buyer,db,p
  await db.query("UPDATE shop.users SET role='admin' WHERE id=$1",[userId]);
  r=await review(userId,'rejected',{revision:2,note:'Cannot downgrade an admin'});check('seller review cannot demote administrator accounts',r.status===400);
  await db.query("UPDATE shop.users SET role='customer' WHERE id=$1",[userId]);
- r=await review(userId,'approved',{revision:2});check('admin approval activates seller and queues email',r.status===200&&r.data.user.role==='seller'&&r.data.user.sellerStatus==='approved'&&r.data.email.status==='pending',r.status)
+ r=await review(userId,'approved',{revision:2,establishedOn:'2020-02-30'});check('approval rejects invalid original opening dates',r.status===400,r)
+ r=await review(userId,'approved',{revision:2,establishedOn:'2018-08-01'});check('admin approval activates seller and queues email',r.status===200&&r.data.user.role==='seller'&&r.data.user.sellerStatus==='approved'&&r.data.email.status==='pending',r.status)
+ const approvedAt=r.data.application.reviewedAt
+ check('approval stores original opening date without backdating approval',r.data.profile.establishedOn==='2018-08-01'&&Math.abs(Date.now()-Date.parse(approvedAt))<30000,r.data.application)
+ const notice=(await req('/api/notifications',{},applicant)).data.notifications.find(item=>item.title==='Your seller application is approved!')
+ check('approval notification matches the actual approval time',notice?.createdAt===approvedAt,notice)
+ const dashboardDates=(await req('/api/seller/analytics',{},applicant)).data.dates
+ check('seller dashboard receives both approval and original opening dates',dashboardDates?.approvedAt===approvedAt&&dashboardDates.establishedOn==='2018-08-01',dashboardDates)
+ const datePath=`/api/admin/sellers/${userId}/dates`
+ r=await req(datePath,{method:'PATCH',body:JSON.stringify({establishedOn:'2017-07-01',expectedEstablishedOn:'2018-08-01'})},cookie)
+ check('already-approved seller opening date can be corrected',r.status===200&&r.data.dates.establishedOn==='2017-07-01'&&r.data.dates.approvedAt===approvedAt,r)
  r=await review(userId,'approved',{revision:2});check('review cannot be repeated',r.status===409)
  r=await req('/api/seller/products',{},applicant);check('same session gains seller access only after approval',r.status===200)
  r=await req('/api/stores/'+userId);check('approved seller store can now be opened',r.status===200)

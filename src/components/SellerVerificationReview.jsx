@@ -1,3 +1,4 @@
+import {formatTimestamp} from '../lib/storeDates.js'
 import {sessionUrl} from '../lib/tabSession.js'
 import { useEffect, useState } from 'react'
 import { ArrowUpRight, CheckCircle2, FileCheck2, Mail, ShieldCheck, Trash2 } from 'lucide-react'
@@ -8,11 +9,28 @@ export default function SellerVerificationReview({userId,onReviewed}){
  useEffect(()=>{if(!ssn)return;const timer=setTimeout(()=>setSsn(''),30000);return()=>clearTimeout(timer)},[ssn])
  const [data,setData]=useState(null),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
  useEffect(()=>{let active=true;apiRequest(`/api/admin/seller-applications/${userId}`).then(result=>{if(active)setData(result)}).catch(failure=>{if(active)setError(failure.message)});return()=>{active=false}},[userId])
+ const [dateNotice,setDateNotice]=useState('')
+ useEffect(()=>setDateNotice(''),[userId])
  const review=async(event)=>{
   event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget)),status=event.nativeEvent.submitter.value
   setBusy(true);setError('');setMessage('')
-  try{const result=await apiRequest(`/api/admin/seller-applications/${userId}/review`,{method:'PATCH',body:JSON.stringify({status,revision:data.application.revision,reviewed:values.reviewed==='on'})});setData(result);setMessage(status==='approved'?'Seller approved. Access is now enabled.':'Rejected.');await onReviewed?.()}
+  try{const result=await apiRequest(`/api/admin/seller-applications/${userId}/review`,{method:'PATCH',body:JSON.stringify({status,revision:data.application.revision,reviewed:values.reviewed==='on',...(status==='approved'&&values.establishedOn?{establishedOn:values.establishedOn}:{})})});setData(result);setMessage(status==='approved'?'Seller approved. Access is now enabled.':'Rejected.');await onReviewed?.()}
   catch(failure){setError(failure.message)}finally{setBusy(false)}
+ }
+ async function saveOpeningDate(event){
+  event.preventDefault()
+  const date=new FormData(event.currentTarget).get('establishedOn')||null
+  setBusy(true)
+  setError('')
+  setDateNotice('')
+  try{
+   const result=await apiRequest(`/api/admin/sellers/${userId}/dates`,{method:'PATCH',body:JSON.stringify({
+    establishedOn:date,expectedEstablishedOn:data.profile?.establishedOn??null
+   })})
+   setData(current=>({...current,profile:{...current.profile,establishedOn:result.dates.establishedOn}}))
+   setDateNotice('Original opening date saved.')
+  }catch(error){setError(error.message)}
+  finally{setBusy(false)}
  }
  const email=async()=>{setBusy(true);setError('');try{setData(await apiRequest(`/api/admin/seller-applications/${userId}/email`,{method:'POST'}));setMessage('Approval email delivery updated.')}catch(failure){setError(failure.message)}finally{setBusy(false)}}
  const purge=async()=>{if(!window.confirm('Remove these private verification photos after review? The decision and audit history will remain. This cannot be undone.'))return;setBusy(true);setError('');try{await apiRequest(`/api/admin/seller-applications/${userId}/documents`,{method:'DELETE'});setData(await apiRequest(`/api/admin/seller-applications/${userId}`));setMessage('Photo access removed. Private storage deletion is queued and retried if necessary.')}catch(failure){setError(failure.message)}finally{setBusy(false)}}
@@ -22,9 +40,21 @@ export default function SellerVerificationReview({userId,onReviewed}){
  return <section id="seller-verification" className="rounded-2xl border border-[#111111] bg-[#111111] p-5 sm:p-7"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] uppercase tracking-[.2em] text-[#777777]">Seller application</p><h2 className="mt-2 flex items-center gap-2 text-xl font-semibold"><ShieldCheck className="text-[#cccccc]" size={22}/>Seller verification</h2></div><span className="rounded-full border border-[#111111] bg-[#111111] px-4 py-2 text-xs capitalize text-[#cccccc]">{application?.status==='rejected'?'Rejected':application?.status==='approved'||!application?'Approved':'Pending'}</span></div>
  <div className="mt-5 grid gap-4 rounded-xl border border-[#111111] bg-[#111111] p-4 text-sm sm:grid-cols-2"><p><span className="block text-xs text-[#777777]">Applicant</span><strong className="mt-1 block font-medium">{data.user.fullName}</strong></p><p><span className="block text-xs text-[#777777]">Phone number to verify</span><a className="mt-1 block font-medium text-[#cccccc]" href={`tel:${data.user.phone||''}`}>{data.user.phone||'Not provided'}</a></p><p className="break-all"><span className="block text-xs text-[#777777]">Email</span>{data.user.email}</p><p><span className="block text-xs text-[#777777]">Store</span>{data.profile?.storeName}</p><p className="sm:col-span-2"><span className="block text-xs text-[#777777]">Contact location</span>{data.profile&&[data.profile.address,data.profile.city,data.profile.region,data.profile.postalCode,data.profile.country].filter(Boolean).join(', ')}</p></div>
  {application&&<div className="mt-4 text-xs leading-6 text-[#a3a3a3]">SSN: {ssn||(application.ssnLast4?`•••-••-${application.ssnLast4}`:'Not provided')}. Self-reported; not verified.{application.ssnAvailable&&<button type="button" disabled={busy} className="ml-3 underline" onClick={async()=>{if(ssn){setSsn('');return}setBusy(true);try{const result=await apiRequest(`/api/admin/seller-applications/${userId}/ssn`,{method:'POST'});setSsn(result.ssn)}catch(e){setError(e.message)}finally{setBusy(false)}}}>{ssn?'Hide SSN':'View full SSN'}</button>}</div>}
+ {data.profile&&(!application||application.status==='approved')&&<div className="mt-5 rounded-xl border border-[#555] p-4">
+  {application?.reviewedAt&&<p className="mb-3 text-sm">Approved on {formatTimestamp(application.reviewedAt)}</p>}
+  <form key={`${userId}:${data.profile.establishedOn??''}`} onSubmit={saveOpeningDate} className="flex flex-wrap items-end gap-3">
+   <label className="text-xs">Original opening date
+    <input name="establishedOn" type="date" min="1900-01-01" max="2100-12-31" defaultValue={data.profile.establishedOn??''} className="mt-1 block rounded-lg border px-3 py-2"/>
+   </label>
+   <button disabled={busy} className="min-h-10 rounded-full border border-[#555] px-4 text-xs">Save opening date</button>
+  </form>
+  {dateNotice&&<p role="status" className="mt-2 text-xs">{dateNotice}</p>}
+ </div>}
  {!application&&<p className="mt-4 text-sm leading-7 text-[#777777]">This account was active before application review was introduced. No identity photos have been collected or verified through this workflow.</p>}
  {application&&<><div className="mt-5 flex flex-wrap gap-5 text-xs text-[#777777]"><span>Submission {application.revision} · {new Date(application.submittedAt).toLocaleString()}</span><span>Private review consent · {new Date(application.consentedAt).toLocaleString()}</span></div><div className="mt-5 grid gap-4 sm:grid-cols-3">{[['selfie','Selfie'],['id_front','Government ID · front'],['id_back','Government ID · back']].map(([kind,label])=>{const photo=data.documents.find(item=>item.kind===kind);return <div key={kind} className="overflow-hidden rounded-xl border border-[#111111] bg-[#111111]"><div className="flex min-h-48 items-center justify-center bg-[#111111] p-3">{photo?<img src={sessionUrl(photo.url)} alt={label} className="h-44 w-full object-contain"/>:<FileCheck2 size={30} className="text-[#555555]"/>}</div><div className="p-3"><p className="text-xs font-medium">{label}</p>{photo?<a href={sessionUrl(photo.url)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[10px] text-[#cccccc] underline">Open full photo<ArrowUpRight size={11}/></a>:<p className="mt-2 text-[10px] text-[#555555]">No photo on file</p>}</div></div>})}</div>
- {application.status==='pending'&&<form onSubmit={review} key={application.revision} className="mt-6 space-y-4 border-t border-[#111111] pt-5"><label className="flex items-start gap-3 text-xs leading-6 text-[#a3a3a3]"><input name="reviewed" type="checkbox" className="mt-1.5 accent-[#cccccc]"/>I have manually reviewed the selfie, both ID photos, contact details, and phone number, and approve this applicant.</label><div className="flex flex-wrap gap-3"><button disabled={busy||data.documents.length!==3} name="status" value="approved" className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#cccccc] px-5 text-xs font-semibold text-[#111111] disabled:opacity-40"><CheckCircle2 size={16}/>Approve seller</button><button disabled={busy} name="status" value="rejected" className="min-h-11 rounded-full border border-[#111111] px-5 text-xs text-[#a3a3a3]">Reject</button></div></form>}
+ {application.status==='pending'&&<form onSubmit={review} key={application.revision} className="mt-6 space-y-4 border-t border-[#111111] pt-5"><label className="flex items-start gap-3 text-xs leading-6 text-[#a3a3a3]"><input name="reviewed" type="checkbox" className="mt-1.5 accent-[#cccccc]"/>I have manually reviewed the selfie, both ID photos, contact details, and phone number, and approve this applicant.</label><label className="block text-xs">Original opening date (optional)
+  <input name="establishedOn" type="date" min="1900-01-01" max="2100-12-31" defaultValue={data.profile?.establishedOn??''} className="mt-1 block rounded-lg border px-3 py-2"/>
+ </label><div className="flex flex-wrap gap-3"><button disabled={busy||data.documents.length!==3} name="status" value="approved" className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[#cccccc] px-5 text-xs font-semibold text-[#111111] disabled:opacity-40"><CheckCircle2 size={16}/>Approve seller</button><button disabled={busy} name="status" value="rejected" className="min-h-11 rounded-full border border-[#111111] px-5 text-xs text-[#a3a3a3]">Reject</button></div></form>}
  {application.status==='approved'&&<div className="mt-6 rounded-xl border border-[#111111] bg-[#111111] p-4"><h3 className="flex items-center gap-2 text-sm font-semibold"><Mail size={17}/>Approval email</h3><p className="mt-2 text-xs leading-6 text-[#a3a3a3]">{data.email?.status==='sent'?`Accepted by the email provider ${data.email.sentAt?new Date(data.email.sentAt).toLocaleString():''}.`:!data.emailConfigured?'Queued. Configure BREVO_API_KEY and EMAIL_FROM in Render to send the approval message.':data.email?.status==='sending'?'Sending approval email…':data.email?.status==='failed'?'Delivery needs attention. Check the backend email settings, then retry.':'Queued for email delivery.'}</p>{data.email?.lastError&&<p className="mt-2 text-xs text-[#a3a3a3]">{data.email.lastError}</p>}{data.email?.status!=='sent'&&<button disabled={busy||!data.emailConfigured||data.email?.status==='sending'} onClick={email} className="mt-3 rounded-full border border-[#555555] px-4 py-2 text-xs text-[#cccccc] disabled:opacity-40">Send / retry approval email</button>}</div>}
  {['approved','rejected'].includes(application.status)&&data.documents.length>0&&<button disabled={busy} onClick={purge} className="mt-5 inline-flex items-center gap-2 text-[11px] text-[#777777] underline underline-offset-4"><Trash2 size={13}/>Remove private photos after review</button>}
  </>}{message&&<p role="status" className="mt-4 rounded-lg bg-[#111111] p-3 text-sm text-[#cccccc]">{message}</p>}{error&&<p role="alert" className="mt-4 rounded-lg border border-[#111111] p-3 text-sm text-[#a3a3a3]">{error}</p>}

@@ -1493,7 +1493,10 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
     read_at: string | null
     created_at: string
   }>(`
-    SELECT id, type, title, body, link, read_at, created_at
+    SELECT id, type, title, body, link, read_at,
+      CASE WHEN type='seller_verification' AND title='Your seller application is approved!'
+        THEN COALESCE((SELECT reviewed_at FROM seller_applications a WHERE a.user_id=notifications.user_id AND a.status='approved'),created_at)
+        ELSE created_at END AS created_at
     FROM notifications WHERE user_id = ? AND type<>'message'
     ORDER BY id DESC LIMIT 100
   `, req.user!.id)).map((notification) => {

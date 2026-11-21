@@ -1,11 +1,18 @@
 import type {Express,RequestHandler} from 'express'
 import type {Database} from './database.ts'
 export async function storeDates(db:Database,id:number){
- return db.prepare('SELECT u.created_at AS "accountCreatedAt",p.created_at AS "storeCreatedAt",p.established_on::text AS "establishedOn" FROM seller_profiles p JOIN users u ON u.id=p.user_id WHERE p.user_id=?').get(id) as Promise<{accountCreatedAt:string,storeCreatedAt:string,establishedOn:string|null}|undefined>
+ return db.prepare(`SELECT u.created_at AS "accountCreatedAt",p.created_at AS "storeCreatedAt",p.established_on::text AS "establishedOn",a.reviewed_at AS "approvedAt" FROM seller_profiles p JOIN users u ON u.id=p.user_id LEFT JOIN seller_applications a ON a.user_id=u.id AND a.status='approved' WHERE p.user_id=?`).get(id) as Promise<{accountCreatedAt:string,storeCreatedAt:string,establishedOn:string|null,approvedAt:string|null}|undefined>
 }
 export const validEstablishedDate=(value:unknown)=>{
  if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value)||value<'1900-01-01'||value>'2100-12-31')return false
  const date=new Date(value+'T00:00:00Z');return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value
+}
+// Call within the transaction that owns the review or date edit.
+export async function setStoreEstablishedDate(db:Database,id:number,actor:number,date:string|null,previous:string|null,reason:string){
+ if(previous===date)return
+ await db.prepare('UPDATE seller_profiles SET established_on=?::date WHERE user_id=?').run(date,id)
+ await db.prepare("INSERT INTO account_admin_history(user_id,admin_id,action,details) VALUES(?,?,?,?)")
+  .run(id,actor,'store_date_updated',JSON.stringify({from:previous,to:date,reason}))
 }
 type HistoricalStoreFigures = {
  followers: number
@@ -53,9 +60,7 @@ export function registerStoreDates(app:Express,db:Database,auth:RequestHandler){
       historical_rating_count=?,historical_rating_average=? WHERE user_id=?`)
       .run(historical.followers,historical.itemsSold,historical.ratingCount,historical.ratingAverage,id)
    }
-   if(previous.establishedOn===date)return 200
-   await db.prepare('UPDATE seller_profiles SET established_on=?::date WHERE user_id=?').run(date,id)
-   await db.prepare('INSERT INTO account_admin_history(user_id,admin_id,action,details) VALUES(?,?,?,?)').run(id,req.user!.id,'store_date_updated',JSON.stringify({from:previous.establishedOn,to:date,reason}))
+   await setStoreEstablishedDate(db,id,req.user!.id,date,previous.establishedOn,reason)
    return 200
   })()
   if(status!==200)return res.status(status).json({error:status===404?'Store not found.':'Store records changed. Reload before editing again.'})
