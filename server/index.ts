@@ -1116,7 +1116,7 @@ app.get('/api/seller/dashboard-metrics', requireAuth, requireRole('seller', 'adm
       metrics = {}
     }
   }
-  return res.json({ metrics })
+  return res.set('Cache-Control', 'private, no-store').json({ metrics })
 })
 
 app.put('/api/seller/store', requireAuth, requireRole('seller', 'admin'), async (req, res) => {
@@ -2257,8 +2257,11 @@ app.put('/api/admin/sellers/:id/dashboard-metrics', requireAuth, requireRole('ad
   await database.prepare(`
     INSERT INTO seller_dashboard_metrics (user_id, metrics_json, updated_at)
     VALUES (?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(user_id) DO UPDATE SET metrics_json = excluded.metrics_json, updated_at = CURRENT_TIMESTAMP
-  `).run(sellerId, savedMetrics)
+    ON CONFLICT(user_id) DO UPDATE SET metrics_json = CASE WHEN ?
+      AND jsonb_exists(seller_dashboard_metrics.metrics_json::jsonb, 'sellerCreditScore')
+      THEN (excluded.metrics_json::jsonb || jsonb_build_object('sellerCreditScore', seller_dashboard_metrics.metrics_json::jsonb -> 'sellerCreditScore'))::text
+      ELSE excluded.metrics_json END, updated_at = CURRENT_TIMESTAMP
+  `).run(sellerId, savedMetrics, req.body.preserveCreditScore === true)
   return res.json({ metrics })
 })
 

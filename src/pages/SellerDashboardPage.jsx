@@ -13,8 +13,8 @@ import {apiRequest} from '../lib/api.js'
 const shortcuts=[[Settings,'Store settings','/seller/account/settings','#ff635b'],[RotateCcw,'Refunds','/seller/refunds','#536aff'],[Package,'Warehouse','/seller/warehouse','#42a8ef'],[Crown,'Store upgrade','/seller/marketing/upgrade','#42a8ef'],[BadgeCheck,'Store level','/seller/marketing/levels','#e9ab2d'],[Gift,'Referrals','/seller/referrals','#35bba0'],[ArrowDownLeft,'Deposit','/seller/wallet?action=deposit','#35bd80'],[ArrowUpRight,'Withdraw','/seller/wallet?action=withdrawal','#5471ff']]
 export default function SellerDashboardPage(){
  const {t}=useSellerLanguage()
- const [user,setUser]=useState(null),[data,setData]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[days,setDays]=useState(7),[limit,setLimit]=useState(12)
- useEffect(()=>{let active=true;const refresh=()=>Promise.all([apiRequest('/api/auth/me'),apiRequest('/api/seller/analytics')]).then(([u,d])=>{if(active){setUser(u.user);setData(d);setError('')}}).catch(e=>active&&setError(e.message));refresh();apiRequest('/api/seller/products').then(d=>active&&setProducts(d.products)).catch(e=>active&&setError(e.message));const tick=()=>{if(!document.hidden)refresh()};const timer=setInterval(tick,30000);return()=>{active=false;clearInterval(timer)}},[])
+ const [user,setUser]=useState(null),[data,setData]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[creditScore,setCreditScore]=useState(null),[days,setDays]=useState(7),[limit,setLimit]=useState(12)
+ useEffect(()=>{let active=true;const refresh=()=>Promise.all([apiRequest('/api/auth/me'),apiRequest('/api/seller/analytics')]).then(([u,d])=>{if(active){setUser(u.user);setData(d);setError('')}}).catch(e=>active&&setError(e.message));apiRequest('/api/seller/products').then(d=>active&&setProducts(d.products)).catch(e=>active&&setError(e.message));const tick=()=>{if(document.hidden)return;refresh();apiRequest('/api/seller/dashboard-metrics',{cache:'no-store'}).then(({metrics})=>{if(active)setCreditScore(metrics.sellerCreditScore??5)}).catch(()=>{})};tick();const timer=setInterval(tick,30000);window.addEventListener('focus',tick);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',tick)}},[])
  const series=useMemo(()=>{const end=new Date((data?.today||new Date().toISOString().slice(0,10))+'T00:00:00Z');return Array.from({length:days},(_,i)=>{const date=new Date(end);date.setUTCDate(date.getUTCDate()-days+1+i);const day=date.toISOString().slice(0,10);return {day,sales:data?.daily.find(d=>d.day===day)?.salesCents||0,visits:data?.visits.find(d=>d.day===day)?.visits||0}})},[data,days])
  const maxSales=Math.max(100,...series.map(d=>d.sales)),maxVisits=Math.max(1,...series.map(d=>d.visits))
  const points=key=>series.map((d,i)=>`${35+i*315/Math.max(1,days-1)},${210-d[key]/(key==='sales'?maxSales:maxVisits)*165}`).join(' ')
@@ -37,7 +37,7 @@ export default function SellerDashboardPage(){
  const groups=[
   ['Shop Overview',[
    ['Overall Rating',number(metrics.overallRating??(data?.overallRating==null?null:Number(data.overallRating).toFixed(2)))],
-   ['Seller Credit Score',number(metrics.sellerCreditScore??(data?5:null))],
+   ['Seller Credit Score',number(creditScore??metrics.sellerCreditScore??(data?5:null))],
    ['Store Followers',number(data?.overview.followers)],
   ]],
   ['Visitor Statistics',[

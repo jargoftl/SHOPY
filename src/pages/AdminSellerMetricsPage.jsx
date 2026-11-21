@@ -97,12 +97,31 @@ const AdminSellerMetricsPage = () => {
   const sellerProducts = products.filter((product) => product.sellerId === Number(selectedSellerId))
   const selectedSeller = sellers.find((seller) => seller.id === Number(selectedSellerId))
 
+  const saveCreditScore = async (event) => {
+    event.preventDefault()
+    if (isSaving || loadedMetricsSellerId !== selectedSellerId) return
+    setIsSaving(true)
+    setMessage('')
+    try {
+      const { score } = await apiRequest(`/api/admin/sellers/${selectedSellerId}/credit-score`, {
+        method: 'PATCH',
+        body: JSON.stringify({ score: Number(form.sellerCreditScore || 5) }),
+      })
+      setForm(current => ({ ...current, sellerCreditScore: String(score) }))
+      setMessage(`Credit score saved as ${score} for ${selectedSeller?.storeName || selectedSeller?.fullName} · #${selectedSeller?.publicId}.`)
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const saveMetrics = async (event) => {
     event.preventDefault()
     if (!selectedSellerId || loadedMetricsSellerId !== selectedSellerId) return
     setIsSaving(true)
     setMessage('')
-    const metrics = Object.fromEntries(Object.entries(form).filter(([, value]) => value !== '').map(([key, value]) => [key, Number(value)]))
+    const metrics = Object.fromEntries(Object.entries(form).filter(([key, value]) => key !== 'sellerCreditScore' && value !== '').map(([key, value]) => [key, Number(value)]))
     const parsedSalesTrack = parseTrack(salesTrack)
     const parsedVisitsTrack = parseTrack(visitsTrack)
     const topProducts = sellerProducts
@@ -115,7 +134,7 @@ const AdminSellerMetricsPage = () => {
     try {
       await apiRequest(`/api/admin/sellers/${selectedSellerId}/dashboard-metrics`, {
         method: 'PUT',
-        body: JSON.stringify({ metrics }),
+        body: JSON.stringify({ metrics, preserveCreditScore: true }),
       })
       setMessage(`Dashboard values saved for ${selectedSeller?.storeName || selectedSeller?.fullName}.`)
     } catch (error) {
@@ -134,36 +153,35 @@ const AdminSellerMetricsPage = () => {
   if (!admin) return <main className="mx-auto max-w-xl px-5 py-20 text-center"><h1 className="text-2xl font-semibold">Admin access required</h1><p className="mt-3 text-sm text-[#666]">{message}</p><Link to="/login" className="mt-5 inline-block underline">Admin login</Link></main>
 
   return (
-    <div className="min-h-screen bg-[#111111] text-[#f7f7f7]">
-      <header className="border-b border-[#111111] bg-[#111111]">
-        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-5 py-5 md:px-10">
-          <div><Link to="/admin" className="text-2xl font-black tracking-[-0.07em]"><SiteName logo /></Link><p className="mt-1 text-xs text-[#777777]">Admin seller controls</p></div>
-          <nav className="flex items-center gap-4 text-xs"><Link to="/admin" className="underline underline-offset-4">Admin dashboard</Link><Link to="/seller/register" className="underline underline-offset-4">Create seller</Link><button type="button" onClick={logOut} className="border border-[#111111] px-3 py-2">Log out</button></nav>
+    <div className="min-h-screen bg-slate-50 text-slate-950">
+      <header className="border-b border-slate-300 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 md:px-10">
+          <div><Link to="/admin" className="text-2xl font-black tracking-[-0.07em]"><SiteName logo /></Link><p className="mt-1 text-xs text-slate-600">Admin seller controls</p></div>
+          <nav className="flex items-center gap-4 text-xs"><Link to="/admin" className="underline underline-offset-4">Admin dashboard</Link><Link to="/seller/register" className="underline underline-offset-4">Create seller</Link><button type="button" onClick={logOut} className="border border-slate-300 px-3 py-2">Log out</button></nav>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1440px] space-y-6 px-5 py-8 md:px-10 md:py-10">
+      <main className="mx-auto max-w-6xl space-y-6 px-5 py-8 md:px-10 md:py-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#cccccc]">Seller accounts</p><h1 className="mt-2 text-3xl font-semibold">Dashboard metrics</h1><p className="mt-2 max-w-2xl text-sm text-[#777777]">Set the figures and activity history shown in each seller’s dashboard.</p></div>
-          <label className="text-xs text-[#a3a3a3]">Seller
-            <select value={selectedSellerId} onChange={(event) => setSelectedSellerId(event.target.value)} className="mt-2 block h-11 min-w-64 border border-[#111111] bg-[#111111] px-3 text-sm text-white">
-              <option value="">Select seller</option>{sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.storeName || seller.fullName} · #{seller.publicId}</option>)}
+          <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Seller accounts</p><h1 className="mt-2 text-3xl font-semibold">Dashboard metrics</h1><p className="mt-2 max-w-2xl text-sm text-slate-600">Set the figures and activity history shown in each seller’s dashboard.</p></div>
+          <label className="text-xs text-slate-700">Seller
+            <select value={selectedSellerId} disabled={isSaving} onChange={(event) => setSelectedSellerId(event.target.value)} className="mt-2 block h-11 min-w-64 border border-slate-300 bg-white px-3 text-sm text-slate-950">
+              <option value="">Select seller</option>{sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.storeName || seller.fullName} · #{seller.publicId} · {seller.email}</option>)}
             </select>
           </label>
         </div>
 
-        {message && <p role="status" className="border border-[#111111] bg-[#111111] px-4 py-3 text-sm">{message}</p>}
+        {message && <p role="status" className="border border-slate-300 bg-white px-4 py-3 text-sm">{message}</p>}
 
-        {selectedSellerId && <AdminStoreDates key={selectedSellerId} userId={selectedSellerId} showDateHistory={false}/>}
-        {selectedSellerId && loadedMetricsSellerId === selectedSellerId && <form onSubmit={saveMetrics} className="space-y-6">
-          <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7" aria-labelledby="seller-score-heading">
+        {selectedSellerId && loadedMetricsSellerId === selectedSellerId &&
+          <form onSubmit={saveCreditScore} className="rounded-xl border border-slate-300 bg-white p-5 sm:p-7" aria-labelledby="seller-score-heading">
             <h2 id="seller-score-heading" className="text-lg font-semibold">Seller credit score</h2>
-            <p className="mt-1 text-sm text-[#a3a3a3]">Enter a score, increase it by one point, or set it to 100, then select Save dashboard values. The default is 5.</p>
+            <p className="mt-1 text-sm text-slate-700">Enter a score, increase it by one point, or set it to 100, then select Save credit score. The default is 5.</p>
             <div className="mt-3 flex flex-wrap items-end gap-2">
-              <label className="text-xs text-[#a3a3a3]">Credit score
+              <label className="text-xs text-slate-700">Credit score
                 <input type="number" min="0" max={MAX_CREDIT_SCORE} step="any" value={form.sellerCreditScore}
                   onChange={(event) => setForm((current) => ({ ...current, sellerCreditScore: event.target.value }))}
-                  className="mt-1 block h-11 w-36 rounded border border-[#555555] bg-[#111111] px-3 text-sm text-white" placeholder="5" />
+                  className="mt-1 block h-11 w-36 rounded border border-[#555555] bg-white px-3 text-sm text-slate-950" placeholder="5" />
               </label>
               <button type="button" disabled={isSaving || Number(form.sellerCreditScore) >= MAX_CREDIT_SCORE}
                 className="min-h-11 rounded border border-[#555555] px-3 text-sm disabled:opacity-50"
@@ -175,43 +193,46 @@ const AdminSellerMetricsPage = () => {
                 onClick={() => setForm((current) => ({ ...current, sellerCreditScore: '100' }))}>
                 Set to 100
               </button>
+              <button type="submit" disabled={isSaving} className="min-h-11 rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white disabled:opacity-50">Save credit score</button>
             </div>
-          </section>
-          <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7">
-            <div className="mb-5"><h2 className="text-lg font-semibold">Dashboard totals</h2><p className="mt-1 text-xs text-[#777777]">Leave a field blank to use live data where available.</p></div>
+          </form>}
+        {selectedSellerId && <AdminStoreDates key={selectedSellerId} userId={selectedSellerId} showDateHistory={false}/>}
+        {selectedSellerId && loadedMetricsSellerId === selectedSellerId && <form onSubmit={saveMetrics} className="space-y-6">
+          <section className="rounded-xl border border-slate-300 bg-white p-5 sm:p-7">
+            <div className="mb-5"><h2 className="text-lg font-semibold">Dashboard totals</h2><p className="mt-1 text-xs text-slate-600">Leave a field blank to use live data where available.</p></div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {metricFields.filter(({ key }) => key !== 'sellerCreditScore').map(({ key, label, integer, max, step, prefix }) => <label key={key} className="block text-xs text-[#a3a3a3]">{label}
-                <div className="mt-2 flex h-11 items-center border border-[#111111] bg-[#111111] focus-within:border-[#cccccc]">{prefix && <span className="pl-3 text-[#777777]">{prefix}</span>}<input type="number" min="0" max={max || 1000000000000} step={integer ? '1' : step || '0.01'} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm text-white outline-none" placeholder="Use live value" /></div>
+              {metricFields.filter(({ key }) => key !== 'sellerCreditScore').map(({ key, label, integer, max, step, prefix }) => <label key={key} className="block text-xs text-slate-700">{label}
+                <div className="mt-2 flex h-11 items-center border border-slate-300 bg-white focus-within:border-[#cccccc]">{prefix && <span className="pl-3 text-slate-600">{prefix}</span>}<input type="number" min="0" max={max || 1000000000000} step={integer ? '1' : step || '0.01'} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm text-slate-950 outline-none" placeholder="Use live value" /></div>
               </label>)}
             </div>
           </section>
 
-          <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7">
-            <div className="mb-5"><h2 className="text-lg font-semibold">Visitor and sales chart</h2><p className="mt-1 text-xs text-[#777777]">Enter up to 31 daily values, separated by commas.</p></div>
+          <section className="rounded-xl border border-slate-300 bg-white p-5 sm:p-7">
+            <div className="mb-5"><h2 className="text-lg font-semibold">Visitor and sales chart</h2><p className="mt-1 text-xs text-slate-600">Enter up to 31 daily values, separated by commas.</p></div>
             <div className="grid gap-4 md:grid-cols-2">
-              <label className="block text-xs text-[#a3a3a3]">Sales volume history
-                <textarea value={salesTrack} onChange={(event) => setSalesTrack(event.target.value)} rows={3} className="mt-2 w-full border border-[#111111] bg-[#111111] px-3 py-2 text-sm text-white outline-none focus:border-[#cccccc]" placeholder="120, 185, 90, 240" />
+              <label className="block text-xs text-slate-700">Sales volume history
+                <textarea value={salesTrack} onChange={(event) => setSalesTrack(event.target.value)} rows={3} className="mt-2 w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-[#cccccc]" placeholder="120, 185, 90, 240" />
               </label>
-              <label className="block text-xs text-[#a3a3a3]">Visits history
-                <textarea value={visitsTrack} onChange={(event) => setVisitsTrack(event.target.value)} rows={3} className="mt-2 w-full border border-[#111111] bg-[#111111] px-3 py-2 text-sm text-white outline-none focus:border-[#cccccc]" placeholder="32, 48, 41, 65" />
+              <label className="block text-xs text-slate-700">Visits history
+                <textarea value={visitsTrack} onChange={(event) => setVisitsTrack(event.target.value)} rows={3} className="mt-2 w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-[#cccccc]" placeholder="32, 48, 41, 65" />
               </label>
             </div>
           </section>
 
-          <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7">
-            <div className="mb-5"><h2 className="text-lg font-semibold">Top-selling product records</h2><p className="mt-1 text-xs text-[#777777]">Only products belonging to this seller are available.</p></div>
+          <details className="rounded-xl border border-slate-300 bg-white p-5 sm:p-7">
+            <summary className="mb-3 cursor-pointer text-lg font-semibold">Top-selling product records</summary>
             <div className="divide-y divide-[#111111]">
               {products.filter((product) => product.sellerId === Number(selectedSellerId)).map((product) => <label key={product.id} className="flex flex-wrap items-center gap-3 py-3 text-sm">
-                <img src={product.imageUrl} alt="" className="size-12 shrink-0 object-cover" /><span className="min-w-0 flex-1 truncate">{product.name}</span><span className="text-xs text-[#777777]">${product.price.toFixed(2)}</span>
-                <span className="flex items-center gap-2 text-xs text-[#a3a3a3]">Units sold<input type="number" min="0" max="1000000000" step="1" value={topProductVolumes[product.id] || ''} onChange={(event) => setTopProductVolumes((current) => ({ ...current, [product.id]: event.target.value }))} className="h-9 w-24 border border-[#111111] bg-[#111111] px-2 text-sm text-white outline-none focus:border-[#cccccc]" /></span>
+                <img src={product.imageUrl} alt="" className="size-12 shrink-0 object-cover" /><span className="min-w-0 flex-1 break-words">{product.name}</span><span className="text-xs text-slate-600">${product.price.toFixed(2)}</span>
+                <span className="flex items-center gap-2 text-xs text-slate-700">Units sold<input type="number" min="0" max="1000000000" step="1" value={topProductVolumes[product.id] || ''} onChange={(event) => setTopProductVolumes((current) => ({ ...current, [product.id]: event.target.value }))} className="h-9 w-24 border border-slate-300 bg-white px-2 text-sm text-slate-950 outline-none focus:border-[#cccccc]" /></span>
               </label>)}
-              {!products.some((product) => product.sellerId === Number(selectedSellerId)) && <p className="py-8 text-sm text-[#777777]">This seller has no products yet.</p>}
+              {!products.some((product) => product.sellerId === Number(selectedSellerId)) && <p className="py-8 text-sm text-slate-600">This seller has no products yet.</p>}
             </div>
-          </section>
+          </details>
 
-          <div className="flex flex-wrap items-center justify-between gap-4"><p className="text-xs text-[#777777]">Selected seller: {selectedSeller?.storeName || selectedSeller?.fullName} · #{selectedSeller?.publicId}</p><button disabled={isSaving} type="submit" className="min-h-11 bg-[#cccccc] px-6 text-sm font-semibold text-[#111111] disabled:opacity-60">{isSaving ? 'Saving…' : 'Save dashboard values'}</button></div>
+          <div className="flex flex-wrap items-center justify-between gap-4"><p className="text-xs text-slate-600">Selected seller: {selectedSeller?.storeName || selectedSeller?.fullName} · #{selectedSeller?.publicId}</p><button disabled={isSaving} type="submit" className="min-h-11 bg-[#cccccc] px-6 text-sm font-semibold text-[#111111] disabled:opacity-60">{isSaving ? 'Saving…' : 'Save dashboard values'}</button></div>
         </form>}
-        {!selectedSellerId && <p className="border border-dashed border-[#111111] px-5 py-12 text-center text-sm text-[#777777]">No seller accounts found. Create a seller account, then return here to set its dashboard data.</p>}
+        {!selectedSellerId && <p className="border border-dashed border-slate-300 px-5 py-12 text-center text-sm text-slate-600">No seller accounts found. Create a seller account, then return here to set its dashboard data.</p>}
       </main>
     </div>
   )
