@@ -201,7 +201,7 @@ function PaymentHistory({requests}){
 }
 
 export default function SellerFinancePage({view='wallet'}){
- const [user,setUser]=useState(null),[data,setData]=useState(null),[analytics,setAnalytics]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[kind,setKind]=useState(''),[depositId,setDepositId]=useState(null),[historyFilter,setHistoryFilter]=useState('all'),[withdrawalCoin,setWithdrawalCoin]=useState('BTC'),[pinSettingsOpen,setPinSettingsOpen]=useState(null),[key,setKey]=useState(''),[period,setPeriod]=useState('30'),[today,setToday]=useState(()=>new Date().toISOString().slice(0,10))
+ const [user,setUser]=useState(null),[data,setData]=useState(null),[analytics,setAnalytics]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[kind,setKind]=useState(''),[depositId,setDepositId]=useState(null),[historyFilter,setHistoryFilter]=useState('all'),[withdrawalCoin,setWithdrawalCoin]=useState('BTC'),[pinSettingsOpen,setPinSettingsOpen]=useState(null),[key,setKey]=useState(''),[period,setPeriod]=useState('today'),[today,setToday]=useState(()=>new Date().toISOString().slice(0,10))
  const [params]=useSearchParams(),actionStarted=useRef(false)
  const refresh=useCallback(async()=>{const [u,d,a]=await Promise.all([apiRequest('/api/auth/me'),view==='statement'?Promise.resolve(null):apiRequest('/api/seller/finance'),view==='statement'?apiRequest('/api/seller/analytics'):Promise.resolve(null)]);setUser(u.user);setData(d);setAnalytics(a);setToday(new Date().toISOString().slice(0,10))},[view])
  useEffect(()=>{refresh().catch(e=>setError(e.message));const visibleRefresh=()=>{if(!document.hidden)refresh().catch(()=>{})};const timer=setInterval(visibleRefresh,30000);window.addEventListener('focus',visibleRefresh);return()=>{clearInterval(timer);window.removeEventListener('focus',visibleRefresh)}},[refresh])
@@ -231,12 +231,49 @@ export default function SellerFinancePage({view='wallet'}){
  }
  const depositWallets=data?.depositWallets||[]
  const records=(data?.records||[]).filter(record=>record.delta_cents!==0&&(historyFilter==='all'||(historyFilter==='credit'?record.delta_cents>0:record.delta_cents<0))).sort(compareHistory(ledgerHistoryTime))
- const daily=(analytics?.daily||[]).filter(d=>period==='all'||d.day>=new Date(new Date(today+'T00:00:00Z').getTime()-(Number(period)-1)*86400000).toISOString().slice(0,10))
+ const date=new Date(today+'T00:00:00Z')
+ const yesterday=new Date(date.getTime()-86400000).toISOString().slice(0,10)
+ const weekStart=new Date(date.getTime()-((date.getUTCDay()+6)%7)*86400000).toISOString().slice(0,10)
+ const monthStart=today.slice(0,7)+'-01'
+ const starts={today,yesterday,week:weekStart,month:monthStart}
+ const daily=(analytics?.daily||[]).filter(row=>period==='all'||(row.day>=starts[period]&&row.day<=(period==='yesterday'?yesterday:today)))
+ const statementCards=[
+  ['Pending amount','pendingCents','bg-[#789cff]'],
+  ['Total sales','salesCents','bg-[#72c1f8]'],
+  ['Estimated profit','profitCents','bg-[#58d2c9]'],
+  ['Total orders','orders','bg-[#989fac]'],
+  ['Cancelled orders','cancelledOrders','bg-[#ff795f]'],
+  ['Refunded orders','refundedOrders','bg-[#ef5e60]'],
+ ]
  const title=view==='wallet'?'My wallet':view==='statement'?'Financial statement':'Transaction history'
  return <SellerWorkspace user={user}><p className="text-xs font-bold tracking-[.18em] text-[#555555]">{view==='wallet'?'MY WALLET':view==='statement'?'FINANCIAL STATEMENT':'TRANSACTION HISTORY'}</p><h1 className="mt-2 font-serif text-4xl">{title}</h1>{error&&<p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
  {view==='wallet'&&<><div className="mt-7 grid gap-4 md:grid-cols-2">{[['Wallet balance',Math.max(0,(data?.wallet.balanceCents||0)-(data?.wallet.reservedCents||0))],['Pending withdrawals',data?.wallet.reservedCents]].map(([label,v],i)=><section key={label} className={`${panel} ${i===0?'!bg-[#111111] !text-white':''}`}><p className="text-sm opacity-70">{label}</p><p className="mt-5 text-3xl font-semibold">{data?money(v):'—'}</p></section>)}</div><div className="mt-5 flex flex-wrap items-center justify-between gap-4"><p className="max-w-2xl text-xs leading-6 text-[#555555]">Pending withdrawals are taken out of your available wallet balance immediately. Rejected withdrawals are returned to your available balance.</p><div className="flex gap-2">{['deposit','withdrawal'].map(k=><button key={k} className={button} disabled={!data} onClick={()=>{if(k==='withdrawal'&&!data.hasTransactionPin){setPinSettingsOpen(true);setError('');return}setError('');setKind(k);setKey(crypto.randomUUID())}}>{k==='deposit'?'Deposit funds':'Withdraw'}</button>)}</div></div>
  <Link className="mt-5 inline-block text-sm text-blue-700 underline" to="/seller/fund-record">View transaction history</Link><SaleConfirmations sales={data?.sales||[]} onConfirmed={refresh}/><section className={`${panel} mt-6`}><h2 className="font-semibold">Confirmed sale history</h2>{data?.sales.filter(s=>s.releaseStatus).slice(0,20).map(s=><div key={s.orderId} className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm"><div><strong>Order #{s.orderNumber}</strong><p className="mt-1 text-xs text-gray-500">Confirmed by {transactionActor(s.confirmedRole)} · {s.confirmedAt}</p></div><span>{money(s.amountCents)} · {s.releaseStatus}</span></div>)}{data&&!data.sales.some(s=>s.releaseStatus)&&<p className="mt-4 text-sm text-gray-500">Confirmed sales and their credited amounts will appear here.</p>}</section><button type="button" className="mt-6 min-h-11 text-sm font-semibold underline" onClick={()=>setPinSettingsOpen(true)}>Set or reset transaction PIN</button><TransactionPinModal open={Boolean(pinSettingsOpen)} onClose={()=>setPinSettingsOpen(false)} onSaved={async()=>{setError('');await refresh()}}/><PaymentHistory requests={data?.requests||[]}/></>}
- {view==='statement'&&<><div className="mt-6 flex flex-wrap gap-2">{[['1','Today'],['7','This week'],['30','Last 30 days'],['all','All time']].map(([value,label])=><button className={`rounded-xl border px-4 py-2 text-sm ${period===value?'bg-[#111111] text-white':'bg-white'}`} key={value} onClick={()=>setPeriod(value)}>{label}</button>)}</div><div className="mt-5 grid gap-4 sm:grid-cols-3">{[['Paid product sales',daily.reduce((s,d)=>s+d.salesCents,0)],['Paid with store credit',daily.reduce((s,d)=>s+d.creditSalesCents,0)],['Estimated gross profit (15%)',Math.round(daily.reduce((s,d)=>s+d.salesCents,0)*.15)]].map(([label,v])=><section key={label} className={panel}><p className="text-xs text-[#555555]">{label}</p><p className="mt-4 text-2xl font-semibold">{money(v)}</p></section>)}</div><p className="mt-4 text-xs leading-6 text-[#555555]">Grouped by order creation date (UTC), including paid orders only in sales. Profit is an estimate, not a wallet credit. Shipping and tax are excluded. Refund status is shown in order history; gross sales above are before refunds.</p><div className={`${panel} mt-6 overflow-auto`}><table className="w-full min-w-[480px] text-left text-sm"><thead><tr className="border-b"><th className="py-3">Date (UTC)</th><th>Orders placed</th><th>Paid sales</th><th>Store credit sales</th></tr></thead><tbody>{daily.map(d=><tr key={d.day} className="border-b border-[#e5e5e5]"><td className="py-4">{d.day}</td><td>{d.orders}</td><td>{money(d.salesCents)}</td><td>{money(d.creditSalesCents)}</td></tr>)}</tbody></table>{!daily.length&&<p className="py-8 text-sm text-[#555555]">No orders in this period.</p>}</div></>}
+ {view==='statement'&&<>
+  <div className="mt-6 flex flex-wrap gap-2" role="group" aria-label="Statement period">
+   {[['yesterday','Yesterday'],['today','Today'],['week','This week'],['month','This month'],['all','All time']].map(([value,label])=>
+    <button type="button" aria-pressed={period===value} className={`min-h-11 rounded-full border px-4 py-2 text-sm font-medium ${period===value?'border-blue-700 bg-blue-700 text-white':'bg-white'}`} key={value} onClick={()=>setPeriod(value)}>{label}</button>)}
+  </div>
+  <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
+   {statementCards.map(([label,key,color])=>{
+    const loaded=analytics&&daily.every(row=>row[key]!=null)
+    const value=daily.reduce((sum,row)=>sum+Number(row[key]??0),0)
+    return <section key={key} className={`min-w-0 rounded-2xl p-4 text-slate-950 ${color}`}>
+     <h2 className="text-xs font-semibold">{label}</h2><p className="mt-2 break-words text-xl font-bold tabular-nums">{loaded?(key.endsWith('Cents')?money(value):value.toLocaleString()):'—'}</p>
+    </section>
+   })}
+  </div>
+  <p className="mt-4 text-xs leading-6 text-slate-600">Grouped by order date (UTC). Sales exclude shipping and tax and are shown before refunds. Pending amount covers paid sales awaiting release. Estimated profit uses the Shop Orders calculation and excludes completed refunds.</p>
+  <div className={`${panel} mt-5 overflow-auto`}>
+   <h2 className="font-semibold">Daily breakdown</h2>
+   <table className="mt-2 w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b border-slate-200">
+    {['Date (UTC)','Total orders','Paid sales','Estimated profit','Cancelled','Refunded'].map(label=><th key={label} scope="col" className="px-2 py-3">{label}</th>)}
+   </tr></thead><tbody>{daily.map(row=><tr key={row.day} className="border-b border-slate-100 even:bg-slate-50">
+    {[row.day,row.orders,money(row.salesCents),row.profitCents==null?'—':money(row.profitCents),row.cancelledOrders??'—',row.refundedOrders??'—'].map((value,index)=><td key={index} className="px-2 py-3 tabular-nums">{value}</td>)}
+   </tr>)}</tbody></table>
+   {analytics&&!daily.length&&<p className="py-6 text-sm text-slate-600">No orders in this period.</p>}
+  </div>
+ </>}
  {view==='record'&&<section className="mt-6 max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-label="Wallet transactions">
   <div className="flex justify-end border-b border-slate-100 px-4 py-3">
    <select aria-label="Filter transactions" value={historyFilter} onChange={event=>setHistoryFilter(event.target.value)}>

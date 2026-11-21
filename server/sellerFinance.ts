@@ -116,10 +116,22 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  ORDER BY o.id DESC LIMIT 500`).all(...(seller===undefined?[]:[seller]))
  const analytics=async(seller:number)=>{
  const orders=await sales(seller)
- const daily=await db.prepare(`SELECT SUBSTRING(o.created_at,1,10) AS day,COUNT(DISTINCT o.id)::integer AS orders,
- COALESCE(SUM(CASE WHEN o.status='paid' THEN i.price_cents*i.quantity ELSE 0 END),0)::bigint AS salesCents,
- COALESCE(SUM(CASE WHEN o.status='paid' AND o.coin='BALANCE' THEN i.price_cents*i.quantity ELSE 0 END),0)::bigint AS creditSalesCents
- FROM purchase_orders o JOIN purchase_items i ON i.order_id=o.id WHERE i.seller_id=? GROUP BY SUBSTRING(o.created_at,1,10) ORDER BY day DESC`).all(seller)
+ const daily=await db.prepare(`WITH seller_orders AS (
+  SELECT o.id,SUBSTRING(o.created_at,1,10) AS day,o.status,o.coin,o.account_balance_payment,
+   SUM(i.price_cents*i.quantity)::bigint AS subtotal_cents,
+   EXISTS (SELECT 1 FROM purchase_refunds f WHERE f.order_id=o.id AND f.seller_id=i.seller_id AND f.status='completed') AS refunded,
+   EXISTS (SELECT 1 FROM seller_sale_releases r WHERE r.order_id=o.id AND r.seller_id=i.seller_id) AS released
+  FROM purchase_orders o JOIN purchase_items i ON i.order_id=o.id
+  WHERE i.seller_id=? GROUP BY o.id,i.seller_id
+ )
+ SELECT day,COUNT(*)::integer AS orders,
+ COALESCE(SUM(subtotal_cents) FILTER (WHERE status='paid'),0)::bigint AS salesCents,
+ COALESCE(SUM(subtotal_cents) FILTER (WHERE status='paid' AND coin='BALANCE'),0)::bigint AS creditSalesCents,
+ COALESCE(SUM(subtotal_cents) FILTER (WHERE status='paid' AND account_balance_payment<>0 AND NOT released AND NOT refunded),0)::bigint AS pendingCents,
+ COALESCE(SUM(subtotal_cents-ROUND(subtotal_cents::numeric*100/115)) FILTER (WHERE status='paid' AND NOT refunded),0)::bigint AS profitCents,
+ COUNT(*) FILTER (WHERE status IN ('cancelled','canceled'))::integer AS cancelledOrders,
+ COUNT(*) FILTER (WHERE refunded)::integer AS refundedOrders
+ FROM seller_orders GROUP BY day ORDER BY day DESC`).all(seller)
  const overview=await db.prepare(`SELECT (SELECT COUNT(*)::integer FROM products WHERE seller_id=?) AS products,
  COALESCE((SELECT follower_count FROM seller_profiles WHERE user_id=?),0) AS followers,
  COALESCE((SELECT visitor_count FROM seller_profiles WHERE user_id=?),0) AS visits,

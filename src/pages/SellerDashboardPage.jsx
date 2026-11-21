@@ -29,10 +29,10 @@ export default function SellerDashboardPage(){
   ? dollars(override)
   : sales==null||fundingCents==null?'—':money(Math.round((Math.round(sales*100)+Number(fundingCents))*rate/100))
  const totals=[
-  ['Total Products',number(metrics.totalProducts??data?.overview.products),'bg-rose-50 text-rose-900'],
-  ['Total Sales Amount',dollars(totalSales),'bg-sky-50 text-sky-900'],
-  ['Total Orders',number(metrics.totalOrders??data?.overview.paidOrders),'bg-indigo-50 text-indigo-900'],
-  ['Total Profit',profit(metrics.totalProfit,totalSales,data?.funding?.total_cents,20),'bg-teal-50 text-teal-900'],
+  ['Total Products',number(metrics.totalProducts??data?.overview.products),'bg-[#ff8099] text-slate-950'],
+  ['Total Sales Amount',dollars(totalSales),'bg-[#72c1f8] text-slate-950'],
+  ['Total Orders',number(metrics.totalOrders??data?.overview.paidOrders),'bg-[#758df5] text-slate-950'],
+  ['Total Profit',profit(metrics.totalProfit,totalSales,data?.funding?.total_cents,20),'bg-[#58d2c9] text-slate-950'],
  ]
  const groups=[
   ['Shop Overview',[
