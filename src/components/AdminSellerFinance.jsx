@@ -1,5 +1,5 @@
 import {Circle} from 'lucide-react'
-import {formatTimestamp} from '../lib/storeDates.js'
+import {formatTimestamp,timestampMillis} from '../lib/storeDates.js'
 import CryptoWalletIcon from './CryptoWalletIcon.jsx'
 import {sessionUrl} from '../lib/tabSession.js'
 import { useEffect,useState } from 'react'
@@ -7,8 +7,37 @@ import { apiRequest } from '../lib/api.js'
 const money=c=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((c||0)/100)
 const field='mt-1 block w-full rounded-lg border border-[#111111] bg-[#111111] px-3 py-2 text-sm text-white'
 const button='rounded-lg border border-[#555555] bg-[#111111] px-4 py-2 text-xs text-white disabled:opacity-50'
+function recordedDate(fields){
+ if(fields.has('useCurrentTime'))return undefined
+ const local=String(fields.get('paymentTime'))
+ return new Date(`${local}${local.length===16?':00':''}+01:00`).toISOString()
+}
+function PaymentDateFields({initialDate}){
+ const [current,setCurrent]=useState(!initialDate)
+ const time=timestampMillis(initialDate)
+ const defaultValue=Number.isFinite(time)?new Date(time+3600000).toISOString().slice(0,19):''
+ return <>
+  <label className="flex min-h-9 items-center gap-2 text-xs">
+   <input name="useCurrentTime" type="checkbox" checked={current} onChange={event=>setCurrent(event.target.checked)}/> Use current date and time
+  </label>
+  {!current&&<label className="text-xs">Payment date and time (Lagos)
+   <input type="datetime-local" name="paymentTime" step="1" defaultValue={defaultValue} className={field} required/>
+  </label>}
+ </>
+}
+function EditPaymentDate({request,busy,onUpdate}){
+ return <details className="mt-4 rounded-lg border border-[#555] p-3">
+  <summary className="cursor-pointer text-xs font-semibold">Edit payment date</summary>
+  <form className="mt-2 flex flex-wrap items-end gap-3" onSubmit={event=>{
+   event.preventDefault()
+   onUpdate({action:'edit-date',recordedAt:recordedDate(new FormData(event.currentTarget))})
+  }}>
+   <PaymentDateFields initialDate={request.resolved_at||request.updated_at}/>
+   <button type="submit" disabled={busy} className={button}>Save date</button>
+  </form>
+ </details>
+}
 function WithdrawalReview({request,busy,onUpdate}){
- const [useCurrentTime,setUseCurrentTime]=useState(true)
  const [copyStatus,setCopyStatus]=useState('')
  const pending=request.status==='awaiting_transfer'
  async function copyAddress(){
@@ -23,14 +52,9 @@ function WithdrawalReview({request,busy,onUpdate}){
   {copyStatus&&<p role="status" className="mt-1 text-xs">{copyStatus}</p>}
   {pending&&<form className="mt-4 flex flex-wrap items-end gap-3" onSubmit={event=>{
    event.preventDefault()
-   const localTime=new FormData(event.currentTarget).get('withdrawalTime')
-   const recordedAt=useCurrentTime?undefined:new Date(`${localTime}:00+01:00`).toISOString()
-   onUpdate({action:'accept',recordedAt})
+   onUpdate({action:'accept',recordedAt:recordedDate(new FormData(event.currentTarget))})
   }}>
-   <label className="flex min-h-9 items-center gap-2 text-xs"><input type="checkbox" checked={useCurrentTime} onChange={event=>setUseCurrentTime(event.target.checked)}/> Use current date and time</label>
-   {!useCurrentTime&&<label className="text-xs">Withdrawal date and time (Lagos)
-    <input type="datetime-local" name="withdrawalTime" className={field} required/>
-   </label>}
+   <PaymentDateFields/>
    <button type="submit" disabled={busy||request.refundPending} className={button}>Accept</button>
    <button type="button" disabled={busy} className={button} onClick={()=>onUpdate({action:'reject'})}>Reject</button>
    {request.refundPending&&<p className="w-full text-xs text-amber-300">Resolve the related refund before accepting.</p>}
@@ -43,8 +67,9 @@ function AcceptTransfer({busy,onAccept}){
   <form className="mt-3 grid gap-3" onSubmit={event=>{
    event.preventDefault()
    const fields=new FormData(event.currentTarget)
-   onAccept({action:'confirm',verified:fields.get('verified')==='on'})
+   onAccept({action:'confirm',verified:fields.get('verified')==='on',recordedAt:recordedDate(fields)})
   }}>
+   <PaymentDateFields/>
    <label className="flex items-center gap-2 text-xs"><input type="checkbox" name="verified" required/> The deposit transfer was received.</label>
    <button disabled={busy} className={`${button} w-fit`}>Accept deposit</button>
   </form>
@@ -73,7 +98,7 @@ export default function AdminSellerFinance({view}){
  const act=async(fn,success)=>{setBusy(true);setError('');setNotice('');try{await fn();if(success){setNotice(success);await load()}}catch(e){setError(e.message)}finally{setBusy(false)}}
  const update=(id,body)=>act(()=>apiRequest(`/api/admin/seller-finance/requests/${id}`,{method:'PATCH',body:JSON.stringify(body)}),
   ['confirm','accept'].includes(body.action)?(view==='deposit'?'Accepted. Seller wallet credited.':'Accepted.')
-  :body.action==='reject'?'Rejected.':'Payment details saved.')
+  :body.action==='reject'?'Rejected.':body.action==='edit-date'?'Payment date updated.':'Payment details saved.')
  const accounts=data?.accounts??[]
  const selectedAccount=accounts.find(account=>account.id===sellerId)
  const requests=(loadedQuery===query?data?.requests??[]:[]).filter(request=>{
@@ -137,6 +162,7 @@ export default function AdminSellerFinance({view}){
  </form>}
  {q.kind==='deposit'&&q.status==='awaiting_review'&&q.usd_rate&&<AcceptTransfer busy={busy} onAccept={body=>update(q.id,body)}/>}
  {q.kind==='deposit'&&!['confirmed','rejected'].includes(q.status)&&<form className="mt-4 flex flex-wrap gap-3" onSubmit={e=>{e.preventDefault();update(q.id,{action:'reject'})}}><button disabled={busy} className={button}>Reject</button></form>}
+ {q.status==='confirmed'&&<EditPaymentDate key={q.resolved_at||q.updated_at} request={q} busy={busy} onUpdate={body=>update(q.id,body)}/>}
  <button type="button" disabled={busy} className="mt-4 text-xs underline disabled:opacity-50" onClick={()=>removeRequest(q)}>Remove from history</button>
  </article>)}{loadedQuery===query&&data&&!requests.length&&<p className="py-5 text-sm text-[#a3a3a3]">No {view==='deposit'?'deposits':'withdrawals'} in this view.</p>}</div>{loadedQuery===query&&data?.nextBefore&&<button type="button" className={`${button} mt-4`} disabled={busy} onClick={loadOlder}>Load older payments</button>}</>}
  {view==='sales'&&<><h3 className="mt-8 font-semibold">Sale release queue</h3><div className="mt-4 overflow-auto"><table className="w-full min-w-[760px] text-left text-xs"><thead><tr>{['Order','Store','Product subtotal','Payment / delivery','Release','Action'].map(h=><th className="border-b border-[#111111] p-3" key={h}>{h}</th>)}</tr></thead><tbody>{data?.sales.map(s=><tr key={`${s.orderId}:${s.sellerId}`}><td className="p-3">#{s.orderNumber}</td><td>{s.storeName}<br/>#{s.sellerPublicId}</td><td>{money(s.amountCents)}</td><td>{s.paymentStatus} / {s.deliveryStatus}<br/>{s.coin}{s.refundStatus&&` · refund ${s.refundStatus}`}</td><td>{s.releaseStatus||'Not confirmed'}{s.confirmedBy&&<p className="mt-1 text-xs">{s.confirmedBy} · {s.confirmedRole}<br/>{s.confirmedAt}</p>}</td><td>{!s.releaseStatus&&s.paymentStatus==='paid'&&(s.accountBalancePayment||(s.coin!=='BALANCE'&&s.deliveryStatus==='delivered'))&&(!s.refundStatus||s.refundStatus==='rejected')?<form onSubmit={e=>{e.preventDefault();act(()=>apiRequest('/api/admin/seller-finance/releases',{method:'POST',body:JSON.stringify({orderId:s.orderId,sellerId:s.sellerId,amountCents:s.amountCents,verified:true})}),'Sale proceeds released.')}}><label className="block"><input type="checkbox" required/> Verify full amount</label><button className={`${button} mt-2`} disabled={busy}>Release {money(s.amountCents)}</button></form>:s.coin==='BALANCE'&&!s.accountBalancePayment?'Legacy credit: noncash':'—'}</td></tr>)}</tbody></table></div><h3 className="mt-8 font-semibold">Seller wallet balances</h3><div className="mt-3 flex flex-wrap gap-3">{data?.wallets.map(w=><div key={w.seller_id} className="rounded-xl border border-[#111111] p-4 text-xs"><p>{w.name} · #{w.publicId}</p><p className="mt-2 font-semibold">{money(w.balance_cents)}</p><p className="mt-1 text-[#a3a3a3]">Held: {money(w.reserved_cents)}</p></div>)}</div></>}

@@ -42,7 +42,7 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  check('admin sees screenshot and submitted reference without crediting seller',review.status==='awaiting_review'&&review.receiptId&&review.submitted_reference==='fixture-deposit'&&!review.transfer_reference&&finance.wallet.balanceCents===0,review)
  r=await req('/api/seller/finance/receipts/'+finance.requests[0].receiptId,{},buyer);check('another buyer cannot read receipt',r.status===404)
  r=await post(adminPath,{action:'confirm',verified:false,transferReference:'fixture-deposit'},cookie,'PATCH');check('admin must independently verify payment',r.status===409)
- r=await post(adminPath,{action:'confirm',verified:true},cookie,'PATCH');check('verified deposit credits wallet without a manual reference',r.status===200,r)
+ r=await post(adminPath,{action:'confirm',verified:true,recordedAt:'2020-06-16T14:30:00.000Z'},cookie,'PATCH');check('verified deposit credits wallet without a manual reference',r.status===200,r)
  r=await post(adminPath,{action:'confirm',verified:true,transferReference:'fixture-deposit'},cookie,'PATCH');check('repeat confirmation is refused',r.status===409)
  finance=(await req('/api/seller/finance',{},seller)).data;check('deposit ledger credits once',finance.wallet.balanceCents===20000&&finance.records.length===1)
  const withdrawal={kind:'withdrawal',coin:'USDT',amountCents:15000,requestKey:randomUUID(),network:'TRC20',address:'fixture-seller-address',transactionPin:'0456'}
@@ -190,6 +190,14 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  const removePath=id=>'/api/admin/seller-finance/requests/'+id+'/archive'
  r=await post(removePath(approvalId),{},seller);check('seller cannot remove a payment record',r.status===403,r)
  r=await post(removePath(singlePending),{},cookie);check('removing a pending payment requires unsent confirmation',r.status===409,r)
+ const historicalDate='2019-02-12T07:15:00.000Z'
+ r=await post(approvalPath,{action:'edit-date',recordedAt:historicalDate},seller,'PATCH')
+ check('seller cannot edit a payment date',r.status===403,r)
+ r=await post(approvalPath,{action:'edit-date',recordedAt:historicalDate},cookie,'PATCH')
+ check('admin updates accepted withdrawal date',r.status===200,r)
+ const dated=(await req('/api/seller/finance',{},seller)).data
+ check('seller request and debit show the same edited date',dated.requests.find(request=>request.id===approvalId)?.resolved_at===historicalDate&&dated.records.find(record=>record.displayReference===accepted.transaction_ref)?.resolvedAt===historicalDate)
+ check('editing payment date preserves wallet and processing timestamps',JSON.stringify(dated.wallet)===JSON.stringify(beforeRemoval)&&dated.records.find(record=>record.displayReference===accepted.transaction_ref)?.created_at===acceptedFinance.records.find(record=>record.displayReference===accepted.transaction_ref)?.created_at)
  r=await post(removePath(approvalId),{},cookie);check('admin can remove one accepted payment from history',r.status===200,r)
  const withoutAccepted=(await req('/api/seller/finance',{},seller)).data
  check('accepted removal hides the payment and debit without changing balances',!withoutAccepted.requests.some(request=>request.id===approvalId)&&!withoutAccepted.records.some(record=>record.displayReference===accepted.transaction_ref)&&JSON.stringify(withoutAccepted.wallet)===JSON.stringify(beforeRemoval))
@@ -200,4 +208,6 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  const withoutPending=(await req('/api/seller/finance',{},seller)).data
  check('removing a pending withdrawal releases its hold once',!withoutPending.requests.some(request=>request.id===singlePending)&&withoutPending.wallet.reservedCents===beforeRemoval.reservedCents-110&&withoutPending.wallet.balanceCents===beforeRemoval.balanceCents)
 
+ const depositDate=(await req('/api/seller/finance',{},seller)).data
+ check('seller deposit and credit show the date entered during acceptance',depositDate.requests.find(request=>request.id===q.id)?.resolved_at==='2020-06-16T14:30:00.000Z'&&depositDate.records.find(record=>record.displayReference===q.transaction_ref)?.resolvedAt==='2020-06-16T14:30:00.000Z')
 }

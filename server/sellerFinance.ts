@@ -40,6 +40,13 @@ const userActivityEntry=(row:unknown)=>{
 export const sellerPaymentCoins = ['BTC','ETH','USDT','USDC','BNB','SOL','XRP','DOGE','LTC','TRX','TON','POL','AVAX','ADA']
 const text = (v: unknown, max = 500) => typeof v === 'string' && v.trim().length <= max ? v.trim() : ''
 function fail(message: string): never { throw Object.assign(new Error(message), { status: 409 }) }
+function paymentDate(recorded:unknown):string {
+ if(recorded===undefined)return new Date().toISOString()
+ if(typeof recorded!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(recorded))fail('Choose a valid payment date and time.')
+ const date=new Date(recorded)
+ if(!Number.isFinite(date.getTime())||date.toISOString()!==recorded||date.getTime()>Date.now())fail('Choose a valid payment date and time in the past.')
+ return recorded
+}
 const rateValid = (v: string) => /^(?:0|[1-9]\d{0,11})(?:\.\d{1,8})?$/.test(v) && /[1-9]/.test(v)
 const coinAmount = (cents: number, rate: string) => {
  const [whole,fraction=''] = rate.split('.')
@@ -275,9 +282,17 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  }))
  app.patch('/api/admin/seller-finance/requests/:id',auth,role('admin'),protectedRoute(async(req,res)=>{
  await db.transaction(async()=>{
- const q=await db.prepare('SELECT * FROM seller_wallet_requests WHERE id=?').get(Number(req.params.id)) as WalletRequest|undefined
+ const q=await db.prepare('SELECT * FROM seller_wallet_requests WHERE id=? AND archived_at IS NULL').get(Number(req.params.id)) as (WalletRequest&{resolved_at:string|null,updated_at:string})|undefined
  if(!q) fail('Request not found.')
  const request=q!,action=req.body?.action
+ if(action==='edit-date'){
+  if(request.status!=='confirmed')fail('Only accepted payments have a recorded payment date.')
+  const resolvedAt=paymentDate(req.body.recordedAt)
+  await db.prepare('UPDATE seller_wallet_requests SET resolved_at=? WHERE id=?').run(resolvedAt,request.id)
+  await db.prepare('INSERT INTO account_admin_history(user_id,admin_id,action,details) VALUES(?,?,?,?)')
+   .run(request.seller_id,req.user!.id,'Payment date updated',JSON.stringify({requestId:request.id,from:request.resolved_at||request.updated_at,to:resolvedAt}))
+  return
+ }
  if(['confirmed','rejected'].includes(request.status)) fail('This request is already closed.')
  if(action==='quote') {
  if(!(request.kind==='deposit'&&request.status==='requested')&&!(request.kind==='withdrawal'&&request.status==='awaiting_transfer'&&!request.usd_rate)) fail('This request already has locked payment instructions.')
@@ -296,14 +311,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  const rate=request.usd_rate||(!simple?text(req.body.usdRate,30):'')
  if((!simple&&!rateValid(rate))||request.status!==(request.kind==='deposit'?'awaiting_review':'awaiting_transfer')||
     (request.kind==='deposit'&&!request.usd_rate)) fail('This request is not ready to confirm.')
- const recorded=req.body.recordedAt
- let resolvedAt=new Date().toISOString()
- if(recorded!==undefined){
-  if(request.kind!=='withdrawal'||typeof recorded!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/.test(recorded))fail('Choose a valid withdrawal date and time.')
-  const date=new Date(recorded)
-  if(!Number.isFinite(date.getTime())||date.toISOString()!==recorded||date.getTime()>Date.now())fail('Choose a valid withdrawal date and time in the past.')
-  resolvedAt=recorded
- }
+ const resolvedAt=paymentDate(req.body.recordedAt)
  if(request.kind==='withdrawal'&&await db.prepare(`SELECT 1 FROM seller_sale_releases r
   JOIN purchase_refunds f ON f.order_id=r.order_id AND f.seller_id=r.seller_id
   WHERE r.withdrawal_request_id=? AND f.status<>'rejected'`).get(request.id)) fail('Resolve the related refund before sending this withdrawal.')
