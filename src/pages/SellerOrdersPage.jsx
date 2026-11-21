@@ -1,3 +1,4 @@
+import TransactionPinModal from '../components/TransactionPinModal.jsx'
 import { formatOrderReference } from '../lib/orderReference.js'
 import HistoricalSalesHistory from '../components/HistoricalSalesHistory.jsx'
 import ShipmentHistory from '../components/ShipmentHistory.jsx'
@@ -18,6 +19,23 @@ import OrderStatusBadge from '../components/OrderStatusBadge.jsx'
 
 const canPurchase=order=>order.status==='paid'&&order.accountBalancePayment&&order.sellers[0]&&!order.sellers[0].releaseStatus
 
+const orderPaymentBadge = order => {
+  if(order.status==='paid'&&!order.sellers[0]?.releaseStatus){
+    return {status:'pending',label:'Needs seller confirmation'}
+  }
+  return {status:order.status,label:paymentStatusLabel(order.status)}
+}
+
+const purchaseBadge = status => status==='released'
+  ? <OrderStatusBadge status="released" label="Confirmed"/>
+  : status==='reversed'
+    ? <OrderStatusBadge status="returned" label="Reversed"/>
+    : <OrderStatusBadge status="pending" label="Pending · needs attention"/>
+
+const logisticsBadge = shipment => shipment
+  ? <OrderStatusBadge status={shipment.status} label={shipment.status==='pending'?'Pending · needs attention':fulfillmentLabel(shipment.status)}/>
+  : '—'
+
 const SellerOrdersPage = () => {
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -33,6 +51,7 @@ const SellerOrdersPage = () => {
   const dialog=useRef(null)
   const [selected,setSelected]=useState(null)
   const [confirmError,setConfirmError]=useState('')
+  const [pinOpen,setPinOpen]=useState(false)
   function openOrder(order,mode){
     setSelected({id:order.id,mode})
     setConfirmError('')
@@ -82,13 +101,13 @@ const SellerOrdersPage = () => {
        ['Order time',formatTimestamp(order.createdAt)],
        ['Product amount',formatMoney(order.subtotalCents)],
        ['Estimated profit',formatMoney(profit)],
-       ['Purchase status',shipment?.releaseStatus==='released'?'Purchased':shipment?.releaseStatus==='reversed'?'Reversed':'Pending'],
-       ['Logistics status',shipment?fulfillmentLabel(shipment.status):'—'],
+       ['Purchase status',purchaseBadge(shipment?.releaseStatus)],
+       ['Logistics status',logisticsBadge(shipment)],
       ]
       return <li key={order.id} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
        <div className="flex flex-wrap items-start justify-between gap-2">
         <h2 className="min-w-0 break-words text-base font-semibold">Order {formatOrderReference(order)}</h2>
-        <OrderStatusBadge status={order.status} label={paymentStatusLabel(order.status)}/>
+        <OrderStatusBadge {...orderPaymentBadge(order)}/>
        </div>
        <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4 rounded-xl bg-slate-50 p-3">
         {fields.map(([label,value])=><div key={label} className="min-w-0">
@@ -118,8 +137,8 @@ const SellerOrdersPage = () => {
        <dl className="mb-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-3">
         {[
          ['Consignee',order.buyerName], ['Email',order.maskedEmail??'—'], ['Order time',formatTimestamp(order.createdAt)],
-         ['Payment status',paymentStatusLabel(order.status)],['Purchase status',shipment?.releaseStatus==='released'?'Purchased':shipment?.releaseStatus==='reversed'?'Reversed':'Pending'],
-         ['Logistics status',shipment?fulfillmentLabel(shipment.status):'—'],['Purchase time',shipment?.confirmedAt?formatTimestamp(shipment.confirmedAt):'—'],
+         ['Payment status',<OrderStatusBadge {...orderPaymentBadge(order)}/>],['Purchase status',purchaseBadge(shipment?.releaseStatus)],
+         ['Logistics status',logisticsBadge(shipment)],['Purchase time',shipment?.confirmedAt?formatTimestamp(shipment.confirmedAt):'—'],
          ['Sales amount',formatMoney(order.subtotalCents)],['Estimated purchase cost',formatMoney(cost)],['Estimated profit',formatMoney(order.subtotalCents-cost)],
         ].map(([label,value])=><div key={label}><dt className="text-xs text-slate-600">{label}</dt><dd className="font-semibold">{value}</dd></div>)}
        </dl>
@@ -129,16 +148,18 @@ const SellerOrdersPage = () => {
         <div className="min-w-0 flex-1"><p className="break-words font-medium">{item.name}</p><p className="text-xs text-slate-600">{[item.color,item.size].filter(Boolean).join(' · ')}</p></div>
         <span>{item.quantity} × {formatMoney(item.priceCents)}</span>
        </li>)}</ul>
-       {selected.mode==='purchase'&&canPurchase(order)?<form onSubmit={event=>confirmPurchase(event,order)} className="grid gap-2 border-t pt-4">
+       {canPurchase(order)&&<form onSubmit={event=>confirmPurchase(event,order)} className="grid gap-2 border-t pt-4">
         <label className="text-sm font-medium">Transaction PIN<PasswordInput name="transactionPin" required inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" className="mt-1 w-full rounded-lg border p-2"/></label>
-        <Link to="/seller/wallet" className="text-sm text-blue-700 underline">Set or reset your PIN in My wallet</Link>
+        <button type="button" onClick={()=>setPinOpen(true)} className="justify-self-start text-sm text-blue-700 underline">Create or reset transaction PIN</button>
         <p className="text-xs text-slate-600">Confirm the paid sale to credit the proceeds to your website wallet.</p>
         <button disabled={busy} className="justify-self-start rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy?'Confirming…':'Confirm purchase'}</button>
-       </form>:<section className="min-w-0"><h2 className="mb-3 text-sm font-semibold">Dispatch & tracking</h2>{shipment&&<><OrderStatusBadge status={shipment.status} label={fulfillmentLabel(shipment.status)}/><details className="portal-shipment-details"><summary>Shipment details & updates</summary><div className="mt-3"><DeliveryProgress compact status={shipment.status}/></div><div className="mt-4 grid min-w-0 gap-3 rounded-xl bg-gray-50 p-4 sm:grid-cols-2"><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Tracking number</p><p className="mt-1 break-all font-mono text-sm font-semibold">{shipment.trackingNumber||'Not assigned yet'}</p></div><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Carrier</p><p className="mt-1 break-words text-sm">{shipment.carrier||'Not assigned yet'}</p></div>{shipment.carrierTrackingNumber&&<p className="break-all text-xs text-gray-500 sm:col-span-2">Carrier reference: {shipment.carrierTrackingNumber}</p>}</div><label className="mt-4 block text-xs font-medium">Update fulfillment<select aria-label={`Logistics for order ${formatOrderReference(order)}`} disabled={busy||order.status!=='paid'} value={shipment.status} onChange={e=>update(order,e.target.value)} className="mt-2 block min-h-12 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm disabled:opacity-50">{fulfillmentOptions.map(([status,label])=><option key={status} value={status}>{label}</option>)}</select></label><DeliveryEmailStatus shipment={shipment} orderId={order.id}/><ShipmentHistory trackingNumber={shipment.trackingNumber} revision={reload}/></details></>}{order.status!=='paid'&&<p className="mt-3 text-xs text-gray-500">Payment not confirmed</p>}</section>}
+       </form>}
+       {selected.mode==='view'&&<section className="mt-4 min-w-0"><h2 className="mb-3 text-sm font-semibold">Dispatch & tracking</h2>{shipment&&<><OrderStatusBadge status={shipment.status} label={fulfillmentLabel(shipment.status)}/><details className="portal-shipment-details"><summary>Shipment details & updates</summary><div className="mt-3"><DeliveryProgress compact status={shipment.status}/></div><div className="mt-4 grid min-w-0 gap-3 rounded-xl bg-gray-50 p-4 sm:grid-cols-2"><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Tracking number</p><p className="mt-1 break-all font-mono text-sm font-semibold">{shipment.trackingNumber||'Not assigned yet'}</p></div><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Carrier</p><p className="mt-1 break-words text-sm">{shipment.carrier||'Not assigned yet'}</p></div>{shipment.carrierTrackingNumber&&<p className="break-all text-xs text-gray-500 sm:col-span-2">Carrier reference: {shipment.carrierTrackingNumber}</p>}</div><label className="mt-4 block text-xs font-medium">Update fulfillment<select aria-label={`Logistics for order ${formatOrderReference(order)}`} disabled={busy||order.status!=='paid'} value={shipment.status} onChange={e=>update(order,e.target.value)} className="mt-2 block min-h-12 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm disabled:opacity-50">{fulfillmentOptions.map(([status,label])=><option key={status} value={status}>{label}</option>)}</select></label><DeliveryEmailStatus shipment={shipment} orderId={order.id}/><ShipmentHistory trackingNumber={shipment.trackingNumber} revision={reload}/></details></>}{order.status!=='paid'&&<p className="mt-3 text-xs text-gray-500">Payment not confirmed</p>}</section>}
        {confirmError&&<p role="alert" className="mt-2 text-sm text-red-700">{confirmError}</p>}
       </>
      })()}
     </dialog>
+    <TransactionPinModal open={pinOpen} onClose={()=>setPinOpen(false)} onSaved={()=>setConfirmError('')}/>
     </>}
   </div></main>
 }
