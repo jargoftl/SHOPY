@@ -1002,7 +1002,7 @@ app.get('/api/stores/:sellerId', async (req, res) => {
   `, sellerId))
   if (!store) return res.status(404).json({ error: 'Store not found.' })
   await database.transaction(async () => {
-    await database.prepare('UPDATE seller_profiles SET visitor_count = visitor_count + 1 WHERE user_id = ?').run(sellerId)
+    await database.prepare('UPDATE seller_profiles SET visitor_count = visitor_count + 1, last_viewed_at = CURRENT_TIMESTAMP WHERE user_id = ?').run(sellerId)
     await database.prepare("INSERT INTO store_daily_visits(seller_id,day,visits) VALUES(?,to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC','YYYY-MM-DD'),1) ON CONFLICT(seller_id,day) DO UPDATE SET visits=store_daily_visits.visits+1").run(sellerId)
     await database.prepare("INSERT INTO store_china_daily_visits(seller_id,day,visits) VALUES(?,to_char(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai','YYYY-MM-DD'),1) ON CONFLICT(seller_id,day) DO UPDATE SET visits=store_china_daily_visits.visits+1").run(sellerId)
   })()

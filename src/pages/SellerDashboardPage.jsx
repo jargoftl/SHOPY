@@ -2,10 +2,9 @@ import { formatOrderReference } from '../lib/orderReference.js'
 import {useSellerLanguage} from '../context/SellerLanguageContext.jsx'
 import {useEffect,useMemo,useState} from 'react'
 import {Link} from 'react-router-dom'
-import {CalendarDays,Store,Settings,RotateCcw,Gift,ArrowDownLeft,ArrowUpRight,Package,Crown,BadgeCheck} from 'lucide-react'
+import {Settings,RotateCcw,Gift,ArrowDownLeft,ArrowUpRight,Package,Crown,BadgeCheck} from 'lucide-react'
 import SellerWorkspace,{money} from '../components/SellerWorkspace.jsx'
 import SaleConfirmations from '../components/SaleConfirmations.jsx'
-import {formatTimestamp} from '../lib/storeDates.js'
 import StoreDates from '../components/StoreDates.jsx'
 import OrderStatusBadge from '../components/OrderStatusBadge.jsx'
 import {paymentStatusLabel} from '../lib/fulfillment.js'
@@ -42,6 +41,7 @@ export default function SellerDashboardPage(){
   ]],
   ['Visitor Statistics',[
    ['Today’s Visitors',number(todayData?.visits)],
+   ['Total store visits',number(data?.overview.visits)],
    ['Last 7 days',number(metrics.visitorsLast7Days??(data?visits(7):null))],
    ['Last 30 days',number(metrics.visitorsLast30Days??(data?visits(30):null))],
   ]],
@@ -77,22 +77,5 @@ export default function SellerDashboardPage(){
  <SaleConfirmations sales={data?.orders||[]} onConfirmed={async()=>setData(await apiRequest('/api/seller/analytics'))}/><section className="portal-card"><div className="portal-section-head"><h2>{t("Recent orders")}</h2><Link to="/seller/orders">{t("View all")}</Link></div>{data?.orders.slice(0,4).map(o=><Link className="portal-order-row" key={o.orderId} to={`/seller/orders?order=${o.orderNumber}`}><div><strong>{formatOrderReference(o)}</strong><OrderStatusBadge status={o.paymentStatus} label={t(paymentStatusLabel(o.paymentStatus))}/></div><strong>{money(o.amountCents)}</strong></Link>)}{data&&!data.orders.length&&<p className="portal-empty">{t("No orders yet.")}</p>}</section>
  <section className="portal-card"><h2>{t("Top 10 best-selling items")}</h2><div className="portal-product-list">{data?.products.filter(p=>p.units>0).map((p,i)=><Link to={products.some(item=>item.id===p.id&&item.isPublished)?`/products/${p.id}`:'/seller/products'} key={p.id||i} className="portal-product-row">{p.imageUrl?<img src={p.imageUrl} alt="" loading="lazy"/>:<span className="portal-image-placeholder"><Package/></span>}<div><h3>{p.name}</h3><p>{p.units} {t('sold')}</p><strong>{money(p.salesCents)} <small>{t("sales")}</small></strong></div></Link>)}</div>{data&&!data.products.some(p=>p.units>0)&&<p className="portal-empty">{t("Your best-selling items will appear after completed payments.")}</p>}</section>
  <section className="portal-card"><div className="portal-section-head"><h2>{t('Store products')}</h2><Link to="/seller/products">{t("Manage")}</Link></div><div className="portal-product-list">{products.slice(0,limit).map(p=><Link to={p.isPublished?`/products/${p.id}`:'/seller/products'} className="portal-product-row" key={p.id}><img src={p.imageUrl} alt="" loading="lazy"/><div><h3>{p.name}</h3><p>{p.category}</p><strong>{money(Math.round(p.price*100))}</strong></div></Link>)}</div>{products.length>limit&&<button className="portal-load-more" onClick={()=>setLimit(n=>n+24)}>{t("Show more products")}</button>}{!products.length&&<Link className="portal-empty" to="/seller/warehouse">{t("Browse the warehouse to add products.")}</Link>}</section>{data?.dates?.establishedOn&&<div className="portal-dates"><StoreDates {...data.dates}/></div>}
- {data?.dates&&<details className="portal-card">
-  <summary className="cursor-pointer font-semibold">{t("Account and store dates")}</summary>
-  <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-   <div className="flex items-center gap-3">
-    <CalendarDays className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
-    <div><dt className="text-xs text-slate-600">{t("Account created")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.accountCreatedAt)}</dd></div>
-   </div>
-   <div className="flex items-center gap-3">
-    <Store className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
-    <div><dt className="text-xs text-slate-600">{t("Store created")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.storeCreatedAt)}</dd></div>
-   </div>
-   {data.dates.approvedAt&&<div className="flex items-center gap-3">
-    <BadgeCheck className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
-    <div><dt className="text-xs text-slate-600">{t("Seller approved")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.approvedAt)}</dd></div>
-   </div>}
-  </dl>
- </details>}
  </SellerWorkspace>
 }

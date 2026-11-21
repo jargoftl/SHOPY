@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS seller_profiles (
   );
 ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS established_on DATE;
 ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS historical_items_sold BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS last_viewed_at TIMESTAMPTZ;
 ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS historical_rating_count BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS historical_rating_average NUMERIC(3,2);
 

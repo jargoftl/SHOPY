@@ -19,11 +19,15 @@ type HistoricalStoreFigures = {
  itemsSold: number
  ratingCount: number
  ratingAverage: number | null
+ visitors?: number
+ lastViewedAt?: string | null
 }
 
 function validHistoricalFigures(value: unknown): value is HistoricalStoreFigures {
  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
- const { followers, itemsSold, ratingCount, ratingAverage } = value as HistoricalStoreFigures
+ const { followers, itemsSold, ratingCount, ratingAverage, visitors, lastViewedAt } = value as HistoricalStoreFigures
+ if(visitors!==undefined&&(!Number.isSafeInteger(visitors)||visitors<0||visitors>1000000000))return false
+ if(lastViewedAt!==undefined&&lastViewedAt!==null&&(typeof lastViewedAt!=='string'||!Number.isFinite(Date.parse(lastViewedAt))))return false
  if (![followers, itemsSold, ratingCount].every(count => Number.isSafeInteger(count) && count >= 0 && count <= 1000000000)) return false
  return ratingCount === 0 ? ratingAverage === null :
   typeof ratingAverage === 'number' && ratingAverage >= 1 && ratingAverage <= 5 && /^\d(?:\.\d{1,2})?$/.test(String(ratingAverage))
@@ -31,9 +35,10 @@ function validHistoricalFigures(value: unknown): value is HistoricalStoreFigures
 
 async function historicalStoreFigures(db: Database, id: number): Promise<HistoricalStoreFigures | undefined> {
  const row = await db.prepare(`SELECT follower_count AS followers, historical_items_sold AS itemsSold,
-  historical_rating_count AS ratingCount, historical_rating_average AS ratingAverage
+  historical_rating_count AS ratingCount, historical_rating_average AS ratingAverage,
+  visitor_count AS visitors, last_viewed_at AS lastViewedAt
   FROM seller_profiles WHERE user_id=?`).get(id) as HistoricalStoreFigures | undefined
- return row && { ...row, ratingAverage: row.ratingAverage === null ? null : Number(row.ratingAverage) }
+ return row && { ...row, lastViewedAt: row.lastViewedAt ? new Date(row.lastViewedAt).toISOString() : null, ratingAverage: row.ratingAverage === null ? null : Number(row.ratingAverage) }
 }
 
 export function registerStoreDates(app:Express,db:Database,auth:RequestHandler){
@@ -55,10 +60,13 @@ export function registerStoreDates(app:Express,db:Database,auth:RequestHandler){
    if(previous.establishedOn!==expected)return 409
    if(historical!==undefined){
     const old=await historicalStoreFigures(db,id)
-    if(!old||Object.entries(old).some(([key,value])=>expectedHistorical[key]!==value))return 409
+    if(!old||Object.entries(old).some(([key,value])=> !['visitors','lastViewedAt'].includes(key)&&expectedHistorical[key]!==value))return 409
     await db.prepare(`UPDATE seller_profiles SET follower_count=?,historical_items_sold=?,
       historical_rating_count=?,historical_rating_average=? WHERE user_id=?`)
       .run(historical.followers,historical.itemsSold,historical.ratingCount,historical.ratingAverage,id)
+    if(historical.visitors!==undefined)await db.prepare('UPDATE seller_profiles SET visitor_count=? WHERE user_id=?').run(historical.visitors,id)
+    if(historical.lastViewedAt!==undefined)await db.prepare('UPDATE seller_profiles SET last_viewed_at=?::timestamptz WHERE user_id=?').run(historical.lastViewedAt,id)
+
    }
    await setStoreEstablishedDate(db,id,req.user!.id,date,previous.establishedOn,reason)
    return 200

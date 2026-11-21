@@ -27,6 +27,13 @@ export default function AdminStoreDates({userId,showDateHistory=true}){
   const counts=Object.fromEntries(countFields.map(([name])=>[name,Number(fields.get(name))]))
   const average=String(fields.get('ratingAverage')).trim()
   const historical={...counts,ratingAverage:average?Number(average):null}
+  const visitors=Number(fields.get('visitors'))
+  const lastViewed=String(fields.get('lastViewedAt'))
+  const parsedLastView=lastViewed?Date.parse(lastViewed+'+01:00'):null
+  if(parsedLastView!==null&&!Number.isFinite(parsedLastView)){setError('Enter a valid last-viewed date and time.');return}
+  const lastViewedAt=parsedLastView===null?null:new Date(parsedLastView).toISOString()
+  if(visitors!==data.historical.visitors)historical.visitors=visitors
+  if((lastViewedAt?.slice(0,16)??null)!==(data.historical.lastViewedAt?.slice(0,16)??null))historical.lastViewedAt=lastViewedAt
   setBusy(true)
   setError('')
   setNotice('')
@@ -36,14 +43,14 @@ export default function AdminStoreDates({userId,showDateHistory=true}){
     historical,expectedHistorical:data.historical
    })})
    setData(result)
-   setNotice('Historical store records saved.')
+   setNotice('Store records and visitor stats saved.')
   }catch(error){setError(error.message)}
   finally{setBusy(false)}
  }
 
- return <section className="rounded-xl border border-slate-200 bg-white p-5 text-black">
-  <h2 className="font-semibold">Historical store records</h2>
-  <p className="mt-2 text-sm text-slate-600">Enter the store’s records from before it joined SHOPY. The storefront combines these figures with activity on SHOPY.</p>
+ return <section id="store-records" className="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-5 text-black">
+  <h2 className="font-semibold">Store records and visitor stats</h2>
+  <p className="mt-2 text-sm text-slate-600">Update historical followers, sales and ratings, plus the store’s total visits and last-viewed time.</p>
   {error&&<p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
   {data&&<>
    <form key={userId} onSubmit={submit} className="mt-4">
@@ -56,6 +63,12 @@ export default function AdminStoreDates({userId,showDateHistory=true}){
      </label>)}
      <label className="text-sm font-medium">Historical average rating (out of 5)
       <input name="ratingAverage" type="number" min="1" max="5" step="0.01" defaultValue={data.historical.ratingAverage??''} className={field}/>
+     </label>
+     <label className="text-sm font-medium">Total store visits
+      <input name="visitors" type="number" min="0" max="1000000000" step="1" required defaultValue={data.historical.visitors??0} className={field}/>
+     </label>
+     <label className="text-sm font-medium">Last viewed (Lagos time)
+      <input name="lastViewedAt" type="datetime-local" defaultValue={data.historical.lastViewedAt?new Date(Date.parse(data.historical.lastViewedAt)+3600000).toISOString().slice(0,16):''} className={field}/>
      </label>
      <p className="self-end text-xs text-slate-600">Enter both rating fields to include past ratings. If there are no historical ratings, use a count of 0 and leave the average blank.</p>
      <button type="submit" className="w-fit rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy?'Saving…':'Save store records'}</button>

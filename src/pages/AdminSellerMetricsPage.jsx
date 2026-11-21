@@ -94,6 +94,12 @@ const AdminSellerMetricsPage = () => {
     return () => { isCurrent = false }
   }, [selectedSellerId])
 
+  useEffect(() => {
+    if (location.hash === '#store-records' && selectedSellerId && loadedMetricsSellerId === selectedSellerId) {
+      document.getElementById('store-records')?.scrollIntoView({ block: 'start' })
+    }
+  }, [location.hash, selectedSellerId, loadedMetricsSellerId])
+
   const sellerProducts = products.filter((product) => product.sellerId === Number(selectedSellerId))
   const selectedSeller = sellers.find((seller) => seller.id === Number(selectedSellerId))
 
