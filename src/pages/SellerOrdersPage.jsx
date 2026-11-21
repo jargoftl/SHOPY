@@ -68,36 +68,42 @@ const SellerOrdersPage = () => {
   }
   const query=search.trim().replace(/^#/,'').toLowerCase()
   const visible = orders.filter(order=>(!query||[formatOrderReference(order),order.orderNumber,order.id,order.buyerName,...order.items.map(i=>i.name)].some(v=>String(v).toLowerCase().includes(query)))&&(filter==='all'||order.sellers[0]?.status===filter)&&(paymentFilter==='all'||order.status===paymentFilter)&&(orderTab==='all'||(orderTab==='paid'?order.sellers[0]?.releaseStatus==='released':!order.sellers[0]?.releaseStatus)))
-  return <main className="seller-portal seller-orders account-workspace min-h-screen bg-[#f7f7f7] px-5 py-8 text-[#111111]"><div className="mx-auto max-w-6xl"><div className="flex flex-wrap justify-between gap-3"><div><Link to="/seller" className="text-sm text-[#555555]">← Dashboard</Link><h1 className="mt-3 text-3xl font-semibold">Shop orders</h1><p className="mt-2 text-sm text-[#555555]">Track paid orders, update shipments and view delivery history.</p></div><div className="flex items-start gap-4"><Link to="/messages" className="text-sm underline">Contact support</Link><SellerNotificationBell /></div></div>
+  return <main className="seller-portal seller-orders account-workspace min-h-screen bg-[#f7f7f7] px-3 py-6 sm:px-5 sm:py-8 text-[#111111]"><div className="mx-auto max-w-6xl"><div className="flex flex-wrap justify-between gap-3"><div><Link to="/seller" className="text-sm text-[#555555]">← Dashboard</Link><h1 className="mt-3 text-3xl font-semibold">Shop orders</h1><p className="mt-2 text-sm text-[#555555]">Track paid orders, update shipments and view delivery history.</p></div><div className="flex items-start gap-4"><Link to="/messages" className="text-sm underline">Contact support</Link><SellerNotificationBell /></div></div>
     <nav aria-label="Order groups" className="portal-order-tabs">{[['all','All orders'],['pending','Pending'],['paid','Purchased'],['history','Sales history']].map(([value,label])=><button key={value} aria-pressed={orderTab===value} onClick={()=>setOrderTab(value)}>{label}</button>)}</nav>
     {orderTab==='history'?<div className="mt-6"><HistoricalSalesHistory/></div>:<>
-    <div className="mt-7 grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-[1fr_1fr_1fr_auto]"><label className="text-xs">Order number<input value={search} onChange={(event) => setSearch(event.target.value)} className="mt-2 block min-h-11 w-full rounded-lg border border-[#e5e5e5] p-2 text-sm" placeholder="Search name, product or order number" /></label><label className="text-xs">Payment status<select value={paymentFilter} onChange={e=>setPaymentFilter(e.target.value)} className="mt-2 block min-h-11 w-full rounded-lg border border-[#e5e5e5] bg-white p-2 text-sm"><option value="all">All</option>{['paid','awaiting_quote','awaiting_receipt','awaiting_review','rejected'].map(value=><option key={value} value={value}>{paymentStatusLabel(value)}</option>)}</select></label><label className="text-xs">Shipment status<select value={filter} onChange={(event) => setFilter(event.target.value)} className="mt-2 block min-h-11 w-full rounded-lg border border-[#e5e5e5] bg-white p-2 text-sm"><option value="all">All</option>{fulfillmentOptions.map(([status, label]) => <option key={status} value={status}>{label}</option>)}</select></label><button onClick={() => { setSearch(''); setFilter('all'); setPaymentFilter('all'); setOrderTab('all'); setReload((value) => value + 1); }} className="border border-[#e5e5e5] px-4 py-2 text-xs">Reset / refresh</button></div>
+    <div className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"><label className="text-xs">Order number<input value={search} onChange={(event) => setSearch(event.target.value)} className="mt-2 block min-h-11 w-full rounded-lg border border-[#e5e5e5] p-2 text-sm" placeholder="Search name, product or order number" /></label><label className="text-xs">Payment status<select value={paymentFilter} onChange={e=>setPaymentFilter(e.target.value)} className="mt-2 block min-h-11 w-full rounded-lg border border-[#e5e5e5] bg-white p-2 text-sm"><option value="all">All</option>{['paid','awaiting_quote','awaiting_receipt','awaiting_review','rejected'].map(value=><option key={value} value={value}>{paymentStatusLabel(value)}</option>)}</select></label><label className="text-xs">Shipment status<select value={filter} onChange={(event) => setFilter(event.target.value)} className="mt-2 block min-h-11 w-full rounded-lg border border-[#e5e5e5] bg-white p-2 text-sm"><option value="all">All</option>{fulfillmentOptions.map(([status, label]) => <option key={status} value={status}>{label}</option>)}</select></label><button onClick={() => { setSearch(''); setFilter('all'); setPaymentFilter('all'); setOrderTab('all'); setReload((value) => value + 1); }} className="border border-[#e5e5e5] px-4 py-2 text-xs">Reset / refresh</button></div>
     {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
-    {loading ? <ContentPlaceholder/> : <div className="mt-5 overflow-x-auto rounded-xl border bg-white">
-     <table className="w-full min-w-[900px] text-left text-sm">
-      <thead className="bg-slate-100 text-xs text-slate-700"><tr>
-       {['Order no.', 'Consignee name', 'Product amount', 'Estimated profit', 'Payment status', 'Purchase status', 'Logistics status', 'Order time', 'Operation'].map(label=><th key={label} scope="col" className="px-3 py-3">{label}</th>)}
-      </tr></thead>
-      <tbody>{visible.map(order=>{
-       const shipment=order.sellers[0]
-       const profit=order.subtotalCents-Math.round(order.subtotalCents*100/115)
-       return <tr key={order.id} className="border-t border-slate-200 even:bg-slate-50">
-        <th scope="row" className="px-3 py-3 font-semibold">{formatOrderReference(order)}</th>
-        <td className="px-3">{order.buyerName}</td><td className="px-3">{formatMoney(order.subtotalCents)}</td>
-        <td className="px-3">{formatMoney(profit)}</td>
-        <td className="px-3"><OrderStatusBadge status={order.status} label={paymentStatusLabel(order.status)}/></td>
-        <td className="px-3">{shipment?.releaseStatus==='released'?'Purchased':shipment?.releaseStatus==='reversed'?'Reversed':'Pending'}</td>
-        <td className="px-3">{shipment?fulfillmentLabel(shipment.status):'—'}</td>
-        <td className="px-3">{formatTimestamp(order.createdAt)}</td>
-        <td className="px-3"><select aria-label={`Operation for ${formatOrderReference(order)}`} value="" onChange={event=>openOrder(order,event.target.value)} className="rounded-lg border bg-white p-2">
-         <option value="" disabled>Operation</option><option value="view">View order</option>
-         {canPurchase(order)&&<option value="purchase">Purchase</option>}
-        </select></td>
-       </tr>
-      })}</tbody>
-     </table>
-     {!visible.length&&<p className="p-6 text-center text-sm text-slate-600">No matching orders.</p>}
-    </div>}
+    {loading ? <ContentPlaceholder/> : <ul className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-2" aria-label="Shop orders">
+     {visible.map(order=>{
+      const shipment=order.sellers[0]
+      const profit=order.subtotalCents-Math.round(order.subtotalCents*100/115)
+      const fields=[
+       ['Consignee name',order.buyerName||'—'],
+       ['Order time',formatTimestamp(order.createdAt)],
+       ['Product amount',formatMoney(order.subtotalCents)],
+       ['Estimated profit',formatMoney(profit)],
+       ['Purchase status',shipment?.releaseStatus==='released'?'Purchased':shipment?.releaseStatus==='reversed'?'Reversed':'Pending'],
+       ['Logistics status',shipment?fulfillmentLabel(shipment.status):'—'],
+      ]
+      return <li key={order.id} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+       <div className="flex flex-wrap items-start justify-between gap-2">
+        <h2 className="min-w-0 break-words text-base font-semibold">Order {formatOrderReference(order)}</h2>
+        <OrderStatusBadge status={order.status} label={paymentStatusLabel(order.status)}/>
+       </div>
+       <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4 rounded-xl bg-slate-50 p-3">
+        {fields.map(([label,value])=><div key={label} className="min-w-0">
+         <dt className="text-xs font-medium text-slate-600">{label}</dt>
+         <dd className="mt-1 break-words text-sm font-semibold text-slate-900">{value}</dd>
+        </div>)}
+       </dl>
+       <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" onClick={()=>openOrder(order,'view')} className="min-h-11 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-900">View order</button>
+        {canPurchase(order)&&<button type="button" onClick={()=>openOrder(order,'purchase')} className="min-h-11 rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white">Purchase</button>}
+       </div>
+      </li>
+     })}
+     {!visible.length&&<li className="rounded-xl border bg-white p-6 text-center text-sm text-slate-600 xl:col-span-2">No matching orders.</li>}
+    </ul>}
     <dialog ref={dialog} onClose={()=>{setSelected(null);setConfirmError('')}} aria-labelledby="shop-order-title" className="m-auto max-h-[90dvh] w-[min(94vw,720px)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-slate-900/60">
      {selected&&(()=>{
       const order=orders.find(entry=>entry.id===selected.id)
