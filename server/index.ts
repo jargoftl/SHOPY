@@ -1501,6 +1501,10 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
     FROM notifications WHERE user_id = ? AND type<>'message'
     ORDER BY id DESC LIMIT 100
   `, req.user!.id)).map((notification) => {
+    if (notification.type === 'purchase' && notification.link?.startsWith('/seller/orders?') && notification.body.startsWith('Paid from the buyer’s account balance.')) {
+      notification.body = 'Paid'
+    }
+
     if (notification.type === 'wallet' && ['/seller/wallet', '/profile/wallet'].includes(notification.link) && notification.title === 'Admin funding added') {
       const amount = notification.body.match(/^\$[0-9]+\.[0-9]{2}(?= credited to your (?:seller wallet|account balance)\.)/)?.[0]
       notification.title = 'Credited to wallet'

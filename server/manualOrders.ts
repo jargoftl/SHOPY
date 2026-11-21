@@ -255,7 +255,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       for (const item of snapshots) { await insert.run(orderId, item.product.seller_id, item.product.id, item.product.name, item.product.image_url, Math.round(item.product.price * 100), item.quantity, item.color, item.size); await seller.run(orderId, item.product.seller_id) }
       for (const sellerId of new Set(snapshots.map((item) => item.product.seller_id))) {
         await recordShipmentEvent(db,orderId,sellerId,'pending',req.user!.id,req.user!.role,'Order placed')
-        await notify.run(sellerId, 'purchase', `New order #${number}`, useBalance ? 'Paid from the buyer’s account balance. Confirm the order to begin fulfillment.' : 'Payment is pending confirmation. Do not fulfill until the administrator confirms payment.', `/seller/orders?order=${number}`)
+        await notify.run(sellerId, 'purchase', `New order #${number}`, useBalance ? 'Paid' : 'Payment is pending confirmation. Do not fulfill until the administrator confirms payment.', `/seller/orders?order=${number}`)
       }
       await db.prepare("INSERT INTO notifications (user_id,type,title,body,link) SELECT id,'purchase',?,?,? FROM users WHERE role='admin'").run(`Order #${number} created`, useBalance ? `${req.user!.full_name} paid from their account balance. The store owner or administrator can confirm fulfillment.` : `${req.user!.full_name} selected ${coin}.`, `/admin?order=${number}#purchase-orders`)
       return { id: orderId, created: true }

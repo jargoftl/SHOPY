@@ -4,6 +4,17 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Bell, X } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 
+const isSellerOrder = item => item.type === 'purchase' && item.link?.startsWith('/seller/orders')
+
+function readShownOrders(key) {
+  try {
+    const ids = JSON.parse(localStorage.getItem(key) || '[]')
+    return new Set(Array.isArray(ids) ? ids : [])
+  } catch {
+    return new Set()
+  }
+}
+
 export default function OrderNotifications() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -32,14 +43,23 @@ export default function OrderNotifications() {
         if (!active||scope!==tabScope()) return
         setUnread(data.unreadCount)
         setError('')
+        const shownKey = `seller-order-popups:${account.id}`
+        const shownOrders = account.role === 'seller' ? readShownOrders(shownKey) : new Set()
         const fresh = data.notifications.filter((item) => {
+          if (isSellerOrder(item) && shownOrders.has(item.id)) return false
           if (item.isRead || seen.current.has(item.id)) return false
           if (item.type === 'reward') return true
           return item.type === 'purchase' && (item.link?.startsWith('/purchase/') || item.link === '/orders' || (account.role === 'seller' && item.link?.startsWith('/seller/orders')) || (account.role === 'admin' && item.link?.startsWith('/admin') && item.link.endsWith('#purchase-orders')))
         })
         if (fresh.length) {
-          seen.current.add(fresh[0].id)
-          setToast({ title: fresh[0].title, body: fresh[0].body, link: fresh[0].link, linkLabel: fresh[0].type === 'reward' ? 'View balance' : 'View order' })
+          const item = fresh[0]
+          seen.current.add(item.id)
+          if (account.role === 'seller' && isSellerOrder(item)) {
+            shownOrders.add(item.id)
+            try { localStorage.setItem(shownKey, JSON.stringify([...shownOrders].slice(-200))) } catch { /* In-memory tracking still applies. */ }
+          }
+          const body = isSellerOrder(item) && item.body.startsWith('Paid from the buyer’s account balance.') ? 'Paid' : item.body
+          setToast({ title: item.title, body, link: item.link, linkLabel: item.type === 'reward' ? 'View balance' : 'View order' })
         }
       } catch (err) {
         if (!active||scope!==tabScope()) return
