@@ -182,4 +182,22 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  r=await post('/api/admin/seller-finance/requests/'+duplicateProofId,{action:'confirm',verified:true},cookie,'PATCH')
  check('the same proof cannot credit a second deposit without a transfer reference',r.status===409&&r.data.error.includes('already been credited'),r)
 
+ r=await newWithdrawal(110)
+ const singlePending=r.data.id
+ const accountQueue=(await req('/api/admin/seller-finance?view=withdrawal&sellerId='+sellerId,{},cookie)).data
+ check('account tab loads its own accepted and pending payments',accountQueue.accounts.some(account=>account.id===sellerId&&account.name&&account.email)&&accountQueue.requests.every(request=>request.seller_id===sellerId)&&accountQueue.requests.some(request=>request.id===approvalId)&&accountQueue.requests.some(request=>request.id===singlePending))
+ const beforeRemoval=(await req('/api/seller/finance',{},seller)).data.wallet
+ const removePath=id=>'/api/admin/seller-finance/requests/'+id+'/archive'
+ r=await post(removePath(approvalId),{},seller);check('seller cannot remove a payment record',r.status===403,r)
+ r=await post(removePath(singlePending),{},cookie);check('removing a pending payment requires unsent confirmation',r.status===409,r)
+ r=await post(removePath(approvalId),{},cookie);check('admin can remove one accepted payment from history',r.status===200,r)
+ const withoutAccepted=(await req('/api/seller/finance',{},seller)).data
+ check('accepted removal hides the payment and debit without changing balances',!withoutAccepted.requests.some(request=>request.id===approvalId)&&!withoutAccepted.records.some(record=>record.displayReference===accepted.transaction_ref)&&JSON.stringify(withoutAccepted.wallet)===JSON.stringify(beforeRemoval))
+ const originalStatus=(await db.query('SELECT status,archived_at,archived_by FROM shop.seller_wallet_requests WHERE id=$1',[approvalId])).rows[0]
+ check('accepted removal preserves original payment status and records who archived it',originalStatus.status==='confirmed'&&originalStatus.archived_at&&originalStatus.archived_by)
+ r=await post(removePath(singlePending),{confirmUnsent:true},cookie);check('admin can remove one pending payment',r.status===200,r)
+ r=await post(removePath(singlePending),{confirmUnsent:true},cookie);check('single payment removal can be retried safely',r.status===200,r)
+ const withoutPending=(await req('/api/seller/finance',{},seller)).data
+ check('removing a pending withdrawal releases its hold once',!withoutPending.requests.some(request=>request.id===singlePending)&&withoutPending.wallet.reservedCents===beforeRemoval.reservedCents-110&&withoutPending.wallet.balanceCents===beforeRemoval.balanceCents)
+
 }

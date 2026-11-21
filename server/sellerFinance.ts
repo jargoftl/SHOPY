@@ -84,15 +84,15 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
   await reviewNotice('Withdrawal requested','A withdrawal is ready for review.','withdrawals')
   return result.lastInsertRowid
  }
- const requests=async(seller?:number,kind?:'deposit'|'withdrawal')=>{
- const where=seller!==undefined?'AND r.seller_id=?':kind?'AND r.kind=?':''
- const params=seller!==undefined?[seller]:kind?[kind]:[]
+ const requests=async(seller?:number,kind?:'deposit'|'withdrawal',account?:number,before?:number)=>{
+ const where=[seller!==undefined||account!==undefined?'AND r.seller_id=?':'',kind?'AND r.kind=?':'',before!==undefined?'AND r.id<?':''].join(' ')
+ const params=[seller??account,kind,before].filter(value=>value!==undefined)
  const rows=await db.prepare(`SELECT r.*,u.public_id AS sellerPublicId,${seller===undefined?'u.full_name AS sellerName,u.email AS sellerEmail,':''}COALESCE(p.store_name,u.full_name) AS storeName,
  (SELECT id FROM seller_wallet_receipts WHERE request_id=r.id) AS receiptId,
  EXISTS(SELECT 1 FROM seller_sale_releases release JOIN purchase_refunds refund
  ON refund.order_id=release.order_id AND refund.seller_id=release.seller_id
  WHERE release.withdrawal_request_id=r.id AND refund.status<>'rejected') AS refundPending
- FROM seller_wallet_requests r JOIN users u ON u.id=r.seller_id LEFT JOIN seller_profiles p ON p.user_id=r.seller_id WHERE r.archived_at IS NULL ${where} ORDER BY ${seller===undefined?"CASE WHEN r.status IN ('awaiting_review','awaiting_transfer','requested') THEN 0 ELSE 1 END, ":''}r.id DESC LIMIT 200`).all(...params)
+ FROM seller_wallet_requests r JOIN users u ON u.id=r.seller_id LEFT JOIN seller_profiles p ON p.user_id=r.seller_id WHERE r.archived_at IS NULL ${where} ORDER BY ${seller===undefined&&account===undefined?"CASE WHEN r.status IN ('awaiting_review','awaiting_transfer','requested') THEN 0 ELSE 1 END, ":''}r.id DESC LIMIT 200`).all(...params)
  return (rows as Array<WalletRequest & {qr_image: string | null, qr_content_type: string | null}>).map(({qr_image,qr_content_type,...request})=>({...request,hasQr:Boolean(qr_image&&qr_content_type)}))
  }
  const sales=async(seller?:number)=>db.prepare(`SELECT o.id AS orderId,n.number AS orderNumber,i.seller_id AS sellerId,u.public_id AS sellerPublicId,
@@ -146,7 +146,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  }))
  app.get('/api/seller/finance',auth,role('seller','admin'),protectedRoute(async(req,res)=>{
  const wallet=await db.prepare('SELECT balance_cents AS balanceCents,reserved_cents AS reservedCents FROM seller_wallets WHERE seller_id=?').get(req.user!.id)||{balanceCents:0,reservedCents:0}
- res.set('Cache-Control','no-store').json({wallet,depositWallets:(await configuredWallets()).map(({coin,network})=>({coin,network})),sales:(await sales(req.user!.id)).map(userFinanceEntry),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:(await requests(req.user!.id)).map(userFinanceEntry),records:(await db.prepare("SELECT f.*,COALESCE(q.transaction_ref,f.transaction_ref) AS displayReference,q.resolved_at AS resolvedAt,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN seller_wallet_requests q ON f.kind IN ('deposit','withdrawal') AND q.seller_id=f.seller_id AND q.id::text=f.reference LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? ORDER BY f.id DESC LIMIT 1000").all(req.user!.id)).map(userFinanceEntry)})
+ res.set('Cache-Control','no-store').json({wallet,depositWallets:(await configuredWallets()).map(({coin,network})=>({coin,network})),sales:(await sales(req.user!.id)).map(userFinanceEntry),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:(await requests(req.user!.id)).map(userFinanceEntry),records:(await db.prepare("SELECT f.*,COALESCE(q.transaction_ref,f.transaction_ref) AS displayReference,q.resolved_at AS resolvedAt,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN seller_wallet_requests q ON f.kind IN ('deposit','withdrawal') AND q.seller_id=f.seller_id AND q.id::text=f.reference LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? AND q.archived_at IS NULL ORDER BY f.id DESC LIMIT 1000").all(req.user!.id)).map(userFinanceEntry)})
  }))
  app.post('/api/seller/finance/requests',auth,role('seller'),rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many wallet attempts. Please try again later.'}}),protectedRoute(async(req,res)=>{
  const {kind,coin,amountCents,requestKey}=req.body||{}
@@ -217,12 +217,45 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  const view=req.query.view
  res.set('Cache-Control','no-store')
  if(view==='deposit'||view==='withdrawal'){
-  res.json({requests:await requests(undefined,view),paymentWallets:view==='deposit'?(await configuredWallets()).map(({coin,network,address,usd_rate})=>({coin,network,address,usd_rate})):[]})
+  const account=req.query.sellerId===undefined?undefined:Number(req.query.sellerId)
+  const before=req.query.before===undefined?undefined:Number(req.query.before)
+  if([account,before].some(value=>value!==undefined&&(!Number.isSafeInteger(value)||value<1))||(before!==undefined&&account===undefined)){
+   return void res.status(400).json({error:'Choose a valid account and history page.'})
+  }
+  const queue=await requests(undefined,view,account,before)
+  const accounts=await db.prepare(`SELECT u.id,u.full_name AS name,u.email FROM users u
+   WHERE EXISTS(SELECT 1 FROM seller_wallet_requests r WHERE r.seller_id=u.id AND r.kind=?)
+   ORDER BY lower(u.full_name),u.id`).all(view)
+  res.json({requests:queue,accounts,nextBefore:account!==undefined&&queue.length===200?queue.at(-1)?.id:null,
+   paymentWallets:view==='deposit'?(await configuredWallets()).map(({coin,network,address,usd_rate})=>({coin,network,address,usd_rate})):[]})
   return
  }
  const wallets=await db.prepare('SELECT w.*,u.public_id AS publicId,u.full_name AS name FROM seller_wallets w JOIN users u ON u.id=w.seller_id ORDER BY seller_id').all()
  if(view==='sales'){res.json({sales:await sales(),wallets});return}
  res.json({requests:await requests(),sales:await sales(),wallets,paymentWallets:(await configuredWallets()).map(({coin,network,address,usd_rate})=>({coin,network,address,usd_rate}))})
+ }))
+ // Called inside a transaction so that hiding a pending withdrawal also releases its hold.
+ const archiveRequest=async(request:WalletRequest,actor:number)=>{
+  if(request.kind==='withdrawal'&&request.status==='awaiting_transfer'){
+   await postSellerFunds(db,request.seller_id,'withdrawal_rejected',String(request.id),0,-request.amount_cents,actor)
+  }
+  await db.prepare(`UPDATE seller_wallet_requests SET
+   status=CASE WHEN status='confirmed' THEN status ELSE 'rejected' END,
+   archived_at=CURRENT_TIMESTAMP,archived_by=? WHERE id=?`).run(actor,request.id)
+ }
+ app.post('/api/admin/seller-finance/requests/:id/archive',auth,role('admin'),protectedRoute(async(req,res)=>{
+  const id=Number(req.params.id)
+  if(!Number.isSafeInteger(id)||id<1)return void res.status(404).json({error:'Request not found.'})
+  const found=await db.transaction(async()=>{
+   const request=await db.prepare('SELECT id,seller_id,kind,status,amount_cents,archived_at FROM seller_wallet_requests WHERE id=?').get(id) as (WalletRequest&{archived_at:string|null})|undefined
+   if(!request)return false
+   if(request.archived_at)return true
+   if(!['confirmed','rejected'].includes(request.status)&&req.body?.confirmUnsent!==true)fail('Confirm that funds have not been transferred before removing this pending payment.')
+   await archiveRequest(request,req.user!.id)
+   return true
+  })()
+  if(!found)return void res.status(404).json({error:'Request not found.'})
+  res.json({ok:true})
  }))
  app.post('/api/admin/seller-finance/requests/archive',auth,role('admin'),protectedRoute(async(req,res)=>{
  const {kind,sellerId,confirmUnsent}=req.body||{}
@@ -233,15 +266,9 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  const archived=await db.transaction(async()=>{
   const scope=sellerId===undefined?'':'AND seller_id=?'
   const params=sellerId===undefined?[kind]:[kind,sellerId]
-  const rows=await db.prepare(`SELECT id,seller_id,status,amount_cents FROM seller_wallet_requests
+  const rows=await db.prepare(`SELECT id,seller_id,kind,status,amount_cents FROM seller_wallet_requests
    WHERE kind=? AND archived_at IS NULL AND status<>'confirmed' ${scope}`).all(...params) as WalletRequest[]
-  for(const request of rows){
-   if(kind==='withdrawal'&&request.status==='awaiting_transfer'){
-    await postSellerFunds(db,request.seller_id,'withdrawal_rejected',String(request.id),0,-request.amount_cents,req.user!.id)
-   }
-   await db.prepare(`UPDATE seller_wallet_requests SET status='rejected',archived_at=CURRENT_TIMESTAMP,archived_by=?,
-    updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(req.user!.id,request.id)
-  }
+  for(const request of rows)await archiveRequest(request,req.user!.id)
   return rows.length
  })()
  res.json({archived})
