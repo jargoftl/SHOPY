@@ -1,3 +1,4 @@
+import { getCountries, getCountryCallingCode, parsePhoneNumberFromString } from 'libphonenumber-js/min'
 import SiteName from '../components/SiteName.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -5,12 +6,21 @@ import { useCart } from '../context/CartContext.jsx'
 import { apiRequest, trackedFetch } from '../lib/api.js'
 import { applyBillingAddress, mergeBillingDefaults } from '../lib/billingDefaults.js'
 
+const regionNames = new Intl.DisplayNames(['en'], { type: 'region' })
+const phoneCountries = getCountries().map(code => ({
+  code,
+  label: regionNames.of(code),
+  dial: getCountryCallingCode(code),
+  flag: String.fromCodePoint(...[...code].map(letter => letter.charCodeAt(0) + 127397)),
+})).sort((a, b) => a.label.localeCompare(b.label))
+
 const BillingPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const { items, subtotal } = useCart()
   const [message, setMessage] = useState('')
   const [addresses, setAddresses] = useState([])
+  const [phoneCountry,setPhoneCountry] = useState('')
   const [selectedAddressId,setSelectedAddressId] = useState('')
   const [canSaveAddress,setCanSaveAddress] = useState(false)
   const [loadingAddresses,setLoadingAddresses] = useState(true)
@@ -45,6 +55,7 @@ const BillingPage = () => {
 
   const selectAddress = (id) => {
     setSelectedAddressId(id)
+    setPhoneCountry('')
     addressFields.forEach(field => editedFields.current.add(field))
     const selected = addresses.find(address => String(address.id) === id)
     setBilling(current => selected ? {...applyBillingAddress(current, selected), phone:selected.phone || ''} : { ...current, address:'', city:'', region:'', country:'', phone:'' })
@@ -61,6 +72,18 @@ const BillingPage = () => {
     setBilling((current) => ({ ...current, [name]: value }))
   }
 
+  const detectedCountry = billing.phone?.startsWith('+') ? parsePhoneNumberFromString(billing.phone)?.country : undefined
+  const changePhoneCountry = (event) => {
+    const code = event.target.value
+    const phone = billing.phone || ''
+    const currentPrefix = phoneCountries.find(country => country.code === (phoneCountry || detectedCountry))?.dial
+    const national = phone.startsWith('+')
+      ? parsePhoneNumberFromString(phone)?.nationalNumber || (currentPrefix ? phone.slice(currentPrefix.length + 1).trim() : '')
+      : phone
+    setPhoneCountry(code)
+    setBilling(current => ({ ...current, phone: code ? `+${getCountryCallingCode(code)} ${national}` : national }))
+  }
+
   const continueToCheckout = async (event) => {
     event.preventDefault()
     if (!items.length) {
@@ -73,6 +96,16 @@ const BillingPage = () => {
       field, String(fields[field] ?? billing[field] ?? '').trim()
     ]))
     checkoutBilling.phone = String(fields.phone ?? addresses.find(address => String(address.id) === selectedAddressId)?.phone ?? billing.phone ?? '').trim()
+    if(phoneCountry && !checkoutBilling.phone.startsWith('+')){
+      checkoutBilling.phone = parsePhoneNumberFromString(checkoutBilling.phone, phoneCountry)?.number
+        || `+${getCountryCallingCode(phoneCountry)} ${checkoutBilling.phone}`
+    }else if(checkoutBilling.phone.startsWith('+')){
+      checkoutBilling.phone = parsePhoneNumberFromString(checkoutBilling.phone)?.number || checkoutBilling.phone
+    }
+    if(/^\+\d{1,3}$/.test(checkoutBilling.phone)){
+      setMessage('Enter a phone number after the country code.')
+      return
+    }
     setSaving(true)
     setMessage('')
     try {
@@ -106,7 +139,16 @@ const BillingPage = () => {
           <form onSubmit={continueToCheckout} className="space-y-5">
             {addresses.length > 0 && <label className="block text-sm font-medium">Use a saved address<select value={selectedAddressId} onChange={(event) => selectAddress(event.target.value)} className="mt-2 h-12 w-full border border-[#cccccc] bg-white px-3 text-sm"><option value="">Add new address</option>{addresses.map((address) => <option key={address.id} value={address.id}>{address.address}, {address.city}{address.isDefault ? ' (default)' : ''}</option>)}</select></label>}
             <label className="block text-sm font-medium">Full name<input name="fullName" value={billing.fullName || ''} onChange={updateBilling} autoComplete="name" required className="mt-2 h-12 w-full rounded border px-3" /></label>
-            <label className="block text-sm font-medium">Phone number<input name="phone" type="tel" value={billing.phone || ''} onChange={updateBilling} autoComplete="tel" maxLength={40} required className="mt-2 h-12 w-full rounded border px-3" /></label>
+            <label className="block text-sm font-medium">Email address<input name="email" type="email" value={billing.email || ''} onChange={updateBilling} autoComplete="email" maxLength={200} required className="mt-2 h-12 w-full rounded border px-3" /></label>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <label className="block min-w-0 text-sm font-medium">Country calling code
+                <select value={phoneCountry || detectedCountry || ''} onChange={changePhoneCountry} className="mt-2 h-12 w-full rounded border bg-white px-3">
+                  <option value="">Choose a country</option>
+                  {phoneCountries.map(({code,label,dial,flag})=><option key={code} value={code}>{flag} {label} (+{dial})</option>)}
+                </select>
+              </label>
+              <label className="block text-sm font-medium">Phone number<input name="phone" type="tel" value={billing.phone || ''} onChange={updateBilling} autoComplete="tel" maxLength={40} required className="mt-2 h-12 w-full rounded border px-3" /></label>
+            </div>
             <label className="block text-sm font-medium">Delivery address<input name="address" value={billing.address || ''} onChange={updateBilling} autoComplete="street-address" placeholder="Enter the full delivery address" maxLength={200} required className="mt-2 h-12 w-full rounded border px-3" /></label>
             {message && <p role="alert" className="text-sm text-[#a33]">{message}</p>}
             <button type="submit" disabled={saving||loadingAddresses} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-50">{saving?'Saving address…':'Continue to checkout'}</button>
