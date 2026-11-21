@@ -21,7 +21,7 @@ const canPurchase=order=>order.status==='paid'&&order.accountBalancePayment&&ord
 
 const orderPaymentBadge = order => {
   if(order.status==='paid'&&!order.sellers[0]?.releaseStatus){
-    return {status:'pending',label:'Needs seller confirmation'}
+    return {status:'pending',label:'Confirm order'}
   }
   return {status:order.status,label:paymentStatusLabel(order.status)}
 }
