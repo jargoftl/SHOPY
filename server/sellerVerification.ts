@@ -1,3 +1,4 @@
+import {setStoreEstablishedDate,storeDates,validEstablishedDate} from './storeDates.ts'
 import {prepareSellerSsn,decryptSellerSsn,ssnStorageConfigured} from './sellerSsn.ts'
 import { randomUUID } from 'node:crypto'
 import express, { type Express, type RequestHandler } from 'express'
@@ -86,11 +87,11 @@ class ReviewError extends Error { status: number; constructor(status: number, me
 export async function registerSellerVerification(app: Express, db: Database, auth: RequestHandler, role: (...roles: Role[]) => RequestHandler) {
   app.use(['/api/seller/application','/api/admin/seller-applications','/api/seller-verification'], (_req,res,next)=>{res.set('Cache-Control','private, no-store');next()})
   const getApplication = async (id: number) => await db.prepare('SELECT * FROM seller_applications WHERE user_id=?').get(id) as Application | undefined
-  const notify = db.prepare('INSERT INTO notifications(user_id,type,title,body,link) VALUES (?,?,?,?,?)')
+  const notify = db.prepare('INSERT INTO notifications(user_id,type,title,body,link,created_at) VALUES (?,?,?,?,?,?)')
   const serialize = async (id: number) => {
     const application = await getApplication(id)
     const user = await db.prepare('SELECT id,full_name AS fullName,email,phone,role,seller_status AS sellerStatus FROM users WHERE id=?').get(id)
-    const profile = await db.prepare('SELECT store_name AS storeName,country,address,city,region,postal_code AS postalCode FROM seller_profiles WHERE user_id=?').get(id)
+    const profile = await db.prepare('SELECT store_name AS storeName,country,address,city,region,postal_code AS postalCode, established_on::text AS establishedOn FROM seller_profiles WHERE user_id=?').get(id)
     const docs = await db.prepare('SELECT id,kind,content_type AS contentType,created_at AS createdAt FROM seller_verification_documents WHERE user_id=? ORDER BY kind').all(id) as { id: string }[]
     const email = await db.prepare('SELECT status,attempts,sent_at AS sentAt,last_error AS lastError FROM seller_approval_emails WHERE user_id=? ORDER BY revision DESC LIMIT 1').get(id)
     return { application: application ? { status: application.status, revision: application.revision, consentedAt: application.consented_at, submittedAt: application.submitted_at, reviewedAt: application.reviewed_at, reviewNote: application.review_note, ssnLast4: application.ssn_last4 || null, ssnAvailable: Boolean(application.ssn_encrypted), ssnVerified: false } : null, user, profile: profile || null, documents: docs.map(doc=>({...doc,url:`/api/seller-verification/documents/${doc.id}`})), email: email || null }
@@ -128,6 +129,8 @@ export async function registerSellerVerification(app: Express, db: Database, aut
   app.patch('/api/admin/seller-applications/:id/review',auth,role('admin'),reviewedRoute(async(req,res)=>{
     const id=idValue(req.params.id),status=req.body?.status,note=(typeof req.body?.note==='string'?req.body.note.trim():'') || (status==='needs_changes'?'Changes requested.':'')
     if(!['approved','rejected','needs_changes'].includes(status)||note.length>2000) return res.status(400).json({error:'Choose a review decision.'})
+    const establishedOn=req.body?.establishedOn
+    if(establishedOn!==undefined&&(status!=='approved'||!validEstablishedDate(establishedOn)))return res.status(400).json({error:'Choose a valid original opening date.'})
     await db.transaction(async()=>{
       const application=await getApplication(id)
       if(!application)throw new ReviewError(404,'Seller application not found.')
@@ -139,11 +142,17 @@ export async function registerSellerVerification(app: Express, db: Database, aut
         const documents=await db.prepare('SELECT kind FROM seller_verification_documents WHERE user_id=?').all(id) as {kind:string}[]
         if(req.body?.reviewed!==true||kinds.some(kind=>!documents.some(d=>d.kind===kind))||!verificationPhone(applicant.phone)||applicant.suspended)throw new ReviewError(400,'Review all three photos and the phone number before approval. Suspended or admin accounts cannot be approved here.')
       }
-      await db.prepare('UPDATE seller_applications SET status=?,reviewed_at=?,reviewed_by=?,review_note=? WHERE user_id=?').run(status,stamp(),req.user!.id,note,id)
+      if(establishedOn!==undefined){
+        const dates=await storeDates(db,id)
+        if(!dates)throw new ReviewError(404,'Store not found.')
+        await setStoreEstablishedDate(db,id,req.user!.id,establishedOn,dates.establishedOn,'Original opening date supplied during seller approval')
+      }
+      const reviewedAt=stamp()
+      await db.prepare('UPDATE seller_applications SET status=?,reviewed_at=?,reviewed_by=?,review_note=? WHERE user_id=?').run(status,reviewedAt,req.user!.id,note,id)
       await db.prepare('UPDATE users SET role=?,seller_status=? WHERE id=?').run(status==='approved'?'seller':'customer',status,id)
       await db.prepare('UPDATE seller_profiles SET verification_status=? WHERE user_id=?').run(status,id)
       await db.prepare('INSERT INTO account_admin_history(user_id,admin_id,action,details) VALUES (?,?,?,?)').run(id,req.user!.id,'Seller application review',`${status}; revision ${application.revision}${note?': '+note:''}`)
-      await notify.run(id,'seller_verification',status==='approved'?'Your seller application is approved!':status==='needs_changes'?'Seller verification needs an update':'Seller application rejected',status==='approved'?'You can now open your seller dashboard.':status==='rejected'?'Your seller application was rejected.':note,'/seller/application')
+      await notify.run(id,'seller_verification',status==='approved'?'Your seller application is approved!':status==='needs_changes'?'Seller verification needs an update':'Seller application rejected',status==='approved'?'You can now open your seller dashboard.':status==='rejected'?'Your seller application was rejected.':note,'/seller/application',reviewedAt)
       if(status==='approved')await db.prepare('INSERT INTO seller_approval_emails(id,user_id,revision,next_attempt_at) VALUES (?,?,?,?) ON CONFLICT(user_id,revision) DO NOTHING').run(randomUUID(),id,application.revision,stamp())
     })()
     await deliverApprovalEmails(db)

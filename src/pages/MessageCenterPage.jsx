@@ -1,3 +1,4 @@
+import {formatTimestamp} from '../lib/storeDates.js'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import SiteName from '../components/SiteName.jsx'
 import { useEffect, useState } from 'react'
@@ -202,7 +203,7 @@ const MessageCenterPage = () => {
                     <h3 className="text-sm font-semibold">{notification.title}<span className={`ml-2 rounded px-2 py-0.5 text-[10px] ${notification.isRead?'bg-green-50 text-green-700':'bg-red-50 text-red-700'}`}>{notification.isRead?'Read':'Unread'}</span>{user?.role === 'seller' && <span className="sr-only"> · {notification.isRead ? 'Read' : 'Unread'}</span>}</h3>
                     <p className={`mt-1 text-sm ${isAdmin && !notification.isRead ? 'text-[#cccccc]' : 'text-[#666]'}`}>{notification.body}</p>
                     {notification.link && <Link to={notification.link} onClick={async (event) => { if (!notification.isRead) { event.preventDefault(); if (await markNotificationRead(notification.id)) navigate(notification.link) } }} className="mt-2 inline-block text-xs underline underline-offset-4">View details</Link>}
-                    <time className={`mt-2 block text-[10px] ${isAdmin && !notification.isRead ? 'text-[#777777]' : 'text-[#777]'}`}>{new Date(`${notification.createdAt.replace(' ', 'T')}Z`).toLocaleString()}</time>
+                    <time className={`mt-2 block text-[10px] ${isAdmin && !notification.isRead ? 'text-[#777777]' : 'text-[#777]'}`}>{formatTimestamp(notification.createdAt)}</time>
                   </div>
                   {!notification.isRead && <button type="button" onClick={() => markNotificationRead(notification.id)} className="shrink-0 text-xs underline underline-offset-4">Mark read</button>}
                 </article>
