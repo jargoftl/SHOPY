@@ -8,7 +8,7 @@ import { apiRequest } from '../../lib/api.js'
 const SellerLogin = () => {
   const navigate = useNavigate()
   const location=useLocation()
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(location.state?.sessionEnded?'Your session ended. Sign in to continue.':'')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isCheckingSession, setIsCheckingSession] = useState(true)
 

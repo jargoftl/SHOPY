@@ -1,3 +1,4 @@
+import {apiRequest} from './lib/api.js'
 import SellerAccountPage from './pages/SellerAccountPage.jsx'
 import SellerBottomNav from './components/SellerBottomNav.jsx'
 import {ShoppingCart} from 'lucide-react'
@@ -6,7 +7,7 @@ import {loadPage,preloadLink} from './lib/pagePreload.js'
 import ContentPlaceholder from './components/ContentPlaceholder.jsx'
 const SellerFinancePage=lazy(()=>loadPage('SellerFinancePage'))
 import {lazy,Suspense,useEffect,useState} from 'react'
-import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { CartProvider } from './context/CartContext.jsx'
 import MobileBottomNav from './components/store/MobileBottomNav.jsx'
 import Login from './pages/logings/Login.jsx'
@@ -229,6 +230,36 @@ function Storefront() {
 
 const AnimatedRoutes = () => {
   const location = useLocation()
+
+  const navigate=useNavigate()
+  const sellerWorkspace=(location.pathname==='/seller'||location.pathname.startsWith('/seller/'))&&
+    !['/seller/login','/seller/register','/seller/application'].includes(location.pathname.replace(/\/$/,''))
+  useEffect(()=>{
+    if(!sellerWorkspace)return
+    const controller=new AbortController()
+    let checking=false
+    async function check(){
+      if(document.hidden||checking||controller.signal.aborted)return
+      checking=true
+      try{
+        await apiRequest('/api/auth/me',{cache:'no-store',signal:controller.signal})
+      }catch(error){
+        if(!controller.signal.aborted&&error.status===401){
+          navigate('/seller/login',{replace:true,state:{sessionEnded:true}})
+        }
+      }finally{checking=false}
+    }
+    check()
+    const timer=setInterval(check,15000)
+    window.addEventListener('focus',check)
+    document.addEventListener('visibilitychange',check)
+    return()=>{
+      controller.abort()
+      clearInterval(timer)
+      window.removeEventListener('focus',check)
+      document.removeEventListener('visibilitychange',check)
+    }
+  },[sellerWorkspace,navigate])
 
   useEffect(() => {
     const events=['pointerover','focusin','touchstart']

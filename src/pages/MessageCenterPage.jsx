@@ -80,14 +80,15 @@ const MessageCenterPage = () => {
             item.sellerId === selectedSellerId ? { ...item, unreadCount: 0 } : item))
         }
       } catch (error) {
-        if (active) setMessage(error.message)
+        if (active&&error.status===401&&user.role==='seller')navigate('/seller/login',{replace:true,state:{sessionEnded:true}})
+        else if (active) setMessage(error.message)
       } finally {
         if (active) timer = setTimeout(receive, 2500)
       }
     }
     receive()
     return () => { active = false; clearTimeout(timer) }
-  }, [user?.id, user?.role, activeTab, selectedSellerId])
+  }, [user?.id, user?.role, activeTab, selectedSellerId, navigate])
 
   useEffect(() => {
     if (user?.role !== 'admin' || activeTab !== 'messages') return
