@@ -85,14 +85,14 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
   return result.lastInsertRowid
  }
  const requests=async(seller?:number,kind?:'deposit'|'withdrawal')=>{
- const where=seller!==undefined?'WHERE r.seller_id=?':kind?'WHERE r.kind=?':''
+ const where=seller!==undefined?'AND r.seller_id=?':kind?'AND r.kind=?':''
  const params=seller!==undefined?[seller]:kind?[kind]:[]
- const rows=await db.prepare(`SELECT r.*,u.public_id AS sellerPublicId,COALESCE(p.store_name,u.full_name) AS storeName,
+ const rows=await db.prepare(`SELECT r.*,u.public_id AS sellerPublicId,${seller===undefined?'u.full_name AS sellerName,u.email AS sellerEmail,':''}COALESCE(p.store_name,u.full_name) AS storeName,
  (SELECT id FROM seller_wallet_receipts WHERE request_id=r.id) AS receiptId,
  EXISTS(SELECT 1 FROM seller_sale_releases release JOIN purchase_refunds refund
  ON refund.order_id=release.order_id AND refund.seller_id=release.seller_id
  WHERE release.withdrawal_request_id=r.id AND refund.status<>'rejected') AS refundPending
- FROM seller_wallet_requests r JOIN users u ON u.id=r.seller_id LEFT JOIN seller_profiles p ON p.user_id=r.seller_id ${where} ORDER BY ${seller===undefined?"CASE WHEN r.status IN ('awaiting_review','awaiting_transfer','requested') THEN 0 ELSE 1 END, ":''}r.id DESC LIMIT 200`).all(...params)
+ FROM seller_wallet_requests r JOIN users u ON u.id=r.seller_id LEFT JOIN seller_profiles p ON p.user_id=r.seller_id WHERE r.archived_at IS NULL ${where} ORDER BY ${seller===undefined?"CASE WHEN r.status IN ('awaiting_review','awaiting_transfer','requested') THEN 0 ELSE 1 END, ":''}r.id DESC LIMIT 200`).all(...params)
  return (rows as Array<WalletRequest & {qr_image: string | null, qr_content_type: string | null}>).map(({qr_image,qr_content_type,...request})=>({...request,hasQr:Boolean(qr_image&&qr_content_type)}))
  }
  const sales=async(seller?:number)=>db.prepare(`SELECT o.id AS orderId,n.number AS orderNumber,i.seller_id AS sellerId,u.public_id AS sellerPublicId,
@@ -217,19 +217,34 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  const view=req.query.view
  res.set('Cache-Control','no-store')
  if(view==='deposit'||view==='withdrawal'){
-  const wallets=await configuredWallets()
-  const queue=await requests(undefined,view)
-  const paymentWallets=wallets.map(({coin,network,address,usd_rate})=>({coin,network,address,usd_rate}))
-  res.json({requests:queue.map(request=>{
-   if(view!=='withdrawal'||request.usd_rate||request.status!=='awaiting_transfer')return request
-   const wallet=wallets.find(wallet=>wallet.coin===request.coin&&wallet.network.toLowerCase()===request.network.toLowerCase())||wallets.find(wallet=>wallet.coin===request.coin)
-   return wallet?{...request,suggestedUsdRate:wallet.usd_rate,suggestedCoinAmount:coinAmount(request.amount_cents,wallet.usd_rate)}:request
-  }),paymentWallets})
+  res.json({requests:await requests(undefined,view),paymentWallets:view==='deposit'?(await configuredWallets()).map(({coin,network,address,usd_rate})=>({coin,network,address,usd_rate})):[]})
   return
  }
  const wallets=await db.prepare('SELECT w.*,u.public_id AS publicId,u.full_name AS name FROM seller_wallets w JOIN users u ON u.id=w.seller_id ORDER BY seller_id').all()
  if(view==='sales'){res.json({sales:await sales(),wallets});return}
  res.json({requests:await requests(),sales:await sales(),wallets,paymentWallets:(await configuredWallets()).map(({coin,network,address,usd_rate})=>({coin,network,address,usd_rate}))})
+ }))
+ app.post('/api/admin/seller-finance/requests/archive',auth,role('admin'),protectedRoute(async(req,res)=>{
+ const {kind,sellerId,confirmUnsent}=req.body||{}
+ if(!['deposit','withdrawal'].includes(kind)||confirmUnsent!==true||
+    (sellerId!==undefined&&(!Number.isSafeInteger(sellerId)||sellerId<1))){
+  return void res.status(400).json({error:'Confirm the requests have no completed transfer before clearing the queue.'})
+ }
+ const archived=await db.transaction(async()=>{
+  const scope=sellerId===undefined?'':'AND seller_id=?'
+  const params=sellerId===undefined?[kind]:[kind,sellerId]
+  const rows=await db.prepare(`SELECT id,seller_id,status,amount_cents FROM seller_wallet_requests
+   WHERE kind=? AND archived_at IS NULL AND status<>'confirmed' ${scope}`).all(...params) as WalletRequest[]
+  for(const request of rows){
+   if(kind==='withdrawal'&&request.status==='awaiting_transfer'){
+    await postSellerFunds(db,request.seller_id,'withdrawal_rejected',String(request.id),0,-request.amount_cents,req.user!.id)
+   }
+   await db.prepare(`UPDATE seller_wallet_requests SET status='rejected',archived_at=CURRENT_TIMESTAMP,archived_by=?,
+    updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(req.user!.id,request.id)
+  }
+  return rows.length
+ })()
+ res.json({archived})
  }))
  app.patch('/api/admin/seller-finance/requests/:id',auth,role('admin'),protectedRoute(async(req,res)=>{
  await db.transaction(async()=>{
@@ -245,10 +260,12 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  } else if(action==='reject') {
  if(request.kind==='withdrawal') await postSellerFunds(db,request.seller_id,'withdrawal_rejected',String(request.id),0,-request.amount_cents,req.user!.id)
  await db.prepare("UPDATE seller_wallet_requests SET status='rejected',instructions='',reviewed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(req.user!.id,request.id)
- } else if(action==='confirm') {
- if(req.body.verified!==true||!text(req.body.transferReference,300)) fail('Independently verify the transfer and enter its transaction reference.')
- const rate=request.usd_rate||text(req.body.usdRate,30)
- if(!rateValid(rate)||request.status!==(request.kind==='deposit'?'awaiting_review':'awaiting_transfer')||
+ } else if(action==='confirm'||action==='accept') {
+ const simple=action==='accept'
+ if(simple&&request.kind!=='withdrawal')fail('This request cannot be accepted here.')
+ if(!simple&&(req.body.verified!==true||!text(req.body.transferReference,300))) fail('Independently verify the transfer and enter its transaction reference.')
+ const rate=request.usd_rate||(!simple?text(req.body.usdRate,30):'')
+ if((!simple&&!rateValid(rate))||request.status!==(request.kind==='deposit'?'awaiting_review':'awaiting_transfer')||
     (request.kind==='deposit'&&!request.usd_rate)) fail('This request is not ready to confirm.')
  const recorded=req.body.recordedAt
  let resolvedAt=new Date().toISOString()
@@ -261,14 +278,18 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  if(request.kind==='withdrawal'&&await db.prepare(`SELECT 1 FROM seller_sale_releases r
   JOIN purchase_refunds f ON f.order_id=r.order_id AND f.seller_id=r.seller_id
   WHERE r.withdrawal_request_id=? AND f.status<>'rejected'`).get(request.id)) fail('Resolve the related refund before sending this withdrawal.')
- const reference=text(req.body.transferReference,300)
- if(await db.prepare('SELECT id FROM seller_wallet_requests WHERE coin=? AND network=? AND transfer_reference=?').get(request.coin,request.network,reference)) fail('That transfer has already been recorded.')
+ if(request.kind==='withdrawal'){
+  const wallet=await db.prepare('SELECT balance_cents,reserved_cents FROM seller_wallets WHERE seller_id=?').get(request.seller_id) as Wallet|undefined
+  if(!wallet||wallet.reserved_cents<request.amount_cents||wallet.balance_cents<wallet.reserved_cents)fail('The wallet no longer covers this withdrawal.')
+ }
+ const reference=simple?null:text(req.body.transferReference,300)
+ if(reference&&await db.prepare('SELECT id FROM seller_wallet_requests WHERE coin=? AND network=? AND transfer_reference=?').get(request.coin,request.network,reference)) fail('That transfer has already been recorded.')
  await postSellerFunds(db,request.seller_id,request.kind,String(request.id),request.kind==='deposit'?request.amount_cents:-request.amount_cents,request.kind==='withdrawal'?-request.amount_cents:0,req.user!.id)
- await db.prepare("UPDATE seller_wallet_requests SET status='confirmed',transfer_reference=?,usd_rate=?,coin_amount=?,resolved_at=?,reviewed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(reference,rate,request.coin_amount||coinAmount(request.amount_cents,rate),resolvedAt,req.user!.id,request.id)
- } else fail('Choose quote, confirm or reject.')
+ await db.prepare("UPDATE seller_wallet_requests SET status='confirmed',transfer_reference=?,usd_rate=?,coin_amount=?,resolved_at=?,reviewed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(reference,rate||null,request.coin_amount||(rate?coinAmount(request.amount_cents,rate):null),resolvedAt,req.user!.id,request.id)
+ } else fail('Choose accept, confirm, quote or reject.')
  const deposit=request.kind==='deposit'
  const amount=`$${(request.amount_cents/100).toFixed(2)}`
- if(action==='confirm') await notify(request.seller_id,deposit?'Wallet credited':'Wallet debited',`${amount} ${deposit?'credited to':'debited from'} your wallet.`)
+ if(action==='confirm'||action==='accept') await notify(request.seller_id,deposit?'Wallet credited':'Wallet debited',`${amount} ${deposit?'credited to':'debited from'} your wallet.`)
  else if(action==='reject') await notify(request.seller_id,deposit?'Deposit rejected':'Withdrawal rejected',deposit?'Your deposit was rejected.':'Your withdrawal was rejected and the hold was released.')
  else await notify(request.seller_id,deposit?'Deposit instructions ready':'Withdrawal details ready',deposit?'View your payment details in My wallet.':'Your withdrawal is awaiting transfer.')
  })()
