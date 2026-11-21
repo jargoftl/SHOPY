@@ -1,4 +1,4 @@
-import {Copy, QrCode, X} from 'lucide-react'
+import {ArrowDown, ArrowUp, Circle, Copy, QrCode, X} from 'lucide-react'
 import {transactionActor} from '../lib/transactionLabels.js'
 import {formatTimestamp} from '../lib/storeDates.js'
 import CryptoWalletIcon,{coinNetworks} from '../components/CryptoWalletIcon.jsx'
@@ -168,7 +168,7 @@ function PaymentHistory({requests,onOpenDeposit}){
     const time=request.resolved_at||(['confirmed','rejected'].includes(request.status)?request.updated_at:request.created_at)
     return <li key={request.id} className="flex flex-wrap items-start justify-between gap-2 py-4">
      <div>
-      <p className="font-semibold">{request.kind==='withdrawal'?'Withdrawal':'Deposit'} · <span className={status==='Pending'?'rounded bg-[#fff1e6] px-1.5 py-0.5 text-[#9a370b]':undefined}>{status}</span></p>
+      <p className="font-semibold">{request.kind==='withdrawal'?'Withdrawal':'Deposit'} · <span className={status==='Pending'?'inline-flex items-center gap-1 rounded bg-[#fff1e6] px-1.5 py-0.5 text-[#9a370b]':undefined}>{status==='Pending'&&<Circle size={12} aria-hidden="true"/>}{status}</span></p>
       <p className="mt-1 text-xs text-slate-600">Ref. {request.transaction_ref}</p>
       <p className="mt-1 text-xs text-slate-600">{formatTimestamp(time)}</p>
       {request.status==='awaiting_receipt'&&<button type="button" className="mt-2 text-xs text-blue-700 underline" onClick={()=>onOpenDeposit(request.id)}>Open payment instructions</button>}
@@ -227,7 +227,7 @@ export default function SellerFinancePage({view='wallet'}){
   </div>
   {records.length ? <ul className="divide-y divide-slate-100">
    {records.map(record=><li key={record.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-4 sm:px-5">
-    <p className={`min-w-0 font-semibold ${record.delta_cents<0?'text-red-700':'text-slate-900'}`}>{record.delta_cents>0?'Credit':'Debit'}</p>
+    <p className={`flex min-w-0 items-center gap-1.5 font-semibold ${record.delta_cents<0?'text-red-700':'text-slate-900'}`}>{record.delta_cents>0?<ArrowUp size={17} aria-hidden="true" className="shrink-0 text-emerald-700"/>:<ArrowDown size={17} aria-hidden="true" className="shrink-0"/>}{record.delta_cents>0?'Credit':'Debit'}</p>
     <p className={`max-w-[45vw] break-words text-right text-sm font-semibold tabular-nums ${record.delta_cents>0?'text-emerald-700':'text-red-700'}`}>
      {record.delta_cents>0?'+':''}{money(record.delta_cents)}
     </p>
