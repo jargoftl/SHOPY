@@ -47,7 +47,7 @@ const BillingPage = () => {
     setSelectedAddressId(id)
     addressFields.forEach(field => editedFields.current.add(field))
     const selected = addresses.find(address => String(address.id) === id)
-    setBilling(current => selected ? applyBillingAddress(current, selected) : { ...current, address:'', city:'', region:'', country:'' })
+    setBilling(current => selected ? applyBillingAddress(current, selected) : { ...current, address:'', city:'', region:'', country:'', phone:'' })
   }
 
   const updateBilling = (event) => {
@@ -67,6 +67,7 @@ const BillingPage = () => {
     const checkoutBilling = Object.fromEntries([...addressFields,'email'].map(field => [
       field, String(fields[field] ?? billing[field] ?? '').trim()
     ]))
+    checkoutBilling.phone = String(fields.phone ?? addresses.find(address => String(address.id) === selectedAddressId)?.phone ?? billing.phone ?? '').trim()
     setSaving(true)
     setMessage('')
     try {
@@ -104,6 +105,7 @@ const BillingPage = () => {
               <label className="block text-sm font-medium">Email<input name="email" value={billing.email || ''} onChange={updateBilling} type="email" autoComplete="email" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
             </div>
             {(!selectedAddressId||loadingAddresses)&&<>
+            <label className="block text-sm font-medium">Recipient phone (optional)<input name="phone" type="tel" autoComplete="tel" maxLength={40} value={billing.phone || ''} onChange={updateBilling} className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
             <label className="block text-sm font-medium">详细地址 / Street address<input name="address" placeholder="请输入真实的街道、门牌号和房间号" value={billing.address || ''} onChange={updateBilling} autoComplete="street-address" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-sm font-medium">城市 / City<input name="city" value={billing.city || ''} onChange={updateBilling} autoComplete="address-level2" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>

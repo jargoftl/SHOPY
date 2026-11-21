@@ -240,7 +240,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
           if(!debit.changes)return null
         }
       }
-      const result = (await db.prepare('INSERT INTO purchase_orders (buyer_id,request_key,coin,billing_json,subtotal_cents,shipping_cents,tax_cents,coin_amount,network,wallet_address,usd_rate,status,account_balance_payment) VALUES (?,?,?,?,?,0,?,?,?,?,?,?,1)').run(req.user!.id, requestKey, coin, JSON.stringify(Object.fromEntries(fields.map((field) => [field, text(billing[field], 200)]))), subtotal, tax, useBalance ? null : coinAmount(total, wallet!.usd_rate!), wallet?.network ?? null, wallet?.address ?? null, wallet?.usd_rate ?? null, useBalance ? 'paid' : 'awaiting_receipt'))
+      const result = (await db.prepare('INSERT INTO purchase_orders (buyer_id,request_key,coin,billing_json,subtotal_cents,shipping_cents,tax_cents,coin_amount,network,wallet_address,usd_rate,status,account_balance_payment) VALUES (?,?,?,?,?,0,?,?,?,?,?,?,1)').run(req.user!.id, requestKey, coin, JSON.stringify({ ...Object.fromEntries(fields.map((field) => [field, text(billing[field], 200)])), phone: text(billing.phone, 40) }), subtotal, tax, useBalance ? null : coinAmount(total, wallet!.usd_rate!), wallet?.network ?? null, wallet?.address ?? null, wallet?.usd_rate ?? null, useBalance ? 'paid' : 'awaiting_receipt'))
       const orderId = Number(result.lastInsertRowid)
       const number = (await allocateOrderNumber(db, 'purchase', orderId))
       if (useBalance) {

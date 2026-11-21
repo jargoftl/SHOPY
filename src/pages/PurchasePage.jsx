@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react'
 import { formatOrderReference } from '../lib/orderReference.js'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import DeliveryProgress from '../components/DeliveryProgress.jsx'
@@ -82,11 +83,26 @@ const PurchasePage = () => {
       </div>
     </div>
     {order && <dialog ref={dialog} onCancel={(event) => { event.preventDefault(); setDialogOpen(false) }} aria-labelledby="purchase-dialog-title" className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl bg-white p-6 text-[#111111] shadow-xl backdrop:bg-black/50">
-      <div className="flex justify-between gap-4"><h2 id="purchase-dialog-title" className="text-xl font-semibold">{order.status === 'awaiting_quote' ? 'Waiting for payment details' : order.status === 'paid' ? 'Thank you!' : 'Transfer payment'}</h2><button type="button" onClick={() => setDialogOpen(false)} aria-label="Close dialog" className="text-2xl">×</button></div>
+      <div className="flex justify-between gap-4"><h2 id="purchase-dialog-title" className="text-xl font-semibold">{order.status === 'awaiting_quote' ? 'Waiting for payment details' : order.status === 'paid' ? 'Payment successful' : 'Transfer payment'}</h2><button type="button" onClick={() => setDialogOpen(false)} aria-label="Close dialog" className="text-2xl">×</button></div>
       {order.status === 'awaiting_quote' && <div role="status" className="mt-6 flex items-center gap-3 text-sm"><span className="size-5 animate-spin rounded-full border-2 border-[#cccccc] border-t-[#111111]" />Waiting for the support to set your final amount and wallet. You can return from My Orders.</div>}
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
       {order.status === 'awaiting_receipt' && <><p className="mt-4 text-sm">Transfer the exact amount of items you are buying, no tips. Thank you.</p><p className="mt-4 text-sm font-semibold">Send {order.coinAmount} {order.coin} · {order.network}</p><p className="mt-1 text-xs text-[#111111]">Final order total: {formatMoney(order.subtotalCents + order.shippingCents + order.taxCents)}</p>{order.usdRate && <p className="mt-1 text-xs text-[#111111]">support-set rate: 1 {order.coin} = ${order.usdRate} USD. This is not a live rate.</p>}<div className="mt-3 flex items-center gap-3 rounded border border-[#e5e5e5] bg-[#f7f7f7] p-3"><span className="min-w-0 flex-1 break-all font-mono text-sm">{order.walletAddress}</span><button type="button" onClick={copy} aria-label="Copy wallet address" className="grid size-10 place-items-center rounded border border-[#cccccc]"><IoCopyOutline size={20} /></button></div>{notice && <p role="status" className="mt-2 text-xs">{notice}</p>}<p className="mt-3 text-xs text-[#555555]">Check the coin and network carefully. Transfers are verified manually.</p><button type="button" onClick={() => setDialogOpen(false)} className="mt-5 bg-[#111111] px-4 py-2 text-sm text-white">Continue to receipt</button></>}
-      {order.status === 'paid' && <p className="mt-5 text-sm">{order.coin === 'BALANCE' ? 'Your order will begin processing.' : 'Your payment was confirmed by the support team. Thank you for your order!'}</p>}
+      {order.status === 'paid' && <>
+        <div className="mt-4 flex flex-col items-center text-center">
+          <span className="grid size-14 place-items-center rounded-full bg-green-700 text-white"><Check size={30} strokeWidth={3} aria-hidden="true"/></span>
+          <p className="mt-3 text-sm text-slate-600">Thank you! Your order will begin processing.</p>
+        </div>
+        <dl className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 text-sm">
+          <div><dt className="font-semibold">Recipient</dt><dd className="break-words">{order.billing?.fullName || 'Unavailable'}</dd></div>
+          {order.billing?.phone && <div><dt className="font-semibold">Phone number</dt><dd>{order.billing.phone}</dd></div>}
+          <div><dt className="font-semibold">Delivery address</dt><dd className="break-words">{[order.billing?.address,order.billing?.city,order.billing?.region,order.billing?.country].filter(Boolean).join(', ') || 'Unavailable'}</dd></div>
+          <div><dt className="font-semibold">Tracking number</dt>
+            {order.sellers.some(seller=>seller.trackingNumber)
+              ? order.sellers.filter(seller=>seller.trackingNumber).map(seller=><dd key={seller.sellerId} className="break-all">{order.sellers.length>1&&`${seller.storeName}: `}{seller.trackingNumber}</dd>)
+              : <dd>Not assigned yet</dd>}
+          </div>
+        </dl>
+      </>}
       {['awaiting_review', 'rejected'].includes(order.status) && <p className="mt-4 text-sm">Your order is {order.status.replaceAll('_', ' ')}.</p>}
     </dialog>}
   </main>
