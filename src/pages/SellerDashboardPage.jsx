@@ -72,8 +72,7 @@ export default function SellerDashboardPage(){
   <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
    {totals.map(([label,value,color])=><div key={label} className={`min-w-0 rounded-xl p-3 sm:p-5 ${color}`}>
     <dt className="text-xs font-medium sm:text-sm">{t(label)}</dt>
-    <dd className="mt-2 break-words text-lg font-semibold tabular-nums sm:text-2xl">{value}
-    {label==='Total Profit'&&metrics.totalProfit==null&&<span className="mt-1 block text-xs font-normal">{t("20% of sales and funding")}</span>}</dd>
+    <dd className="mt-2 break-words text-lg font-semibold tabular-nums sm:text-2xl">{value}</dd>
    </div>)}
   </dl>
  </section>
@@ -83,8 +82,7 @@ export default function SellerDashboardPage(){
    <dl className="mt-4 grid grid-cols-3 gap-2">
     {figures.map(([label,value])=><div key={label} className="min-w-0">
      <dt className="text-xs text-slate-600">{t(label)}</dt>
-     <dd className="mt-1 break-words text-sm font-semibold tabular-nums text-slate-900 sm:text-base">{value}
-     {label==='Estimated Profit'&&metrics.estimatedProfit==null&&<span className="mt-1 block text-xs font-normal text-slate-600">{t("15% of today’s sales and funding")}</span>}</dd>
+     <dd className="mt-1 break-words text-sm font-semibold tabular-nums text-slate-900 sm:text-base">{value}</dd>
     </div>)}
    </dl>
   </section>)}
