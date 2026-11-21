@@ -2177,6 +2177,25 @@ app.get('/api/admin/sellers/:id/dashboard-metrics', requireAuth, requireRole('ad
   return res.json({ metrics, adminFollowerCount: store?.follower_count ?? 0 })
 })
 
+app.patch('/api/admin/sellers/:id/credit-score', requireAuth, requireRole('admin'), async (req, res) => {
+  const sellerId = Number(req.params.id)
+  const score = req.body?.score
+  if (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 1000000000000) {
+    return res.status(400).json({ error: 'Enter a valid nonnegative credit score.' })
+  }
+  if (!Number.isSafeInteger(sellerId)) return res.status(404).json({ error: 'Seller not found.' })
+  const updated = await database.prepare(`
+    INSERT INTO seller_dashboard_metrics (user_id, metrics_json, updated_at)
+    SELECT id, ?, CURRENT_TIMESTAMP FROM users WHERE id=? AND role='seller' AND deleted_at IS NULL
+    ON CONFLICT(user_id) DO UPDATE SET
+      metrics_json=(seller_dashboard_metrics.metrics_json::jsonb || excluded.metrics_json::jsonb)::text,
+      updated_at=CURRENT_TIMESTAMP
+    RETURNING user_id
+  `).get(JSON.stringify({ sellerCreditScore: score }), sellerId)
+  if (!updated) return res.status(404).json({ error: 'Seller not found.' })
+  return res.json({ score })
+})
+
 app.put('/api/admin/sellers/:id/dashboard-metrics', requireAuth, requireRole('admin'), async (req, res) => {
   const sellerId = Number(req.params.id)
   const seller = (await getRow<{ id: number }>("SELECT id FROM users WHERE id = ? AND role = 'seller'", sellerId))
