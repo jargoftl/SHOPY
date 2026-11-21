@@ -52,22 +52,6 @@ export default function SellerDashboardPage(){
   ]],
  ]
  return <SellerWorkspace user={user}><h1 className="portal-title">{t("Store overview")}</h1>{error&&<p role="alert" className="portal-error">{error}</p>}
- {data?.dates&&<section className="portal-card" aria-label={t("Account and store dates")}>
-  <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-   <div className="flex items-center gap-3">
-    <CalendarDays className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
-    <div><dt className="text-xs text-slate-600">{t("Account created")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.accountCreatedAt)}</dd></div>
-   </div>
-   <div className="flex items-center gap-3">
-    <Store className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
-    <div><dt className="text-xs text-slate-600">{t("Store created")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.storeCreatedAt)}</dd></div>
-   </div>
-   {data.dates.approvedAt&&<div className="flex items-center gap-3">
-    <BadgeCheck className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
-    <div><dt className="text-xs text-slate-600">{t("Seller approved")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.approvedAt)}</dd></div>
-   </div>}
-  </dl>
- </section>}
  <section className="portal-card" aria-label={t('Dashboard totals')}>
   <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
    {totals.map(([label,value,color])=><div key={label} className={`min-w-0 rounded-xl p-3 sm:p-5 ${color}`}>
@@ -91,5 +75,23 @@ export default function SellerDashboardPage(){
  <section className="portal-card portal-shortcuts" aria-label="Store tools">{shortcuts.map(([Icon,label,to,color])=><Link key={to} to={to}><i style={{background:color}}><Icon size={23}/></i><span>{t(label)}</span></Link>)}</section>
  <SaleConfirmations sales={data?.orders||[]} onConfirmed={async()=>setData(await apiRequest('/api/seller/analytics'))}/><section className="portal-card"><div className="portal-section-head"><h2>{t("Recent orders")}</h2><Link to="/seller/orders">{t("View all")}</Link></div>{data?.orders.slice(0,4).map(o=><Link className="portal-order-row" key={o.orderId} to={`/seller/orders?order=${o.orderNumber}`}><div><strong>{formatOrderReference(o)}</strong><OrderStatusBadge status={o.paymentStatus} label={t(paymentStatusLabel(o.paymentStatus))}/></div><strong>{money(o.amountCents)}</strong></Link>)}{data&&!data.orders.length&&<p className="portal-empty">{t("No orders yet.")}</p>}</section>
  <section className="portal-card"><h2>{t("Top 10 best-selling items")}</h2><div className="portal-product-list">{data?.products.filter(p=>p.units>0).map((p,i)=><Link to={products.some(item=>item.id===p.id&&item.isPublished)?`/products/${p.id}`:'/seller/products'} key={p.id||i} className="portal-product-row">{p.imageUrl?<img src={p.imageUrl} alt="" loading="lazy"/>:<span className="portal-image-placeholder"><Package/></span>}<div><h3>{p.name}</h3><p>{p.units} {t('sold')}</p><strong>{money(p.salesCents)} <small>{t("sales")}</small></strong></div></Link>)}</div>{data&&!data.products.some(p=>p.units>0)&&<p className="portal-empty">{t("Your best-selling items will appear after completed payments.")}</p>}</section>
- <section className="portal-card"><div className="portal-section-head"><h2>{t('Store products')}</h2><Link to="/seller/products">{t("Manage")}</Link></div><div className="portal-product-list">{products.slice(0,limit).map(p=><Link to={p.isPublished?`/products/${p.id}`:'/seller/products'} className="portal-product-row" key={p.id}><img src={p.imageUrl} alt="" loading="lazy"/><div><h3>{p.name}</h3><p>{p.category}</p><strong>{money(Math.round(p.price*100))}</strong></div></Link>)}</div>{products.length>limit&&<button className="portal-load-more" onClick={()=>setLimit(n=>n+24)}>{t("Show more products")}</button>}{!products.length&&<Link className="portal-empty" to="/seller/warehouse">{t("Browse the warehouse to add products.")}</Link>}</section>{data?.dates?.establishedOn&&<div className="portal-dates"><StoreDates {...data.dates}/></div>}</SellerWorkspace>
+ <section className="portal-card"><div className="portal-section-head"><h2>{t('Store products')}</h2><Link to="/seller/products">{t("Manage")}</Link></div><div className="portal-product-list">{products.slice(0,limit).map(p=><Link to={p.isPublished?`/products/${p.id}`:'/seller/products'} className="portal-product-row" key={p.id}><img src={p.imageUrl} alt="" loading="lazy"/><div><h3>{p.name}</h3><p>{p.category}</p><strong>{money(Math.round(p.price*100))}</strong></div></Link>)}</div>{products.length>limit&&<button className="portal-load-more" onClick={()=>setLimit(n=>n+24)}>{t("Show more products")}</button>}{!products.length&&<Link className="portal-empty" to="/seller/warehouse">{t("Browse the warehouse to add products.")}</Link>}</section>{data?.dates?.establishedOn&&<div className="portal-dates"><StoreDates {...data.dates}/></div>}
+ {data?.dates&&<details className="portal-card">
+  <summary className="cursor-pointer font-semibold">{t("Account and store dates")}</summary>
+  <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+   <div className="flex items-center gap-3">
+    <CalendarDays className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
+    <div><dt className="text-xs text-slate-600">{t("Account created")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.accountCreatedAt)}</dd></div>
+   </div>
+   <div className="flex items-center gap-3">
+    <Store className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
+    <div><dt className="text-xs text-slate-600">{t("Store created")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.storeCreatedAt)}</dd></div>
+   </div>
+   {data.dates.approvedAt&&<div className="flex items-center gap-3">
+    <BadgeCheck className="shrink-0 text-blue-700" size={20} aria-hidden="true"/>
+    <div><dt className="text-xs text-slate-600">{t("Seller approved")}</dt><dd className="text-sm font-semibold">{formatTimestamp(data.dates.approvedAt)}</dd></div>
+   </div>}
+  </dl>
+ </details>}
+ </SellerWorkspace>
 }
