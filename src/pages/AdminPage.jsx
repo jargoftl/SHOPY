@@ -1,3 +1,4 @@
+import AdminSellerHistoricalSales from '../components/AdminSellerHistoricalSales.jsx'
 import SiteName from '../components/SiteName.jsx'
 import {RecoveryRequests} from '../components/AdminRecovery.jsx'
 import AdminAccess from '../components/AdminAccess.jsx'
@@ -19,7 +20,7 @@ import AdminWarehouse from '../components/AdminWarehouse.jsx'
 import AdminMarketing from '../components/AdminMarketing.jsx'
 import AdminDisplayStats from '../components/AdminDisplayStats.jsx'
 import RefundList from '../components/RefundList.jsx'
-const tabs=[['overview','Overview',LayoutDashboard],['accounts','People & stores',Users],['applications','Seller approval',ClipboardCheck],['orders','Orders & tracking',ShoppingBag],['payment-type','Payment Type',Wallet],['buyer-wallet','Buyer funding',Wallet],['warehouse','Warehouse',Warehouse],['marketing','Marketing requests',Megaphone],['referrals','Referrals & rewards',Users],['statistics','Display statistics',ChartNoAxesCombined],['activity','Account activity',History],['settings','Site settings',Settings],['admin-access','Manage admins',ShieldCheck],['account-recovery','Account recovery',ShieldCheck]]
+const tabs=[['overview','Overview',LayoutDashboard],['accounts','People & stores',Users],['applications','Seller approval',ClipboardCheck],['orders','Orders & tracking',ShoppingBag],['payment-type','Payment Type',Wallet],['seller-sales-history','Adding Seller Sales History',History],['buyer-wallet','Buyer funding',Wallet],['warehouse','Warehouse',Warehouse],['marketing','Marketing requests',Megaphone],['referrals','Referrals & rewards',Users],['statistics','Display statistics',ChartNoAxesCombined],['activity','Account activity',History],['settings','Site settings',Settings],['admin-access','Manage admins',ShieldCheck],['account-recovery','Account recovery',ShieldCheck]]
 function activeTab(hash,order){if(order)return 'orders';if(paymentSection(hash))return 'payment-type';const key=hash.replace('#','');return ({'purchase-orders':'orders','refunds':'orders','marketing-requests':'marketing','seller-applications':'applications'})[key]||tabs.find(t=>t[0]===key)?.[0]||'overview'}
 export default function AdminPage(){
  const location=useLocation(),navigate=useNavigate(),[params]=useSearchParams(),tab=activeTab(location.hash,params.get('order'))
@@ -38,6 +39,7 @@ export default function AdminPage(){
  {tab==='accounts'&&<AdminAccountDirectory users={data.users} sellers={data.sellers}/>}
  {tab==='applications'&&<AdminSellerApplications/>}
  {tab==='orders'&&<><AdminPurchases selectedNumber={params.get('order')} autoOpen/><details className="mt-6 border bg-white p-5"><summary className="cursor-pointer font-semibold">Refund reviews</summary><div className="mt-4"><RefundList admin/></div></details></>}
+ {tab==='seller-sales-history'&&<AdminSellerHistoricalSales/>}
  {tab==='payment-type'&&<AdminPaymentType section={paymentSection(location.hash)}/>}
  {tab==='buyer-wallet'&&<><AdminSellerFunding kind="buyer"/><button type="button" onClick={()=>setBuyerRequestsOpen(v=>!v)} className="my-6 min-h-11 rounded-lg border bg-white px-4 py-3 text-sm font-semibold">{buyerRequestsOpen?'Hide coin requests':'Review coin deposit / withdrawal requests'}</button>{buyerRequestsOpen&&<AdminBuyers/>}</>}
  {tab==='warehouse'&&<AdminWarehouse/>}
