@@ -158,16 +158,16 @@ const AdminSellerMetricsPage = () => {
         {selectedSellerId && loadedMetricsSellerId === selectedSellerId && <form onSubmit={saveMetrics} className="space-y-6">
           <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7" aria-labelledby="seller-score-heading">
             <h2 id="seller-score-heading" className="text-lg font-semibold">Seller credit score</h2>
-            <p className="mt-1 text-sm text-[#a3a3a3]">Set a score or increase it by one point, then save dashboard metrics. The default is 100.</p>
+            <p className="mt-1 text-sm text-[#a3a3a3]">Set a score or increase it by one point, then save dashboard metrics. The default is 5.</p>
             <div className="mt-3 flex flex-wrap items-end gap-2">
               <label className="text-xs text-[#a3a3a3]">Credit score
                 <input type="number" min="0" max={MAX_CREDIT_SCORE} step="any" value={form.sellerCreditScore}
                   onChange={(event) => setForm((current) => ({ ...current, sellerCreditScore: event.target.value }))}
-                  className="mt-1 block h-11 w-36 rounded border border-[#555555] bg-[#111111] px-3 text-sm text-white" placeholder="100" />
+                  className="mt-1 block h-11 w-36 rounded border border-[#555555] bg-[#111111] px-3 text-sm text-white" placeholder="5" />
               </label>
               <button type="button" disabled={isSaving || Number(form.sellerCreditScore) >= MAX_CREDIT_SCORE}
                 className="min-h-11 rounded border border-[#555555] px-3 text-sm disabled:opacity-50"
-                onClick={() => setForm((current) => ({ ...current, sellerCreditScore: String(Math.min(MAX_CREDIT_SCORE, Number(current.sellerCreditScore || 100) + 1)) }))}>
+                onClick={() => setForm((current) => ({ ...current, sellerCreditScore: String(Math.min(MAX_CREDIT_SCORE, Number(current.sellerCreditScore || 5) + 1)) }))}>
                 Increase by 1
               </button>
             </div>

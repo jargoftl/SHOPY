@@ -37,7 +37,7 @@ export default function SellerDashboardPage(){
  const groups=[
   ['Shop Overview',[
    ['Overall Rating',number(metrics.overallRating??(data?.overallRating==null?null:Number(data.overallRating).toFixed(2)))],
-   ['Seller Credit Score',number(metrics.sellerCreditScore??(data?100:null))],
+   ['Seller Credit Score',number(metrics.sellerCreditScore??(data?5:null))],
    ['Store Followers',number(data?.overview.followers)],
   ]],
   ['Visitor Statistics',[
