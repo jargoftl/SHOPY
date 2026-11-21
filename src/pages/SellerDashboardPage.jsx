@@ -23,16 +23,21 @@ export default function SellerDashboardPage(){
  const metrics=data?.dashboardMetrics??{}
  const number=value=>value==null?'—':Number(value).toLocaleString()
  const dollars=value=>value==null?'—':money(Math.round(value*100))
+ const totalSales=metrics.totalSalesAmount??(data&&(data.overview.salesCents+(data.historicalSales?.salesCents||0))/100)
+ const todaySales=metrics.todaySales??(data?(todayData?.salesCents??0)/100:null)
+ const profit=(override,sales,fundingCents,rate)=>override!=null
+  ? dollars(override)
+  : sales==null||fundingCents==null?'—':money(Math.round((Math.round(sales*100)+Number(fundingCents))*rate/100))
  const totals=[
   ['Total Products',number(metrics.totalProducts??data?.overview.products),'bg-rose-50 text-rose-900'],
-  ['Total Sales Amount',dollars(metrics.totalSalesAmount??(data&&(data.overview.salesCents+(data.historicalSales?.salesCents||0))/100)),'bg-sky-50 text-sky-900'],
+  ['Total Sales Amount',dollars(totalSales),'bg-sky-50 text-sky-900'],
   ['Total Orders',number(metrics.totalOrders??data?.overview.paidOrders),'bg-indigo-50 text-indigo-900'],
-  ['Total Profit',dollars(metrics.totalProfit),'bg-teal-50 text-teal-900'],
+  ['Total Profit',profit(metrics.totalProfit,totalSales,data?.funding?.total_cents,20),'bg-teal-50 text-teal-900'],
  ]
  const groups=[
   ['Shop Overview',[
    ['Overall Rating',number(metrics.overallRating??(data?.overallRating==null?null:Number(data.overallRating).toFixed(2)))],
-   ['Seller Credit Score',number(metrics.sellerCreditScore)],
+   ['Seller Credit Score',number(metrics.sellerCreditScore??(data?100:null))],
    ['Store Followers',number(data?.overview.followers)],
   ]],
   ['Visitor Statistics',[
@@ -42,8 +47,8 @@ export default function SellerDashboardPage(){
   ]],
   ['Today’s Statistics',[
    ['Today’s Orders',number(metrics.todayOrders??(data?todayData?.orders??0:null))],
-   ['Today’s Sales',dollars(metrics.todaySales??(data?(todayData?.salesCents??0)/100:null))],
-   ['Estimated Profit',dollars(metrics.estimatedProfit)],
+   ['Today’s Sales',dollars(todaySales)],
+   ['Estimated Profit',profit(metrics.estimatedProfit,todaySales,data?.funding?.today_cents,15)],
   ]],
  ]
  return <SellerWorkspace user={user}><h1 className="portal-title">{t("Store overview")}</h1>{error&&<p role="alert" className="portal-error">{error}</p>}
@@ -67,7 +72,8 @@ export default function SellerDashboardPage(){
   <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
    {totals.map(([label,value,color])=><div key={label} className={`min-w-0 rounded-xl p-3 sm:p-5 ${color}`}>
     <dt className="text-xs font-medium sm:text-sm">{t(label)}</dt>
-    <dd className="mt-2 break-words text-lg font-semibold tabular-nums sm:text-2xl">{value}</dd>
+    <dd className="mt-2 break-words text-lg font-semibold tabular-nums sm:text-2xl">{value}
+    {label==='Total Profit'&&metrics.totalProfit==null&&<span className="mt-1 block text-xs font-normal">{t("20% of sales and funding")}</span>}</dd>
    </div>)}
   </dl>
  </section>
@@ -77,7 +83,8 @@ export default function SellerDashboardPage(){
    <dl className="mt-4 grid grid-cols-3 gap-2">
     {figures.map(([label,value])=><div key={label} className="min-w-0">
      <dt className="text-xs text-slate-600">{t(label)}</dt>
-     <dd className="mt-1 break-words text-sm font-semibold tabular-nums text-slate-900 sm:text-base">{value}</dd>
+     <dd className="mt-1 break-words text-sm font-semibold tabular-nums text-slate-900 sm:text-base">{value}
+     {label==='Estimated Profit'&&metrics.estimatedProfit==null&&<span className="mt-1 block text-xs font-normal text-slate-600">{t("15% of today’s sales and funding")}</span>}</dd>
     </div>)}
    </dl>
   </section>)}
