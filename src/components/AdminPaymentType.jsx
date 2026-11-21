@@ -12,7 +12,7 @@ const sections = [
  ['sales','Sale payouts & balances',ReceiptText,'payment-type-sales'],
 ]
 const previousSections = new Map([
- ['seller-funding','credits'], ['seller-wallet','deposit'], ['seller-finance','deposit'],
+ ['seller-wallet','deposit'], ['seller-finance','deposit'],
 ])
 
 export function paymentSection(hash) {
