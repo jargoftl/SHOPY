@@ -14,17 +14,17 @@ const shortcuts=[[Settings,'Store settings','/seller/account/settings','#ff635b'
 export default function SellerDashboardPage(){
  const {t}=useSellerLanguage()
  const [user,setUser]=useState(null),[data,setData]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[creditScore,setCreditScore]=useState(null),[days,setDays]=useState(7),[limit,setLimit]=useState(12)
- useEffect(()=>{let active=true;const refresh=()=>Promise.all([apiRequest('/api/auth/me'),apiRequest('/api/seller/analytics')]).then(([u,d])=>{if(active){setUser(u.user);setData(d);setError('')}}).catch(e=>active&&setError(e.message));apiRequest('/api/seller/products').then(d=>active&&setProducts(d.products)).catch(e=>active&&setError(e.message));const tick=()=>{if(document.hidden)return;refresh();apiRequest('/api/seller/dashboard-metrics',{cache:'no-store'}).then(({metrics})=>{if(active)setCreditScore(metrics.sellerCreditScore??5)}).catch(()=>{})};tick();const timer=setInterval(tick,30000);window.addEventListener('focus',tick);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',tick)}},[])
+ useEffect(()=>{let active=true;const refresh=()=>Promise.all([apiRequest('/api/auth/me'),apiRequest('/api/seller/analytics')]).then(([u,d])=>{if(active){setUser(u.user);setData(d);setError('')}}).catch(e=>active&&setError(e.message));apiRequest('/api/seller/products').then(d=>active&&setProducts(d.products)).catch(e=>active&&setError(e.message));const tick=()=>{if(document.hidden)return;refresh();apiRequest('/api/seller/dashboard-metrics',{cache:'no-store'}).then(({metrics})=>{if(active)setCreditScore(metrics.sellerCreditScore??5)}).catch(()=>{})};tick();const timer=setInterval(tick,30000);window.addEventListener('focus',tick);document.addEventListener('visibilitychange',tick);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',tick);document.removeEventListener('visibilitychange',tick)}},[])
  const series=useMemo(()=>{const end=new Date((data?.today||new Date().toISOString().slice(0,10))+'T00:00:00Z');return Array.from({length:days},(_,i)=>{const date=new Date(end);date.setUTCDate(date.getUTCDate()-days+1+i);const day=date.toISOString().slice(0,10);return {day,sales:data?.daily.find(d=>d.day===day)?.salesCents||0,visits:data?.visits.find(d=>d.day===day)?.visits||0}})},[data,days])
  const maxSales=Math.max(100,...series.map(d=>d.sales)),maxVisits=Math.max(1,...series.map(d=>d.visits))
  const points=key=>series.map((d,i)=>`${35+i*315/Math.max(1,days-1)},${210-d[key]/(key==='sales'?maxSales:maxVisits)*165}`).join(' ')
  const today=data?.today,visits=(length)=>{const end=new Date((today||'2000-01-01')+'T00:00:00Z');end.setUTCDate(end.getUTCDate()-length+1);const from=end.toISOString().slice(0,10);return (data?.visits||[]).filter(v=>v.day>=from&&v.day<=today).reduce((s,v)=>s+v.visits,0)}
- const todayData=data?.daily.find(d=>d.day===today)
+ const todayData=data?.chinaToday
  const metrics=data?.dashboardMetrics??{}
  const number=value=>value==null?'—':Number(value).toLocaleString()
  const dollars=value=>value==null?'—':money(Math.round(value*100))
  const totalSales=metrics.totalSalesAmount??(data&&(data.overview.salesCents+(data.historicalSales?.salesCents||0))/100)
- const todaySales=metrics.todaySales??(data?(todayData?.salesCents??0)/100:null)
+ const todaySales=todayData?(todayData.salesCents??0)/100:null
  const profit=(override,sales,fundingCents,rate)=>override!=null
   ? dollars(override)
   : sales==null||fundingCents==null?'—':money(Math.round((Math.round(sales*100)+Number(fundingCents))*rate/100))
@@ -41,14 +41,14 @@ export default function SellerDashboardPage(){
    ['Store Followers',number(data?.overview.followers)],
   ]],
   ['Visitor Statistics',[
-   ['Today’s Visitors',number(metrics.todayVisitors??(data?visits(1):null))],
+   ['Today’s Visitors',number(todayData?.visits)],
    ['Last 7 days',number(metrics.visitorsLast7Days??(data?visits(7):null))],
    ['Last 30 days',number(metrics.visitorsLast30Days??(data?visits(30):null))],
   ]],
   ['Today’s Statistics',[
-   ['Today’s Orders',number(metrics.todayOrders??(data?todayData?.orders??0:null))],
+   ['Today’s Orders',number(todayData?.orders)],
    ['Today’s Sales',dollars(todaySales)],
-   ['Estimated Profit',profit(metrics.estimatedProfit,todaySales,data?.funding?.today_cents,15)],
+   ['Estimated Profit',profit(null,todaySales,data?.funding?.today_cents,15)],
   ]],
  ]
  return <SellerWorkspace user={user}><h1 className="portal-title">{t("Store overview")}</h1>{error&&<p role="alert" className="portal-error">{error}</p>}
@@ -63,6 +63,7 @@ export default function SellerDashboardPage(){
  <div className="grid gap-4 xl:grid-cols-3">
   {groups.map(([heading,figures])=><section key={heading} className="portal-card min-w-0">
    <h2>{t(heading)}</h2>
+   {heading==='Today’s Statistics'&&<p className="mt-1 text-xs text-slate-600">{t("Resets at midnight China time")}</p>}
    <dl className="mt-4 grid grid-cols-3 gap-2">
     {figures.map(([label,value])=><div key={label} className="min-w-0">
      <dt className="text-xs text-slate-600">{t(label)}</dt>
