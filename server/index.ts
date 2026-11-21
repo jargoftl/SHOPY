@@ -28,6 +28,7 @@ import { registerMarketing } from './marketing.ts'
 import {registerSellerAdminFunding} from './sellerAdminFunding.ts'
 import {registerSellerDisplayStats} from './sellerDisplayStats.ts'
 import { registerTransactionPin, checkTransactionPin } from './transactionPin.ts'
+import { registerHistoricalSales } from './sellerHistoricalSales.ts'
 import { registerSellerFinance } from './sellerFinance.ts'
 import { registerManualOrders } from './manualOrders.ts'
 import { allocateOrderNumber } from './orderNumbers.ts'
@@ -2279,6 +2280,7 @@ registerSellerAdminFunding(app,database,requireAuth,requireRole)
 registerSellerDisplayStats(app,database,requireAuth,requireRole)
 registerTransactionPin(app, database, requireAuth, requireRole)
 registerSellerFinance(app, database, requireAuth, requireRole)
+registerHistoricalSales(app, database, requireAuth, requireRole)
 await registerManualOrders(app, database, requireAuth, requireRole)
 await registerMarketing(app, database, requireAuth, requireRole)
 const stopDeliveryEmailWorker=registerDeliveryEmails(app,database,requireAuth,requireRole)

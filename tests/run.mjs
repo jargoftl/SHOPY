@@ -272,6 +272,25 @@ try{
  await testAccountDeletion({req,check,db,cookie,buyer,seller,sellerId});
  await testAccountRecovery({req,check,db,cookie,buyer,seller});
  await testEmailLifecycle({req,check,db,cookie,seller,sellerId,sellerForm});
+ const historicalPath=`/api/admin/seller-sales-history/${sellerId}`
+ const historicalEntry={soldOn:'2019-04-10',itemName:'Historical lamp',itemType:'Lighting',quantity:3,unitPriceCents:12550,orderReference:'OFF-204',requestKey:randomUUID()}
+ const saveHistorical=(fields=historicalEntry,who=cookie)=>req(historicalPath,{method:'POST',body:JSON.stringify(fields)},who)
+ const salesWalletBefore=(await req('/api/seller/finance',{},seller)).data.wallet
+ const checkoutOrdersBefore=(await req('/api/seller/purchases',{},seller)).data.orders.length
+ check('seller history entry is admin-only',(await saveHistorical(historicalEntry,seller)).status===403)
+ check('buyer cannot open seller sales history',(await req('/api/seller/sales-history',{},buyer)).status===403)
+ check('historical sales reject an invalid calendar date',(await saveHistorical({...historicalEntry,soldOn:'2019-02-30'})).status===400)
+ r=await saveHistorical();check('admin records historical sale and server calculates total',r.status===201&&r.data.record.totalCents===37650,r)
+ const firstHistoricalId=r.data.record.id
+ r=await saveHistorical();check('retrying a historical sale does not duplicate it',r.status===200&&r.data.record.id===firstHistoricalId,r)
+ r=await saveHistorical({...historicalEntry,quantity:4});check('same save key cannot change a historic sale',r.status===409,r)
+ r=await saveHistorical({...historicalEntry,requestKey:randomUUID(),soldOn:'2020-08-01',quantity:1})
+ check('admin can add another sale on a different date',r.status===201,r)
+ r=await req('/api/seller/sales-history',{},seller)
+ check('seller Orders history lists own historical sales newest first',r.status===200&&r.data.records[0].soldOn==='2020-08-01'&&r.data.records[1].id===firstHistoricalId&&r.data.summary.units===4&&r.data.summary.salesCents===50200,r)
+ r=await req('/api/seller/analytics',{},seller)
+ check('seller dashboard receives historical sales totals and latest items',r.status===200&&r.data.historicalSales.salesCents===50200&&r.data.recentHistoricalSales.some(entry=>entry.id===firstHistoricalId))
+ check('recording old sales leaves wallet and live orders unchanged',JSON.stringify((await req('/api/seller/finance',{},seller)).data.wallet)===JSON.stringify(salesWalletBefore)&&(await req('/api/seller/purchases',{},seller)).data.orders.length===checkoutOrdersBefore)
  await testTabSessions({req,check,db,previousSeller:seller,sellerId});
  // Verify actual Storage HTTP contracts with mocked responses and no live credentials.
  const storageFetch=globalThis.fetch;
