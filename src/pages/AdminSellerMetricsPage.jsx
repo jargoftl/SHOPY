@@ -158,7 +158,7 @@ const AdminSellerMetricsPage = () => {
         {selectedSellerId && loadedMetricsSellerId === selectedSellerId && <form onSubmit={saveMetrics} className="space-y-6">
           <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7" aria-labelledby="seller-score-heading">
             <h2 id="seller-score-heading" className="text-lg font-semibold">Seller credit score</h2>
-            <p className="mt-1 text-sm text-[#a3a3a3]">Set a score or increase it by one point, then save dashboard metrics. The default is 5.</p>
+            <p className="mt-1 text-sm text-[#a3a3a3]">Enter a score, increase it by one point, or set it to 100, then select Save dashboard values. The default is 5.</p>
             <div className="mt-3 flex flex-wrap items-end gap-2">
               <label className="text-xs text-[#a3a3a3]">Credit score
                 <input type="number" min="0" max={MAX_CREDIT_SCORE} step="any" value={form.sellerCreditScore}
@@ -169,6 +169,11 @@ const AdminSellerMetricsPage = () => {
                 className="min-h-11 rounded border border-[#555555] px-3 text-sm disabled:opacity-50"
                 onClick={() => setForm((current) => ({ ...current, sellerCreditScore: String(Math.min(MAX_CREDIT_SCORE, Number(current.sellerCreditScore || 5) + 1)) }))}>
                 Increase by 1
+              </button>
+              <button type="button" disabled={isSaving}
+                className="min-h-11 rounded border border-[#555555] px-3 text-sm disabled:opacity-50"
+                onClick={() => setForm((current) => ({ ...current, sellerCreditScore: '100' }))}>
+                Set to 100
               </button>
             </div>
           </section>
