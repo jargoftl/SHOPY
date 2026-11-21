@@ -1,3 +1,4 @@
+import { ChevronDown, Search } from 'lucide-react'
 import TransactionPinModal from '../components/TransactionPinModal.jsx'
 import { formatOrderReference } from '../lib/orderReference.js'
 import HistoricalSalesHistory from '../components/HistoricalSalesHistory.jsx'
@@ -35,6 +36,20 @@ const purchaseBadge = status => status==='released'
 const logisticsBadge = shipment => shipment
   ? <OrderStatusBadge status={shipment.status} label={shipment.status==='pending'?'Pending · needs attention':fulfillmentLabel(shipment.status)}/>
   : '—'
+
+function OrderFilter({label,value,onChange,options}){
+ return <label className="min-w-0 text-xs font-medium text-slate-700">
+  {label}
+  <span className="relative mt-1.5 block">
+   <select value={value} onChange={event=>onChange(event.target.value)} style={{appearance:'none'}}
+    className="block h-11 w-full rounded-lg border border-slate-200 bg-white py-0 pl-3 pr-8 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-600">
+    <option value="all">All</option>
+    {options.map(([key,text])=><option key={key} value={key}>{text}</option>)}
+   </select>
+   <ChevronDown aria-hidden="true" size={16} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500"/>
+  </span>
+ </label>
+}
 
 const SellerOrdersPage = () => {
   const navigate = useNavigate()
@@ -90,7 +105,20 @@ const SellerOrdersPage = () => {
   return <main className="seller-portal seller-orders account-workspace min-h-screen bg-[#f7f7f7] px-3 py-6 sm:px-5 sm:py-8 text-[#111111]"><div className="mx-auto max-w-6xl"><div className="flex flex-wrap justify-between gap-3"><div><Link to="/seller" className="text-sm text-[#555555]">← Dashboard</Link><h1 className="mt-3 text-3xl font-semibold">Shop orders</h1><p className="mt-2 text-sm text-[#555555]">Track paid orders, update shipments and view delivery history.</p></div><div className="flex items-start gap-4"><Link to="/messages" className="text-sm underline">Contact support</Link><SellerNotificationBell /></div></div>
     <nav aria-label="Order groups" className="portal-order-tabs">{[['all','All orders'],['pending','Pending'],['paid','Purchased'],['history','Sales history']].map(([value,label])=><button key={value} aria-pressed={orderTab===value} onClick={()=>setOrderTab(value)}>{label}</button>)}</nav>
     {orderTab==='history'?<div className="mt-6"><HistoricalSalesHistory/></div>:<>
-    <div className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"><label className="text-xs">Order number<input value={search} onChange={(event) => setSearch(event.target.value)} className="mt-2 block min-h-11 w-full rounded-lg border border-[#e5e5e5] p-2 text-sm" placeholder="Search name, product or order number" /></label><label className="text-xs">Payment status<select value={paymentFilter} onChange={e=>setPaymentFilter(e.target.value)} className="mt-2 block min-h-11 w-full rounded-lg border border-[#e5e5e5] bg-white p-2 text-sm"><option value="all">All</option>{['paid','awaiting_quote','awaiting_receipt','awaiting_review','rejected'].map(value=><option key={value} value={value}>{paymentStatusLabel(value)}</option>)}</select></label><label className="text-xs">Shipment status<select value={filter} onChange={(event) => setFilter(event.target.value)} className="mt-2 block min-h-11 w-full rounded-lg border border-[#e5e5e5] bg-white p-2 text-sm"><option value="all">All</option>{fulfillmentOptions.map(([status, label]) => <option key={status} value={status}>{label}</option>)}</select></label><button onClick={() => { setSearch(''); setFilter('all'); setPaymentFilter('all'); setOrderTab('all'); setReload((value) => value + 1); }} className="border border-[#e5e5e5] px-4 py-2 text-xs">Reset / refresh</button></div>
+    <div className="mt-4 grid grid-cols-2 items-end gap-x-3 gap-y-3 rounded-xl border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+     <label className="col-span-2 min-w-0 text-xs font-medium text-slate-700 lg:col-span-1">Search orders
+      <span className="relative mt-1.5 block">
+       <Search aria-hidden="true" size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"/>
+       <input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Order number, name or product"
+        className="block h-11 w-full rounded-lg border border-slate-200 pl-9 pr-3 text-sm focus-visible:outline-2 focus-visible:outline-blue-600"/>
+      </span>
+     </label>
+     <OrderFilter label="Payment status" value={paymentFilter} onChange={setPaymentFilter}
+      options={['paid','awaiting_quote','awaiting_receipt','awaiting_review','rejected'].map(value=>[value,paymentStatusLabel(value)])}/>
+     <OrderFilter label="Shipment status" value={filter} onChange={setFilter} options={fulfillmentOptions}/>
+     <button type="button" onClick={()=>{setSearch('');setFilter('all');setPaymentFilter('all');setOrderTab('all');setReload(value=>value+1)}}
+      className="col-span-2 min-h-11 justify-self-end rounded-lg px-3 text-xs font-semibold text-blue-700 hover:bg-blue-50 lg:col-span-1">Reset filters</button>
+    </div>
     {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
     {loading ? <ContentPlaceholder/> : <ul className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-2" aria-label="Shop orders">
      {visible.map(order=>{
