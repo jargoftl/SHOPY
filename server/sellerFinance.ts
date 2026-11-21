@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs'
 import {publicStoreReviewsSql} from './reviews.ts'
 import {historicalSalesSummary,historicalSaleRows} from './sellerHistoricalSales.ts'
 import { createHash, randomUUID } from 'node:crypto'
@@ -388,5 +389,16 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  res.json({ok:true})
  })
  app.post('/api/admin/seller-finance/releases',auth,role('admin'),releaseSale)
+ app.post('/api/seller/finance/confirm-purchase',auth,role('seller'),
+  rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'draft-8',legacyHeaders:false,skipSuccessfulRequests:true,message:{error:'Too many confirmation attempts. Try again later.'}}),
+  protectedRoute(async(req,res,next)=>{
+   const {password,orderId,amountCents}=req.body??{}
+   const account=await db.prepare('SELECT password_hash FROM users WHERE id=?').get(req.user!.id) as {password_hash:string}|undefined
+   if(typeof password!=='string'||password.length>1024||!account||!await bcrypt.compare(password,account.password_hash)){
+    return void res.status(403).json({error:'Incorrect account password.'})
+   }
+   req.body={orderId,amountCents,sellerId:req.user!.id,verified:true,destination:'wallet'}
+   return releaseSale(req,res,next)
+  }))
  app.post('/api/seller/finance/releases',auth,role('seller'),releaseSale)
 }
