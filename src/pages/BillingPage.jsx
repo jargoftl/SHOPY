@@ -36,7 +36,7 @@ const BillingPage = () => {
           ? addressFields.every(field => address[field] === location.state.billing[field])
           : address.isDefault)
         if(saved) setSelectedAddressId(String(saved.id))
-        setBilling((current) => mergeBillingDefaults(current, user, profile.addresses, editedFields.current))
+        setBilling((current) => mergeBillingDefaults({phone: saved?.phone || user.phone || '', ...current}, user, profile.addresses, editedFields.current))
       }
     }
     loadAddresses().catch((error) => { if (active) setMessage(error.message) }).finally(() => { if (active) setLoadingAddresses(false) })
@@ -47,12 +47,17 @@ const BillingPage = () => {
     setSelectedAddressId(id)
     addressFields.forEach(field => editedFields.current.add(field))
     const selected = addresses.find(address => String(address.id) === id)
-    setBilling(current => selected ? applyBillingAddress(current, selected) : { ...current, address:'', city:'', region:'', country:'', phone:'' })
+    setBilling(current => selected ? {...applyBillingAddress(current, selected), phone:selected.phone || ''} : { ...current, address:'', city:'', region:'', country:'', phone:'' })
   }
 
   const updateBilling = (event) => {
     const { name, value } = event.target
     editedFields.current.add(name)
+    if(name==='address'){
+      setSelectedAddressId('')
+      setBilling(current=>({...current,address:value,city:'',region:'',country:''}))
+      return
+    }
     setBilling((current) => ({ ...current, [name]: value }))
   }
 
@@ -72,7 +77,7 @@ const BillingPage = () => {
     setMessage('')
     try {
       if(canSaveAddress){
-        const existing = addresses.find(address => addressFields.every(field => checkoutBilling[field] === address[field]))
+        const existing = addresses.find(address => addressFields.every(field => checkoutBilling[field] === address[field]) && checkoutBilling.phone === address.phone)
         if(existing){
           if(!existing.isDefault) await apiRequest(`/api/buyer/addresses/${existing.id}/default`,{method:'PATCH'})
         }else{
@@ -100,21 +105,9 @@ const BillingPage = () => {
         <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_320px]">
           <form onSubmit={continueToCheckout} className="space-y-5">
             {addresses.length > 0 && <label className="block text-sm font-medium">Use a saved address<select value={selectedAddressId} onChange={(event) => selectAddress(event.target.value)} className="mt-2 h-12 w-full border border-[#cccccc] bg-white px-3 text-sm"><option value="">Add new address</option>{addresses.map((address) => <option key={address.id} value={address.id}>{address.address}, {address.city}{address.isDefault ? ' (default)' : ''}</option>)}</select></label>}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-medium">Full name<input name="fullName" value={billing.fullName || ''} onChange={updateBilling} autoComplete="name" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
-              <label className="block text-sm font-medium">Email<input name="email" value={billing.email || ''} onChange={updateBilling} type="email" autoComplete="email" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
-            </div>
-            {(!selectedAddressId||loadingAddresses)&&<>
-            <label className="block text-sm font-medium">Recipient phone (optional)<input name="phone" type="tel" autoComplete="tel" maxLength={40} value={billing.phone || ''} onChange={updateBilling} className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
-            <label className="block text-sm font-medium">详细地址 / Street address<input name="address" placeholder="请输入真实的街道、门牌号和房间号" value={billing.address || ''} onChange={updateBilling} autoComplete="street-address" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-medium">城市 / City<input name="city" value={billing.city || ''} onChange={updateBilling} autoComplete="address-level2" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
-              <label className="block text-sm font-medium">省 / 自治区 / 直辖市<input name="region" value={billing.region || ''} onChange={updateBilling} autoComplete="address-level1" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
-            </div>
-            <label className="block text-sm font-medium">国家 / Country
-              <select name="country" value={billing.country || 'United States'} onChange={updateBilling} autoComplete="country-name" required className="mt-2 h-12 w-full border border-[#cccccc] bg-white px-3 text-sm outline-none focus:border-black"><option value="">Choose country</option><option value="China">中国</option><option>United States</option><option>Canada</option><option>United Kingdom</option><option>Nigeria</option><option>Other</option>{billing.country && !['China', 'United States', 'Canada', 'United Kingdom', 'Nigeria', 'Other'].includes(billing.country) && <option>{billing.country}</option>}</select>
-            </label>
-            </>}
+            <label className="block text-sm font-medium">Full name<input name="fullName" value={billing.fullName || ''} onChange={updateBilling} autoComplete="name" required className="mt-2 h-12 w-full rounded border px-3" /></label>
+            <label className="block text-sm font-medium">Phone number<input name="phone" type="tel" value={billing.phone || ''} onChange={updateBilling} autoComplete="tel" maxLength={40} required className="mt-2 h-12 w-full rounded border px-3" /></label>
+            <label className="block text-sm font-medium">Delivery address<input name="address" value={billing.address || ''} onChange={updateBilling} autoComplete="street-address" placeholder="Enter the full delivery address" maxLength={200} required className="mt-2 h-12 w-full rounded border px-3" /></label>
             {message && <p role="alert" className="text-sm text-[#a33]">{message}</p>}
             <button type="submit" disabled={saving||loadingAddresses} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-50">{saving?'Saving address…':'Continue to checkout'}</button>
           </form>

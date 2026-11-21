@@ -1812,7 +1812,7 @@ app.post('/api/buyer/addresses', requireAuth, requireRole('customer'), async (re
   const fields = ['fullName', 'phone', 'address', 'city', 'region', 'postalCode', 'country'] as const
   const values = fields.map((field) => typeof req.body[field] === 'string' ? req.body[field].trim() : '')
   const checkout = req.body.checkout === true
-  if (values.some((value, index) => value.length > 200 || (!value && !(checkout && (fields[index] === 'phone' || fields[index] === 'postalCode'))))) {
+  if (values.some((value, index) => value.length > 200 || (!value && !(checkout && !['fullName','address'].includes(fields[index]))))) {
     return res.status(400).json({ error: 'Complete the required address fields using at most 200 characters each.' })
   }
 
@@ -1820,8 +1820,8 @@ app.post('/api/buyer/addresses', requireAuth, requireRole('customer'), async (re
     await database.prepare('SELECT id FROM users WHERE id = ? FOR UPDATE').get(req.user!.id)
     if (checkout) {
       const existing = await getRow<{ id: number }>(`SELECT id FROM buyer_addresses
-        WHERE user_id=? AND full_name=? AND address=? AND city=? AND region=? AND country=?
-        ORDER BY is_default DESC,id DESC LIMIT 1`, req.user!.id, values[0], ...values.slice(2,5), values[6])
+        WHERE user_id=? AND full_name=? AND phone=? AND address=? AND city=? AND region=? AND country=?
+        ORDER BY is_default DESC,id DESC LIMIT 1`, req.user!.id, ...values.slice(0,5), values[6])
       if (existing) {
         await database.prepare('UPDATE buyer_addresses SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END WHERE user_id = ?').run(existing.id, req.user!.id)
         return true

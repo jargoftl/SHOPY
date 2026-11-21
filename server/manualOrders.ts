@@ -204,7 +204,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     const fields = ['fullName', 'email', 'address', 'city', 'region', 'country']
     const useBalance = coin === 'BALANCE'
     if(!useBalance)return res.status(400).json({error:'Orders can only be paid from your account balance. Add funds to your account before checkout.'})
-    if ((!useBalance && !coins.includes(coin)) || typeof requestKey !== 'string' || !/^[a-f0-9-]{36}$/i.test(requestKey) || !Array.isArray(items) || !items.length || items.length > 100 || !billing || !fields.every((field) => text(billing[field], 200))) return res.status(400).json({ error: 'Enter valid billing details, products and a supported payment method.' })
+    if ((!useBalance && !coins.includes(coin)) || typeof requestKey !== 'string' || !/^[a-f0-9-]{36}$/i.test(requestKey) || !Array.isArray(items) || !items.length || items.length > 100 || !billing || !['fullName','address'].every((field) => text(billing[field], 200))) return res.status(400).json({ error: 'Enter valid billing details, products and a supported payment method.' })
     if (useBalance && !['customer', 'seller'].includes(req.user!.role)) return res.status(403).json({ error: 'Account balance is available to buyers and sellers.' })
     const existing = (await db.prepare('SELECT id FROM purchase_orders WHERE buyer_id=? AND request_key=?').get(req.user!.id, requestKey)) as { id: number } | undefined
     if (existing) return res.json({ id: existing.id, buyerId: req.user!.id })
@@ -240,7 +240,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
           if(!debit.changes)return null
         }
       }
-      const result = (await db.prepare('INSERT INTO purchase_orders (buyer_id,request_key,coin,billing_json,subtotal_cents,shipping_cents,tax_cents,coin_amount,network,wallet_address,usd_rate,status,account_balance_payment) VALUES (?,?,?,?,?,0,?,?,?,?,?,?,1)').run(req.user!.id, requestKey, coin, JSON.stringify({ ...Object.fromEntries(fields.map((field) => [field, text(billing[field], 200)])), phone: text(billing.phone, 40) }), subtotal, tax, useBalance ? null : coinAmount(total, wallet!.usd_rate!), wallet?.network ?? null, wallet?.address ?? null, wallet?.usd_rate ?? null, useBalance ? 'paid' : 'awaiting_receipt'))
+      const result = (await db.prepare('INSERT INTO purchase_orders (buyer_id,request_key,coin,billing_json,subtotal_cents,shipping_cents,tax_cents,coin_amount,network,wallet_address,usd_rate,status,account_balance_payment) VALUES (?,?,?,?,?,0,?,?,?,?,?,?,1)').run(req.user!.id, requestKey, coin, JSON.stringify({ ...Object.fromEntries(fields.map((field) => [field, text(billing[field], 200)])), email: text(billing.email, 200) || req.user!.email, phone: text(billing.phone, 40) }), subtotal, tax, useBalance ? null : coinAmount(total, wallet!.usd_rate!), wallet?.network ?? null, wallet?.address ?? null, wallet?.usd_rate ?? null, useBalance ? 'paid' : 'awaiting_receipt'))
       const orderId = Number(result.lastInsertRowid)
       const number = (await allocateOrderNumber(db, 'purchase', orderId))
       if (useBalance) {
