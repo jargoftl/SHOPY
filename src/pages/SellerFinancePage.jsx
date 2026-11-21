@@ -1,4 +1,4 @@
-import {ArrowDown, ArrowUp, Circle, Copy, QrCode, X} from 'lucide-react'
+import {ArrowDown, ArrowUp, Circle, Copy, TrendingUp, Wallet, QrCode, X} from 'lucide-react'
 import {transactionActor} from '../lib/transactionLabels.js'
 import {formatTimestamp,timestampMillis} from '../lib/storeDates.js'
 import CryptoWalletIcon,{coinNetworks} from '../components/CryptoWalletIcon.jsx'
@@ -163,19 +163,21 @@ const compareHistory=(getTime)=>(first,second)=>{
 }
 
 function PaymentHistory({requests}){
- const [filter,setFilter]=useState('withdrawals')
+ const [kind,setKind]=useState('deposit')
+ const [filter,setFilter]=useState('all')
  const shown=requests.filter(request=>{
+  if(request.kind!==kind)return false
   if(filter==='all')return true
   if(filter==='pending')return !['confirmed','rejected'].includes(request.status)
-  if(filter==='rejected')return request.status==='rejected'
-  return request.status==='confirmed'&&(filter==='completed'||request.kind==='withdrawal')
+  return request.status===filter
  }).sort(compareHistory(paymentHistoryTime))
  return <section id="wallet-requests" className={`${panel} mt-7`}>
   <div className="flex flex-wrap items-center justify-between gap-3">
-   <h2 className="font-semibold">Payment history</h2>
+   <div className="flex flex-wrap gap-2" role="group" aria-label="Payment history">
+    {[['deposit','Deposits'],['withdrawal','Withdrawals']].map(([value,label])=><button key={value} type="button" aria-pressed={kind===value} onClick={()=>setKind(value)} className={`rounded-full px-4 py-2 text-sm font-semibold ${kind===value?'bg-blue-700 text-white':'bg-slate-100 text-slate-700'}`}>{label}</button>)}
+   </div>
    <select aria-label="Filter payment history" value={filter} onChange={event=>setFilter(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
-    <option value="withdrawals">Accepted withdrawals</option>
-    <option value="completed">Accepted and credited</option>
+    <option value="confirmed">Completed</option>
     <option value="pending">Pending</option>
     <option value="rejected">Rejected</option>
     <option value="all">All transactions</option>
@@ -247,8 +249,24 @@ export default function SellerFinancePage({view='wallet'}){
  ]
  const title=view==='wallet'?'My wallet':view==='statement'?'Financial statement':'Transaction history'
  return <SellerWorkspace user={user}><p className="text-xs font-bold tracking-[.18em] text-[#555555]">{view==='wallet'?'MY WALLET':view==='statement'?'FINANCIAL STATEMENT':'TRANSACTION HISTORY'}</p><h1 className="mt-2 font-serif text-4xl">{title}</h1>{error&&<p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
- {view==='wallet'&&<><div className="mt-7 grid gap-4 md:grid-cols-2">{[['Balance',Math.max(0,(data?.wallet.balanceCents||0)-(data?.wallet.reservedCents||0))],['Pending withdrawals',data?.wallet.reservedCents]].map(([label,v],i)=><section key={label} className={`${panel} ${i===0?'!bg-[#111111] !text-white':''}`}><p className="text-sm opacity-70">{label}</p><p className="mt-5 text-3xl font-semibold">{data?money(v):'—'}</p></section>)}</div><div className="mt-5 flex flex-wrap items-center justify-between gap-4"><p className="max-w-2xl text-xs leading-6 text-[#555555]">Pending withdrawals are taken out of your available wallet balance immediately. Rejected withdrawals are returned to your available balance.</p><div className="flex gap-2">{['deposit','withdrawal'].map(k=><button key={k} className={button} disabled={!data} onClick={()=>{if(k==='withdrawal'&&!data.hasTransactionPin){setPinSettingsOpen(true);setError('');return}setError('');setKind(k);setKey(crypto.randomUUID())}}>{k==='deposit'?'Deposit funds':'Withdraw'}</button>)}</div></div>
- <Link className="mt-5 inline-block text-sm text-blue-700 underline" to="/seller/fund-record">View transaction history</Link><SaleConfirmations sales={data?.sales||[]} onConfirmed={refresh}/><section className={`${panel} mt-6`}><h2 className="font-semibold">Confirmed sale history</h2>{data?.sales.filter(s=>s.releaseStatus).slice(0,20).map(s=><div key={s.orderId} className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm"><div><strong>Order #{s.orderNumber}</strong><p className="mt-1 text-xs text-gray-500">Confirmed by {transactionActor(s.confirmedRole)} · {s.confirmedAt}</p></div><span>{money(s.amountCents)} · {s.releaseStatus}</span></div>)}{data&&!data.sales.some(s=>s.releaseStatus)&&<p className="mt-4 text-sm text-gray-500">Confirmed sales and their credited amounts will appear here.</p>}</section><button type="button" className="mt-6 min-h-11 text-sm font-semibold underline" onClick={()=>setPinSettingsOpen(true)}>Set or reset transaction PIN</button><TransactionPinModal open={Boolean(pinSettingsOpen)} onClose={()=>setPinSettingsOpen(false)} onSaved={async()=>{setError('');await refresh()}}/><PaymentHistory requests={data?.requests||[]}/></>}
+ {view==='wallet'&&<>
+  <div className={`${panel} mt-7 flex flex-wrap items-center justify-between gap-5`}>
+   <dl className="grid min-w-0 flex-1 gap-5 sm:grid-cols-2">
+    {[
+     ['Balance',data?Math.max(0,data.wallet.balanceCents-data.wallet.reservedCents):null,Wallet,'bg-blue-100 text-blue-700'],
+     ['Accumulated revenue',data?.accumulatedRevenueCents,TrendingUp,'bg-orange-100 text-orange-800'],
+    ].map(([label,value,Icon,color])=><div key={label} className="flex min-w-0 items-center gap-3">
+     <span className={`shrink-0 rounded-full p-3 ${color}`}><Icon size={22} aria-hidden="true"/></span>
+     <div className="min-w-0"><dt className="text-sm text-slate-600">{label}</dt><dd className="break-words text-2xl font-semibold tabular-nums">{value==null?'—':money(value)}</dd></div>
+    </div>)}
+   </dl>
+   <div className="flex gap-2">{['deposit','withdrawal'].map(k=><button key={k} className={button} disabled={!data} onClick={()=>{if(k==='withdrawal'&&!data.hasTransactionPin){setPinSettingsOpen(true);setError('');return}setError('');setKind(k);setKey(crypto.randomUUID())}}>{k==='deposit'?'Deposit':'Withdraw'}</button>)}</div>
+  </div>
+  <div className="mt-4 overflow-hidden rounded-2xl bg-blue-950">
+   <img src="/seller-wallet-banner.webp" alt="" width="1500" height="500" className="h-28 w-full object-cover object-center sm:h-40"/>
+  </div>
+  <PaymentHistory requests={data?.requests||[]}/>
+ <Link className="mt-5 inline-block text-sm text-blue-700 underline" to="/seller/fund-record">View transaction history</Link><SaleConfirmations sales={data?.sales||[]} onConfirmed={refresh}/><section className={`${panel} mt-6`}><h2 className="font-semibold">Confirmed sale history</h2>{data?.sales.filter(s=>s.releaseStatus).slice(0,20).map(s=><div key={s.orderId} className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm"><div><strong>Order #{s.orderNumber}</strong><p className="mt-1 text-xs text-gray-500">Confirmed by {transactionActor(s.confirmedRole)} · {s.confirmedAt}</p></div><span>{money(s.amountCents)} · {s.releaseStatus}</span></div>)}{data&&!data.sales.some(s=>s.releaseStatus)&&<p className="mt-4 text-sm text-gray-500">Confirmed sales and their credited amounts will appear here.</p>}</section><button type="button" className="mt-6 min-h-11 text-sm font-semibold underline" onClick={()=>setPinSettingsOpen(true)}>Set or reset transaction PIN</button><TransactionPinModal open={Boolean(pinSettingsOpen)} onClose={()=>setPinSettingsOpen(false)} onSaved={async()=>{setError('');await refresh()}}/></>}
  {view==='statement'&&<>
   <div className="mt-6 flex flex-wrap gap-2" role="group" aria-label="Statement period">
    {[['yesterday','Yesterday'],['today','Today'],['week','This week'],['month','This month'],['all','All time']].map(([value,label])=>
