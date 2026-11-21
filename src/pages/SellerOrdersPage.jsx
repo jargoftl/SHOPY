@@ -37,6 +37,35 @@ const logisticsBadge = shipment => shipment
   ? <OrderStatusBadge status={shipment.status} label={shipment.status==='pending'?'Pending · needs attention':fulfillmentLabel(shipment.status)}/>
   : '—'
 
+function OrderContactForm({order,onSaved,onCancel}){
+ const [busy,setBusy]=useState(false)
+ const [error,setError]=useState('')
+ const contact=order.sellerContact||{}
+ async function save(event){
+  event.preventDefault()
+  if(busy)return
+  const fields=Object.fromEntries(new FormData(event.currentTarget))
+  setBusy(true)
+  setError('')
+  try{
+   const {contact:saved}=await apiRequest(`/api/seller/purchases/${order.id}/contact`,{method:'PUT',body:JSON.stringify(fields)})
+   onSaved(saved)
+  }catch(error){setError(error.message)}
+  finally{setBusy(false)}
+ }
+ return <form onSubmit={save} className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+  <p className="text-sm text-slate-600 sm:col-span-2">These contact details are private to your store and apply to this order.</p>
+  {[['name','Name','text',200],['email','Email','email',200],['phone','Phone number','tel',40],['address','Address','text',500]].map(([field,label,type,limit])=><label key={field} className="text-sm font-medium">{label}
+   <input name={field} type={type} maxLength={limit} defaultValue={contact[field]??(field==='name'?order.buyerName:'')} className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2"/>
+  </label>)}
+  <div className="flex flex-wrap gap-2 sm:col-span-2">
+   <button type="submit" disabled={busy} className="min-h-11 rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white">{busy?'Saving…':'Save contact'}</button>
+   <button type="button" onClick={onCancel} className="min-h-11 rounded-lg border border-slate-300 px-4 text-sm">Cancel</button>
+  </div>
+  {error&&<p role="alert" className="text-sm text-red-700 sm:col-span-2">{error}</p>}
+ </form>
+}
+
 function OrderFilter({label,value,onChange,options}){
  return <label className="min-w-0 text-xs font-medium text-slate-700">
   {label}
@@ -101,7 +130,7 @@ const SellerOrdersPage = () => {
     catch (err) { setError(err.message) } finally { setBusy(false) }
   }
   const query=search.trim().replace(/^#/,'').toLowerCase()
-  const visible = orders.filter(order=>(!query||[formatOrderReference(order),order.orderNumber,order.id,order.buyerName,...order.items.map(i=>i.name)].some(v=>String(v).toLowerCase().includes(query)))&&(filter==='all'||order.sellers[0]?.status===filter)&&(paymentFilter==='all'||order.status===paymentFilter)&&(orderTab==='all'||(orderTab==='paid'?order.sellers[0]?.releaseStatus==='released':!order.sellers[0]?.releaseStatus)))
+  const visible = orders.filter(order=>(!query||[formatOrderReference(order),order.orderNumber,order.id,order.sellerContact?.name,order.buyerName,...order.items.map(i=>i.name)].some(v=>String(v).toLowerCase().includes(query)))&&(filter==='all'||order.sellers[0]?.status===filter)&&(paymentFilter==='all'||order.status===paymentFilter)&&(orderTab==='all'||(orderTab==='paid'?order.sellers[0]?.releaseStatus==='released':!order.sellers[0]?.releaseStatus)))
   return <main className="seller-portal seller-orders account-workspace min-h-screen bg-[#f7f7f7] px-3 py-6 sm:px-5 sm:py-8 text-[#111111]"><div className="mx-auto max-w-6xl"><div className="flex flex-wrap justify-between gap-3"><div><Link to="/seller" className="text-sm text-[#555555]">← Dashboard</Link><h1 className="mt-3 text-3xl font-semibold">Shop orders</h1><p className="mt-2 text-sm text-[#555555]">Track paid orders, update shipments and view delivery history.</p></div><div className="flex items-start gap-4"><Link to="/messages" className="text-sm underline">Contact support</Link><SellerNotificationBell /></div></div>
     <nav aria-label="Order groups" className="portal-order-tabs">{[['all','All orders'],['pending','Pending'],['paid','Purchased'],['history','Sales history']].map(([value,label])=><button key={value} aria-pressed={orderTab===value} onClick={()=>setOrderTab(value)}>{label}</button>)}</nav>
     {orderTab==='history'?<div className="mt-6"><HistoricalSalesHistory/></div>:<>
@@ -125,7 +154,7 @@ const SellerOrdersPage = () => {
       const shipment=order.sellers[0]
       const profit=order.subtotalCents-Math.round(order.subtotalCents*100/115)
       const fields=[
-       ['Consignee name',order.buyerName||'—'],
+       ['Consignee name',<button type="button" onClick={()=>openOrder(order,'contact')} className="text-left text-blue-700 underline">{(order.sellerContact?.name??order.buyerName)||'Edit contact'}</button>],
        ['Order time',formatTimestamp(order.createdAt)],
        ['Product amount',formatMoney(order.subtotalCents)],
        ['Estimated profit',formatMoney(profit)],
@@ -159,24 +188,32 @@ const SellerOrdersPage = () => {
       const cost=Math.round(order.subtotalCents*100/115)
       return <>
        <header className="mb-4 flex items-start justify-between gap-3">
-        <div><h2 id="shop-order-title" className="text-xl font-semibold">{selected.mode==='purchase'?'Purchase confirmation':'Order details'}</h2><p className="text-sm text-slate-600">{formatOrderReference(order)}</p></div>
+        <div><h2 id="shop-order-title" className="text-xl font-semibold">{selected.mode==='purchase'?'Purchase confirmation':selected.mode==='contact'?'Edit contact':'Order details'}</h2><p className="text-sm text-slate-600">{formatOrderReference(order)}</p></div>
         <button type="button" onClick={()=>dialog.current.close()} className="rounded border px-3 py-1">Close</button>
        </header>
        <dl className="mb-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-3">
         {[
-         ['Consignee',order.buyerName], ['Email',order.maskedEmail??'—'], ['Order time',formatTimestamp(order.createdAt)],
+         ['Consignee',(order.sellerContact?.name??order.buyerName)||'—'], ['Email',order.sellerContact?.email||order.maskedEmail||'—'],
+         ['Phone',order.sellerContact?.phone||'—'], ['Address',order.sellerContact?.address||'—'], ['Order time',formatTimestamp(order.createdAt)],
          ['Payment status',<OrderStatusBadge {...orderPaymentBadge(order)}/>],['Purchase status',purchaseBadge(shipment?.releaseStatus)],
          ['Logistics status',logisticsBadge(shipment)],['Purchase time',shipment?.confirmedAt?formatTimestamp(shipment.confirmedAt):'—'],
          ['Sales amount',formatMoney(order.subtotalCents)],['Estimated purchase cost',formatMoney(cost)],['Estimated profit',formatMoney(order.subtotalCents-cost)],
         ].map(([label,value])=><div key={label}><dt className="text-xs text-slate-600">{label}</dt><dd className="font-semibold">{value}</dd></div>)}
        </dl>
+       {selected.mode==='contact'
+        ? <OrderContactForm key={order.id} order={order} onCancel={()=>setSelected({id:order.id,mode:'view'})} onSaved={contact=>{
+         setOrders(current=>current.map(entry=>entry.id===order.id?{...entry,sellerContact:contact}:entry))
+         setSelected({id:order.id,mode:'view'})
+         progressToast('Order contact saved.')
+        }}/>
+        : <button type="button" onClick={()=>setSelected({id:order.id,mode:'contact'})} className="mb-4 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium">Edit contact</button>}
        <h3 className="font-semibold">Order items</h3>
        <ul className="mb-4 divide-y text-sm">{order.items.map(item=><li key={item.id} className="flex items-center gap-3 py-3">
         {item.imageUrl&&<img src={item.imageUrl} alt="" className="size-12 rounded object-cover"/>}
         <div className="min-w-0 flex-1"><p className="break-words font-medium">{item.name}</p><p className="text-xs text-slate-600">{[item.color,item.size].filter(Boolean).join(' · ')}</p></div>
         <span>{item.quantity} × {formatMoney(item.priceCents)}</span>
        </li>)}</ul>
-       {canPurchase(order)&&<form onSubmit={event=>confirmPurchase(event,order)} className="grid gap-2 border-t pt-4">
+       {selected.mode!=='contact'&&canPurchase(order)&&<form onSubmit={event=>confirmPurchase(event,order)} className="grid gap-2 border-t pt-4">
         <label className="text-sm font-medium">Transaction PIN<PasswordInput name="transactionPin" required inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" className="mt-1 w-full rounded-lg border p-2"/></label>
         <button type="button" onClick={()=>setPinOpen(true)} className="justify-self-start text-sm text-blue-700 underline">Create or reset transaction PIN</button>
         <p className="text-xs text-slate-600">Confirm the paid sale to credit the proceeds to your website wallet.</p>

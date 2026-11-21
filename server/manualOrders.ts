@@ -61,10 +61,14 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       .map((item) => ({ id: item.id, sellerId: item.seller_id, productId: item.product_id, name: item.name, imageUrl: item.image_url, priceCents: item.price_cents, quantity: item.quantity, color: item.color, size: item.size }))
     const sellers = (await db.prepare('SELECT s.seller_id AS sellerId, s.status,s.tracking_code AS trackingNumber,s.tracking_number AS carrierTrackingNumber,s.carrier,e.status AS deliveryEmailStatus,e.sent_at AS deliveryEmailSentAt,s.tracking_assigned_at AS trackingAssignedAt,(SELECT status FROM seller_sale_releases r WHERE r.order_id=s.order_id AND r.seller_id=s.seller_id) AS releaseStatus, (SELECT created_at FROM seller_sale_releases r WHERE r.order_id=s.order_id AND r.seller_id=s.seller_id) AS confirmedAt, COALESCE(p.store_name,u.full_name) AS storeName FROM purchase_sellers s JOIN users u ON u.id=s.seller_id LEFT JOIN seller_profiles p ON p.user_id=s.seller_id LEFT JOIN seller_delivery_emails e ON e.order_id=s.order_id AND e.seller_id=s.seller_id WHERE s.order_id=? AND (? IS NULL OR s.seller_id=?)').all(order.id, sellerId ?? null, sellerId ?? null))
     const billing = JSON.parse(order.billing_json) as Record<string, string>
+    const savedContact = sellerId === undefined ? undefined : await db.prepare(
+      'SELECT seller_contact_json FROM purchase_sellers WHERE order_id=? AND seller_id=?',
+    ).get(order.id,sellerId) as {seller_contact_json:string}|undefined
+    const sellerContact = savedContact ? JSON.parse(savedContact.seller_contact_json) : undefined
     const email = typeof billing.email === 'string' ? /^([^@])[^@]*@([^@]+)$/.exec(billing.email) : null
     const maskedEmail = email ? `${email[1]}***@${email[2]}` : null
     return {
-      id: order.id, orderNumber: (await orderNumber(order.id)), buyerId: order.buyer_id, buyerName: billing.fullName, ...(sellerId === undefined ? { billing } : { maskedEmail }),
+      id: order.id, orderNumber: (await orderNumber(order.id)), buyerId: order.buyer_id, buyerName: billing.fullName, ...(sellerId === undefined ? { billing } : { maskedEmail, sellerContact }),
       coin: order.coin, status: order.status, accountBalancePayment:Boolean(order.account_balance_payment), subtotalCents: sellerId === undefined ? order.subtotal_cents : items.reduce((sum, item) => sum + item.priceCents * item.quantity, 0),
       ...(sellerId === undefined ? { shippingCents: order.shipping_cents, taxCents: order.tax_cents, coinAmount: order.coin_amount, network: order.network, walletAddress: order.wallet_address, usdRate: order.usd_rate } : {}),
       createdAt: order.created_at, items, sellers,
@@ -327,6 +331,23 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     })()
     return res.json({ ok: true })
   })
+  app.put('/api/seller/purchases/:id/contact', auth, role('seller'), async (req, res) => {
+    const limits = { name: 200, email: 200, phone: 40, address: 500 } as const
+    const fields = Object.keys(limits) as (keyof typeof limits)[]
+    const input = req.body ?? {}
+    if (fields.some(field => typeof input[field] !== 'string' || input[field].trim().length > limits[field])) {
+      return res.status(400).json({ error: 'Check the contact fields and try again.' })
+    }
+    const contact = Object.fromEntries(fields.map(field => [field, input[field].trim()]))
+    if (contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) {
+      return res.status(400).json({ error: 'Enter a valid contact email.' })
+    }
+    const result = await db.prepare('UPDATE purchase_sellers SET seller_contact_json=? WHERE order_id=? AND seller_id=?')
+      .run(JSON.stringify(contact),validId(req.params.id),req.user!.id)
+    if (!result.changes) return res.status(404).json({ error: 'Order not found.' })
+    return res.set('Cache-Control','private, no-store').json({ contact })
+  })
+
   app.get('/api/seller/purchases', auth, role('seller'), async (req, res) => {
     const orders = (await db.prepare('SELECT o.* FROM purchase_orders o JOIN purchase_sellers s ON s.order_id=o.id WHERE s.seller_id=? ORDER BY o.id DESC').all(req.user!.id)) as Order[]
     return res.json({ orders: (await Promise.all(orders.map(async (order) => (await serialize(order, req.user!.id))))) })

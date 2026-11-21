@@ -614,6 +614,7 @@ CREATE TABLE IF NOT EXISTS buyer_deposit_credits (
 ALTER TABLE buyer_wallet_holds ENABLE ROW LEVEL SECURITY;
 ALTER TABLE buyer_deposit_credits ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE purchase_sellers ADD COLUMN IF NOT EXISTS seller_contact_json TEXT NOT NULL DEFAULT '{}';
 ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS account_balance_payment INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE seller_sale_releases ADD COLUMN IF NOT EXISTS confirmed_role TEXT NOT NULL DEFAULT 'admin';
 ALTER TABLE purchase_sellers ADD COLUMN IF NOT EXISTS tracking_number TEXT NOT NULL DEFAULT '';
