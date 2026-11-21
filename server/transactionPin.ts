@@ -6,8 +6,8 @@ import type { Database } from './database.ts'
 export const validPin = (pin: unknown): pin is string => typeof pin === 'string' && /^\d{4}$/.test(pin)
 export async function checkTransactionPin(db: Database, userId: number, pin: unknown): Promise<string | null> {
  return db.transaction(async () => {
-  const row = await db.prepare('SELECT pin_hash,failed_attempts,locked_until FROM transaction_security WHERE user_id=?').get(userId) as {pin_hash:string,failed_attempts:number,locked_until:string|null}|undefined
-  if (!row) return 'Set your four-digit transaction PIN before making a deposit or withdrawal.'
+  const row = await db.prepare('SELECT pin_hash,failed_attempts,locked_until FROM transaction_security WHERE user_id=? FOR UPDATE').get(userId) as {pin_hash:string,failed_attempts:number,locked_until:string|null}|undefined
+  if (!row) return 'Set your four-digit transaction PIN in My wallet before confirming a transaction.'
   if (row.locked_until && row.locked_until > new Date().toISOString()) return 'Too many incorrect PIN attempts. Try again in 15 minutes or reset your PIN using your login password.'
   if (!validPin(pin) || !await bcrypt.compare(pin,row.pin_hash)) {
    const attempts = row.locked_until ? 1 : row.failed_attempts + 1

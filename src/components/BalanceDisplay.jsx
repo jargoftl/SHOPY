@@ -13,7 +13,6 @@ const BalanceDisplay = ({ balanceCents, size = 'text-2xl' }) => {
       </button>
     </div>
     <p className={`mt-1 font-semibold ${size}`}>{visible ? formatMoney(balanceCents) : <span aria-label="Balance hidden">••••••</span>}</p>
-    <p className="mt-2 text-xs text-white/75">Store credit for purchases; not withdrawable as cash.</p>
   </div>
 }
 

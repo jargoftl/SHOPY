@@ -42,12 +42,12 @@ const SellerOrdersPage = () => {
     event.preventDefault()
     if(busy)return
     const form=event.currentTarget
-    const password=new FormData(form).get('password')
+    const transactionPin=new FormData(form).get('transactionPin')
     form.reset()
     setBusy(true)
     setConfirmError('')
     try{
-      await apiRequest('/api/seller/finance/confirm-purchase',{method:'POST',body:JSON.stringify({orderId:order.id,amountCents:order.subtotalCents,password})})
+      await apiRequest('/api/seller/finance/confirm-purchase',{method:'POST',body:JSON.stringify({orderId:order.id,amountCents:order.subtotalCents,transactionPin})})
       setSelected(current=>current?.id===order.id?{id:order.id,mode:'view'}:current)
       setReload(value=>value+1)
       progressToast('Sale confirmed. Proceeds credited to your wallet.')
@@ -130,7 +130,8 @@ const SellerOrdersPage = () => {
         <span>{item.quantity} × {formatMoney(item.priceCents)}</span>
        </li>)}</ul>
        {selected.mode==='purchase'&&canPurchase(order)?<form onSubmit={event=>confirmPurchase(event,order)} className="grid gap-2 border-t pt-4">
-        <label className="text-sm font-medium">Account password<PasswordInput name="password" required maxLength={1024} autoComplete="current-password" className="mt-1 w-full rounded-lg border p-2"/></label>
+        <label className="text-sm font-medium">Transaction PIN<PasswordInput name="transactionPin" required inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" className="mt-1 w-full rounded-lg border p-2"/></label>
+        <Link to="/seller/wallet" className="text-sm text-blue-700 underline">Set or reset your PIN in My wallet</Link>
         <p className="text-xs text-slate-600">Confirm the paid sale to credit the proceeds to your website wallet.</p>
         <button disabled={busy} className="justify-self-start rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy?'Confirming…':'Confirm purchase'}</button>
        </form>:<section className="min-w-0"><h2 className="mb-3 text-sm font-semibold">Dispatch & tracking</h2>{shipment&&<><OrderStatusBadge status={shipment.status} label={fulfillmentLabel(shipment.status)}/><details className="portal-shipment-details"><summary>Shipment details & updates</summary><div className="mt-3"><DeliveryProgress compact status={shipment.status}/></div><div className="mt-4 grid min-w-0 gap-3 rounded-xl bg-gray-50 p-4 sm:grid-cols-2"><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Tracking number</p><p className="mt-1 break-all font-mono text-sm font-semibold">{shipment.trackingNumber||'Not assigned yet'}</p></div><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Carrier</p><p className="mt-1 break-words text-sm">{shipment.carrier||'Not assigned yet'}</p></div>{shipment.carrierTrackingNumber&&<p className="break-all text-xs text-gray-500 sm:col-span-2">Carrier reference: {shipment.carrierTrackingNumber}</p>}</div><label className="mt-4 block text-xs font-medium">Update fulfillment<select aria-label={`Logistics for order ${formatOrderReference(order)}`} disabled={busy||order.status!=='paid'} value={shipment.status} onChange={e=>update(order,e.target.value)} className="mt-2 block min-h-12 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm disabled:opacity-50">{fulfillmentOptions.map(([status,label])=><option key={status} value={status}>{label}</option>)}</select></label><DeliveryEmailStatus shipment={shipment} orderId={order.id}/><ShipmentHistory trackingNumber={shipment.trackingNumber} revision={reload}/></details></>}{order.status!=='paid'&&<p className="mt-3 text-xs text-gray-500">Payment not confirmed</p>}</section>}
