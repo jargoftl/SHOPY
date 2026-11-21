@@ -420,8 +420,12 @@ const clearSessionCookie = (req: Request, res: Response): void => {
 const createSession = async (userId: number | bigint, req: Request, res: Response): Promise<void> => {
   const token = randomBytes(32).toString('hex')
   const expiresAt = new Date(Date.now() + sessionDurationMs).toISOString()
-  await database.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)')
-    .run(hashToken(token), userId, expiresAt)
+  await database.transaction(async()=>{
+    await database.prepare("DELETE FROM sessions WHERE user_id=? AND EXISTS(SELECT 1 FROM users WHERE id=? AND role='seller')")
+      .run(userId,userId)
+    await database.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)')
+      .run(hashToken(token), userId, expiresAt)
+  })()
   setSessionCookie(req, res, token)
 }
 
@@ -900,7 +904,7 @@ app.post('/api/auth/reset-password', passwordResetLimiter, async (req, res, next
   }
 })
 
-app.get('/api/auth/me', requireAuth, (req, res) => res.json({ user: publicUser(req.user!) }))
+app.get('/api/auth/me', requireAuth, (req, res) => res.set('Cache-Control','private, no-store').json({ user: publicUser(req.user!) }))
 
 app.post('/api/auth/logout', async (req, res) => {
   const token = sessionToken(req)

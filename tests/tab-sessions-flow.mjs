@@ -1,4 +1,4 @@
-export async function testTabSessions({req,check,db}){
+export async function testTabSessions({req,check,db,previousSeller,sellerId}){
  const scopes={buyer:'a'.repeat(32),seller:'b'.repeat(32),admin:'c'.repeat(32)},cookies=[]
  for(const [role,scope] of Object.entries(scopes)){
   const email=role==='buyer'?'buyer@example.test':role==='seller'?'seller@example.test':'admin@example.test'
@@ -19,4 +19,18 @@ export async function testTabSessions({req,check,db}){
  await req('/api/auth/logout',{method:'POST',headers:{'X-Session-Scope':scopes.buyer},body:'{}'},jar)
  r=await req('/api/auth/me',{headers:{'X-Session-Scope':scopes.buyer}},jar);check('logout clears selected buyer session',r.status===401)
  for(const role of ['seller','admin']){r=await req('/api/auth/me',{headers:{'X-Session-Scope':scopes[role]}},jar);check('buyer logout preserves '+role+' tab',r.status===200)}
+ r=await req('/api/seller/finance',{},previousSeller)
+ check('signing in on another seller device immediately revokes the former session',r.status===401,r)
+ const secondScope='d'.repeat(32)
+ const newLogin=await req('/api/auth/login',{method:'POST',headers:{'X-Session-Scope':secondScope,'X-Forwarded-For':'198.51.100.191'},body:JSON.stringify({email:'seller@example.test',password:'long-test-password-123'})})
+ check('new seller device can sign in',newLogin.status===200&&Boolean(newLogin.cookie),newLogin)
+ r=await req('/api/auth/me',{headers:{'X-Session-Scope':scopes.seller}},jar)
+ check('seller session check rejects revoked device',r.status===401,r)
+ r=await req('/api/auth/me',{headers:{'X-Session-Scope':secondScope}},newLogin.cookie)
+ check('newest seller session stays active',r.status===200&&r.data.user.role==='seller',r)
+ r=await req('/api/auth/me',{headers:{'X-Session-Scope':scopes.admin}},jar)
+ check('seller login leaves the unrelated admin session active',r.status===200,r)
+ const sessions=(await db.query('SELECT COUNT(*) AS count FROM shop.sessions WHERE user_id=$1',[sellerId])).rows[0]
+ check('seller has exactly one active saved session',Number(sessions.count)===1,sessions)
+
 }
