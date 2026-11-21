@@ -14,6 +14,29 @@ const phoneCountries = getCountries().map(code => ({
   flag: String.fromCodePoint(...[...code].map(letter => letter.charCodeAt(0) + 127397)),
 })).sort((a, b) => a.label.localeCompare(b.label))
 
+const exampleAddresses = [
+  '浙江省杭州市西湖区示例路18号',
+  '广东省深圳市南山区示例街道26号',
+  '四川省成都市锦江区示例路35号',
+  '江苏省苏州市姑苏区示例街道12号',
+  '北京市朝阳区示例路48号',
+  '上海市浦东新区示例街道9号',
+  '湖北省武汉市洪山区示例路21号',
+  '山东省青岛市市南区示例街道16号',
+  '福建省厦门市思明区示例路32号',
+  '湖南省长沙市岳麓区示例街道7号',
+  '河南省郑州市金水区示例路29号',
+  '安徽省合肥市蜀山区示例街道14号',
+  '江西省南昌市东湖区示例路43号',
+  '辽宁省大连市中山区示例街道23号',
+  '重庆市渝中区示例路11号',
+  '云南省昆明市五华区示例街道37号',
+  '陕西省西安市雁塔区示例路19号',
+  '广西壮族自治区南宁市青秀区示例街道31号',
+  '海南省海口市龙华区示例路6号',
+  '河北省石家庄市长安区示例街道45号',
+]
+
 const BillingPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
@@ -55,10 +78,16 @@ const BillingPage = () => {
 
   const selectAddress = (id) => {
     setSelectedAddressId(id)
-    setPhoneCountry('')
     addressFields.forEach(field => editedFields.current.add(field))
     const selected = addresses.find(address => String(address.id) === id)
-    setBilling(current => selected ? {...applyBillingAddress(current, selected), phone:selected.phone || ''} : { ...current, address:'', city:'', region:'', country:'', phone:'' })
+    if(selected){
+      setPhoneCountry('')
+      setBilling(current => ({...applyBillingAddress(current, selected), phone:selected.phone || ''}))
+      return
+    }
+    const example = id.startsWith('example-') ? exampleAddresses[Number(id.slice(8))] : ''
+    setBilling(current => ({...current, address:example || '', city:'', region:'', country:example?'China':''}))
+
   }
 
   const updateBilling = (event) => {
@@ -137,11 +166,10 @@ const BillingPage = () => {
         <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">Billing and delivery</h1>
         <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_320px]">
           <form onSubmit={continueToCheckout} className="space-y-5">
-            {addresses.length > 0 && <label className="block text-sm font-medium">Use a saved address<select value={selectedAddressId} onChange={(event) => selectAddress(event.target.value)} className="mt-2 h-12 w-full border border-[#cccccc] bg-white px-3 text-sm"><option value="">Add new address</option>{addresses.map((address) => <option key={address.id} value={address.id}>{address.address}, {address.city}{address.isDefault ? ' (default)' : ''}</option>)}</select></label>}
             <label className="block text-sm font-medium">Full name<input name="fullName" value={billing.fullName || ''} onChange={updateBilling} autoComplete="name" required className="mt-2 h-12 w-full rounded border px-3" /></label>
             <label className="block text-sm font-medium">Email address<input name="email" type="email" value={billing.email || ''} onChange={updateBilling} autoComplete="email" maxLength={200} required className="mt-2 h-12 w-full rounded border px-3" /></label>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <label className="block min-w-0 text-sm font-medium">Country calling code
+              <label className="block min-w-0 text-sm font-medium">Phone country code
                 <select value={phoneCountry || detectedCountry || ''} onChange={changePhoneCountry} className="mt-2 h-12 w-full rounded border bg-white px-3">
                   <option value="">Choose a country</option>
                   {phoneCountries.map(({code,label,dial,flag})=><option key={code} value={code}>{flag} {label} (+{dial})</option>)}
@@ -149,6 +177,17 @@ const BillingPage = () => {
               </label>
               <label className="block text-sm font-medium">Phone number<input name="phone" type="tel" value={billing.phone || ''} onChange={updateBilling} autoComplete="tel" maxLength={40} required className="mt-2 h-12 w-full rounded border px-3" /></label>
             </div>
+            <label className="block text-sm font-medium">Choose a delivery address
+              <select value={selectedAddressId} onChange={event=>selectAddress(event.target.value)} className="mt-2 h-12 w-full rounded border bg-white px-3 text-sm">
+                <option value="">Add new address</option>
+                {addresses.length>0&&<optgroup label="Your saved addresses">
+                  {addresses.map(address=><option key={address.id} value={address.id}>{[address.address,address.city].filter(Boolean).join(', ')}{address.isDefault?' (default)':''}</option>)}
+                </optgroup>}
+                <optgroup label="Example addresses · China">
+                  {exampleAddresses.map((address,index)=><option key={address} value={`example-${index}`}>{address}</option>)}
+                </optgroup>
+              </select>
+            </label>
             <label className="block text-sm font-medium">Delivery address<input name="address" value={billing.address || ''} onChange={updateBilling} autoComplete="street-address" placeholder="Enter the full delivery address" maxLength={200} required className="mt-2 h-12 w-full rounded border px-3" /></label>
             {message && <p role="alert" className="text-sm text-[#a33]">{message}</p>}
             <button type="submit" disabled={saving||loadingAddresses} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-50">{saving?'Saving address…':'Continue to checkout'}</button>
