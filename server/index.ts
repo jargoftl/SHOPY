@@ -1520,6 +1520,14 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
     if (notification.type === 'buyer_request' && notification.link === '/profile/wallet' && /^Request #\d+ (pending|rejected)$/.test(notification.title)) {
       notification.body = 'Open your wallet to see the request status.'
     }
+    if (notification.type === 'wallet' && notification.link === '/seller/wallet' && ['Withdrawal declined','Deposit declined'].includes(notification.title)) {
+      notification.title = notification.title.replace('declined','rejected')
+      notification.body = notification.title === 'Withdrawal rejected' ? 'Your withdrawal was rejected.' : 'Your deposit was rejected.'
+    }
+    if (notification.type === 'seller_verification' && notification.title === 'Seller application declined') {
+      notification.title = 'Seller application rejected'
+      notification.body = 'Your seller application was rejected.'
+    }
     return {
       id: notification.id,
       type: notification.type,

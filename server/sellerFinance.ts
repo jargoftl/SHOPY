@@ -13,6 +13,11 @@ const financialActorLabel=(role:unknown)=>role==='admin'?'Support team':role==='
 const userFinanceEntry=(row:unknown)=>{
  if(!row||typeof row!=='object'||Array.isArray(row))return row
  const entry={...row} as Record<string,unknown>
+ if(entry.kind==='withdrawal'){
+  delete entry.address
+  delete entry.network
+  delete entry.instructions
+ }
  if(entry.kind==='admin_funding'){
   delete entry.actor_id
   delete entry.actorName
@@ -141,7 +146,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  }))
  app.get('/api/seller/finance',auth,role('seller','admin'),protectedRoute(async(req,res)=>{
  const wallet=await db.prepare('SELECT balance_cents AS balanceCents,reserved_cents AS reservedCents FROM seller_wallets WHERE seller_id=?').get(req.user!.id)||{balanceCents:0,reservedCents:0}
- res.set('Cache-Control','no-store').json({wallet,depositWallets:(await configuredWallets()).map(({coin,network})=>({coin,network})),sales:(await sales(req.user!.id)).map(userFinanceEntry),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:(await requests(req.user!.id)).map(userFinanceEntry),records:(await db.prepare("SELECT f.*,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? ORDER BY f.id DESC LIMIT 1000").all(req.user!.id)).map(userFinanceEntry)})
+ res.set('Cache-Control','no-store').json({wallet,depositWallets:(await configuredWallets()).map(({coin,network})=>({coin,network})),sales:(await sales(req.user!.id)).map(userFinanceEntry),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:(await requests(req.user!.id)).map(userFinanceEntry),records:(await db.prepare("SELECT f.*,COALESCE(q.transaction_ref,f.transaction_ref) AS displayReference,q.resolved_at AS resolvedAt,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN seller_wallet_requests q ON f.kind IN ('deposit','withdrawal') AND q.seller_id=f.seller_id AND q.id::text=f.reference LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? ORDER BY f.id DESC LIMIT 1000").all(req.user!.id)).map(userFinanceEntry)})
  }))
  app.post('/api/seller/finance/requests',auth,role('seller'),rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many wallet attempts. Please try again later.'}}),protectedRoute(async(req,res)=>{
  const {kind,coin,amountCents,requestKey}=req.body||{}
@@ -212,7 +217,14 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  const view=req.query.view
  res.set('Cache-Control','no-store')
  if(view==='deposit'||view==='withdrawal'){
-  res.json({requests:await requests(undefined,view),paymentWallets:(await configuredWallets()).map(({coin,network,address,usd_rate})=>({coin,network,address,usd_rate}))})
+  const wallets=await configuredWallets()
+  const queue=await requests(undefined,view)
+  const paymentWallets=wallets.map(({coin,network,address,usd_rate})=>({coin,network,address,usd_rate}))
+  res.json({requests:queue.map(request=>{
+   if(view!=='withdrawal'||request.usd_rate||request.status!=='awaiting_transfer')return request
+   const wallet=wallets.find(wallet=>wallet.coin===request.coin&&wallet.network.toLowerCase()===request.network.toLowerCase())||wallets.find(wallet=>wallet.coin===request.coin)
+   return wallet?{...request,suggestedUsdRate:wallet.usd_rate,suggestedCoinAmount:coinAmount(request.amount_cents,wallet.usd_rate)}:request
+  }),paymentWallets})
   return
  }
  const wallets=await db.prepare('SELECT w.*,u.public_id AS publicId,u.full_name AS name FROM seller_wallets w JOIN users u ON u.id=w.seller_id ORDER BY seller_id').all()
@@ -232,22 +244,32 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  await db.prepare("UPDATE seller_wallet_requests SET network=?,address=?,usd_rate=?,coin_amount=?,instructions=?,status=?,updated_at=CURRENT_TIMESTAMP,reviewed_by=? WHERE id=?").run(network,address,rate,coinAmount(request.amount_cents,rate),text(req.body.instructions,1000),request.kind==='deposit'?'awaiting_receipt':'awaiting_transfer',req.user!.id,request.id)
  } else if(action==='reject') {
  if(request.kind==='withdrawal') await postSellerFunds(db,request.seller_id,'withdrawal_rejected',String(request.id),0,-request.amount_cents,req.user!.id)
- await db.prepare("UPDATE seller_wallet_requests SET status='rejected',instructions=?,reviewed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(text(req.body.instructions,1000),req.user!.id,request.id)
+ await db.prepare("UPDATE seller_wallet_requests SET status='rejected',instructions='',reviewed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(req.user!.id,request.id)
  } else if(action==='confirm') {
  if(req.body.verified!==true||!text(req.body.transferReference,300)) fail('Independently verify the transfer and enter its transaction reference.')
- if(!request.usd_rate||request.status!==(request.kind==='deposit'?'awaiting_review':'awaiting_transfer')) fail('This request is not ready to confirm.')
+ const rate=request.usd_rate||text(req.body.usdRate,30)
+ if(!rateValid(rate)||request.status!==(request.kind==='deposit'?'awaiting_review':'awaiting_transfer')||
+    (request.kind==='deposit'&&!request.usd_rate)) fail('This request is not ready to confirm.')
+ const recorded=req.body.recordedAt
+ let resolvedAt=new Date().toISOString()
+ if(recorded!==undefined){
+  if(request.kind!=='withdrawal'||typeof recorded!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/.test(recorded))fail('Choose a valid withdrawal date and time.')
+  const date=new Date(recorded)
+  if(!Number.isFinite(date.getTime())||date.toISOString()!==recorded||date.getTime()>Date.now())fail('Choose a valid withdrawal date and time in the past.')
+  resolvedAt=recorded
+ }
  if(request.kind==='withdrawal'&&await db.prepare(`SELECT 1 FROM seller_sale_releases r
   JOIN purchase_refunds f ON f.order_id=r.order_id AND f.seller_id=r.seller_id
   WHERE r.withdrawal_request_id=? AND f.status<>'rejected'`).get(request.id)) fail('Resolve the related refund before sending this withdrawal.')
  const reference=text(req.body.transferReference,300)
  if(await db.prepare('SELECT id FROM seller_wallet_requests WHERE coin=? AND network=? AND transfer_reference=?').get(request.coin,request.network,reference)) fail('That transfer has already been recorded.')
  await postSellerFunds(db,request.seller_id,request.kind,String(request.id),request.kind==='deposit'?request.amount_cents:-request.amount_cents,request.kind==='withdrawal'?-request.amount_cents:0,req.user!.id)
- await db.prepare("UPDATE seller_wallet_requests SET status='confirmed',transfer_reference=?,reviewed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(reference,req.user!.id,request.id)
+ await db.prepare("UPDATE seller_wallet_requests SET status='confirmed',transfer_reference=?,usd_rate=?,coin_amount=?,resolved_at=?,reviewed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(reference,rate,request.coin_amount||coinAmount(request.amount_cents,rate),resolvedAt,req.user!.id,request.id)
  } else fail('Choose quote, confirm or reject.')
  const deposit=request.kind==='deposit'
  const amount=`$${(request.amount_cents/100).toFixed(2)}`
  if(action==='confirm') await notify(request.seller_id,deposit?'Wallet credited':'Wallet debited',`${amount} ${deposit?'credited to':'debited from'} your wallet.`)
- else if(action==='reject') await notify(request.seller_id,deposit?'Deposit declined':'Withdrawal declined',deposit?'Your deposit was declined.':'Your withdrawal was declined and the hold was released.')
+ else if(action==='reject') await notify(request.seller_id,deposit?'Deposit rejected':'Withdrawal rejected',deposit?'Your deposit was rejected.':'Your withdrawal was rejected and the hold was released.')
  else await notify(request.seller_id,deposit?'Deposit instructions ready':'Withdrawal details ready',deposit?'View your payment details in My wallet.':'Your withdrawal is awaiting transfer.')
  })()
  res.json({ok:true})

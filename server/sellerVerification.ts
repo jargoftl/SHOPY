@@ -126,8 +126,8 @@ export async function registerSellerVerification(app: Express, db: Database, aut
     res.set('Cache-Control','private, no-store').set('X-Content-Type-Options','nosniff').set('Content-Disposition','inline').type(document.content_type).send(image)
   })
   app.patch('/api/admin/seller-applications/:id/review',auth,role('admin'),reviewedRoute(async(req,res)=>{
-    const id=idValue(req.params.id),status=req.body?.status,note=(typeof req.body?.note==='string'?req.body.note.trim():'') || 'Application reviewed by administrator'
-    if(!['approved','rejected','needs_changes'].includes(status)||note.length>2000||((status==='rejected'||status==='needs_changes')&&!note)) return res.status(400).json({error:'Choose a review decision.'})
+    const id=idValue(req.params.id),status=req.body?.status,note=(typeof req.body?.note==='string'?req.body.note.trim():'') || (status==='needs_changes'?'Changes requested.':'')
+    if(!['approved','rejected','needs_changes'].includes(status)||note.length>2000) return res.status(400).json({error:'Choose a review decision.'})
     await db.transaction(async()=>{
       const application=await getApplication(id)
       if(!application)throw new ReviewError(404,'Seller application not found.')
@@ -143,7 +143,7 @@ export async function registerSellerVerification(app: Express, db: Database, aut
       await db.prepare('UPDATE users SET role=?,seller_status=? WHERE id=?').run(status==='approved'?'seller':'customer',status,id)
       await db.prepare('UPDATE seller_profiles SET verification_status=? WHERE user_id=?').run(status,id)
       await db.prepare('INSERT INTO account_admin_history(user_id,admin_id,action,details) VALUES (?,?,?,?)').run(id,req.user!.id,'Seller application review',`${status}; revision ${application.revision}${note?': '+note:''}`)
-      await notify.run(id,'seller_verification',status==='approved'?'Your seller application is approved!':status==='needs_changes'?'Seller verification needs an update':'Seller application declined',status==='approved'?'You can now open your seller dashboard.':note,'/seller/application')
+      await notify.run(id,'seller_verification',status==='approved'?'Your seller application is approved!':status==='needs_changes'?'Seller verification needs an update':'Seller application rejected',status==='approved'?'You can now open your seller dashboard.':status==='rejected'?'Your seller application was rejected.':note,'/seller/application')
       if(status==='approved')await db.prepare('INSERT INTO seller_approval_emails(id,user_id,revision,next_attempt_at) VALUES (?,?,?,?) ON CONFLICT(user_id,revision) DO NOTHING').run(randomUUID(),id,application.revision,stamp())
     })()
     await deliverApprovalEmails(db)
