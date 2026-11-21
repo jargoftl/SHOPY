@@ -11,6 +11,11 @@ const BillingPage = () => {
   const { items, subtotal } = useCart()
   const [message, setMessage] = useState('')
   const [addresses, setAddresses] = useState([])
+  const [selectedAddressId,setSelectedAddressId] = useState('')
+  const [canSaveAddress,setCanSaveAddress] = useState(false)
+  const [loadingAddresses,setLoadingAddresses] = useState(true)
+  const [saving,setSaving] = useState(false)
+  const addressFields = ['fullName','address','city','region','country']
   const [billing, setBilling] = useState(location.state?.billing || {})
   const editedFields = useRef(new Set())
 
@@ -25,20 +30,24 @@ const BillingPage = () => {
       if (user.role !== 'customer') return
       const profile = await apiRequest('/api/buyer/profile')
       if (active) {
+        setCanSaveAddress(true)
         setAddresses(profile.addresses)
+        const saved = profile.addresses.find(address => location.state?.billing
+          ? addressFields.every(field => address[field] === location.state.billing[field])
+          : address.isDefault)
+        if(saved) setSelectedAddressId(String(saved.id))
         setBilling((current) => mergeBillingDefaults(current, user, profile.addresses, editedFields.current))
       }
     }
-    loadAddresses().catch((error) => { if (active) setMessage(error.message) })
+    loadAddresses().catch((error) => { if (active) setMessage(error.message) }).finally(() => { if (active) setLoadingAddresses(false) })
     return () => { active = false }
   }, [])
 
   const selectAddress = (id) => {
-    const selected = addresses.find((address) => address.id === Number(id))
-    if (!selected) return
-    const fields = ['fullName', 'address', 'city', 'region', 'country']
-    fields.forEach((field) => editedFields.current.add(field))
-    setBilling((current) => applyBillingAddress(current, selected))
+    setSelectedAddressId(id)
+    addressFields.forEach(field => editedFields.current.add(field))
+    const selected = addresses.find(address => String(address.id) === id)
+    setBilling(current => selected ? applyBillingAddress(current, selected) : { ...current, address:'', city:'', region:'', country:'' })
   }
 
   const updateBilling = (event) => {
@@ -47,15 +56,34 @@ const BillingPage = () => {
     setBilling((current) => ({ ...current, [name]: value }))
   }
 
-  const continueToCheckout = (event) => {
+  const continueToCheckout = async (event) => {
     event.preventDefault()
     if (!items.length) {
       navigate('/cart')
       return
     }
-    const formData = new FormData(event.currentTarget)
-    const billing = Object.fromEntries(formData.entries())
-    navigate('/checkout', { state: { billing } })
+    if(saving||loadingAddresses)return
+    const fields = Object.fromEntries(new FormData(event.currentTarget))
+    const checkoutBilling = Object.fromEntries([...addressFields,'email'].map(field => [
+      field, String(fields[field] ?? billing[field] ?? '').trim()
+    ]))
+    setSaving(true)
+    setMessage('')
+    try {
+      if(canSaveAddress){
+        const existing = addresses.find(address => addressFields.every(field => checkoutBilling[field] === address[field]))
+        if(existing){
+          if(!existing.isDefault) await apiRequest(`/api/buyer/addresses/${existing.id}/default`,{method:'PATCH'})
+        }else{
+          await apiRequest('/api/buyer/addresses',{method:'POST',body:JSON.stringify({...checkoutBilling,isDefault:true,checkout:true})})
+        }
+      }
+      navigate('/checkout', { state: { billing: checkoutBilling } })
+    }catch(error){
+      setMessage(error.message)
+    }finally{
+      setSaving(false)
+    }
   }
 
   if (!items.length) {
@@ -70,11 +98,12 @@ const BillingPage = () => {
         <h1 className="mt-2 text-3xl font-semibold sm:text-4xl">Billing and delivery</h1>
         <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_320px]">
           <form onSubmit={continueToCheckout} className="space-y-5">
-            {addresses.length > 0 && <label className="block text-sm font-medium">Use a saved address<select defaultValue="" onChange={(event) => selectAddress(event.target.value)} className="mt-2 h-12 w-full border border-[#cccccc] bg-white px-3 text-sm"><option value="">Choose a saved address</option>{addresses.map((address) => <option key={address.id} value={address.id}>{address.address}, {address.city}{address.isDefault ? ' (default)' : ''}</option>)}</select></label>}
+            {addresses.length > 0 && <label className="block text-sm font-medium">Use a saved address<select value={selectedAddressId} onChange={(event) => selectAddress(event.target.value)} className="mt-2 h-12 w-full border border-[#cccccc] bg-white px-3 text-sm"><option value="">Add new address</option>{addresses.map((address) => <option key={address.id} value={address.id}>{address.address}, {address.city}{address.isDefault ? ' (default)' : ''}</option>)}</select></label>}
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-sm font-medium">Full name<input name="fullName" value={billing.fullName || ''} onChange={updateBilling} autoComplete="name" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
               <label className="block text-sm font-medium">Email<input name="email" value={billing.email || ''} onChange={updateBilling} type="email" autoComplete="email" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
             </div>
+            {(!selectedAddressId||loadingAddresses)&&<>
             <label className="block text-sm font-medium">详细地址 / Street address<input name="address" placeholder="请输入真实的街道、门牌号和房间号" value={billing.address || ''} onChange={updateBilling} autoComplete="street-address" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-sm font-medium">城市 / City<input name="city" value={billing.city || ''} onChange={updateBilling} autoComplete="address-level2" required className="mt-2 h-12 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" /></label>
@@ -83,8 +112,9 @@ const BillingPage = () => {
             <label className="block text-sm font-medium">国家 / Country
               <select name="country" value={billing.country || 'United States'} onChange={updateBilling} autoComplete="country-name" required className="mt-2 h-12 w-full border border-[#cccccc] bg-white px-3 text-sm outline-none focus:border-black"><option value="">Choose country</option><option value="China">中国</option><option>United States</option><option>Canada</option><option>United Kingdom</option><option>Nigeria</option><option>Other</option>{billing.country && !['China', 'United States', 'Canada', 'United Kingdom', 'Nigeria', 'Other'].includes(billing.country) && <option>{billing.country}</option>}</select>
             </label>
+            </>}
             {message && <p role="alert" className="text-sm text-[#a33]">{message}</p>}
-            <button type="submit" className="h-12 w-full bg-black text-sm font-semibold text-white">Continue to checkout</button>
+            <button type="submit" disabled={saving||loadingAddresses} className="h-12 w-full bg-black text-sm font-semibold text-white disabled:opacity-50">{saving?'Saving address…':'Continue to checkout'}</button>
           </form>
           <aside className="h-fit border border-[#e5e5e5] p-5 sm:p-6">
             <h2 className="text-lg font-semibold">Order total</h2>

@@ -1811,8 +1811,22 @@ app.patch('/api/admin/cancellation-requests/:id', requireAuth, requireRole('admi
 app.post('/api/buyer/addresses', requireAuth, requireRole('customer'), async (req, res) => {
   const fields = ['fullName', 'phone', 'address', 'city', 'region', 'postalCode', 'country'] as const
   const values = fields.map((field) => typeof req.body[field] === 'string' ? req.body[field].trim() : '')
-  if (values.some((value) => !value || value.length > 200)) return res.status(400).json({ error: 'Complete every address field using at most 200 characters each.' })
+  const checkout = req.body.checkout === true
+  if (values.some((value, index) => value.length > 200 || (!value && !(checkout && (fields[index] === 'phone' || fields[index] === 'postalCode'))))) {
+    return res.status(400).json({ error: 'Complete the required address fields using at most 200 characters each.' })
+  }
+
   const insert = database.transaction(async () => {
+    await database.prepare('SELECT id FROM users WHERE id = ? FOR UPDATE').get(req.user!.id)
+    if (checkout) {
+      const existing = await getRow<{ id: number }>(`SELECT id FROM buyer_addresses
+        WHERE user_id=? AND full_name=? AND address=? AND city=? AND region=? AND country=?
+        ORDER BY is_default DESC,id DESC LIMIT 1`, req.user!.id, values[0], ...values.slice(2,5), values[6])
+      if (existing) {
+        await database.prepare('UPDATE buyer_addresses SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END WHERE user_id = ?').run(existing.id, req.user!.id)
+        return true
+      }
+    }
     const count = (await getRow<{ count: number }>('SELECT COUNT(*) AS count FROM buyer_addresses WHERE user_id = ?', req.user!.id))!.count
     if (count >= 20) return false
     const makeDefault = count === 0 || req.body.isDefault === true
@@ -1832,6 +1846,7 @@ app.patch('/api/buyer/addresses/:id/default', requireAuth, requireRole('customer
   const address = (await getRow<{ id: number }>('SELECT id FROM buyer_addresses WHERE id = ? AND user_id = ?', id, req.user!.id))
   if (!address) return res.status(404).json({ error: 'Address not found.' })
   await database.transaction(async () => {
+    await database.prepare('SELECT id FROM users WHERE id = ? FOR UPDATE').get(req.user!.id)
     await database.prepare('UPDATE buyer_addresses SET is_default = 0 WHERE user_id = ?').run(req.user!.id)
     await database.prepare('UPDATE buyer_addresses SET is_default = 1 WHERE id = ? AND user_id = ?').run(id, req.user!.id)
   })()

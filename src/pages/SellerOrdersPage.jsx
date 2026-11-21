@@ -111,7 +111,7 @@ const SellerOrdersPage = () => {
        </header>
        <dl className="mb-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-3">
         {[
-         ['Consignee',order.buyerName], ['Order time',formatTimestamp(order.createdAt)],
+         ['Consignee',order.buyerName], ['Email',order.maskedEmail??'—'], ['Order time',formatTimestamp(order.createdAt)],
          ['Payment status',paymentStatusLabel(order.status)],['Purchase status',shipment?.releaseStatus==='released'?'Purchased':shipment?.releaseStatus==='reversed'?'Reversed':'Pending'],
          ['Logistics status',shipment?fulfillmentLabel(shipment.status):'—'],['Purchase time',shipment?.confirmedAt?formatTimestamp(shipment.confirmedAt):'—'],
          ['Sales amount',formatMoney(order.subtotalCents)],['Estimated purchase cost',formatMoney(cost)],['Estimated profit',formatMoney(order.subtotalCents-cost)],
