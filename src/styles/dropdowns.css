@@ -1,0 +1,66 @@
+:where(select:not([multiple]):not([size])) {
+  max-width: 100%;
+  min-height: 42px;
+  padding-inline: 12px;
+  border: 1px solid #d6deea;
+  border-radius: 12px;
+  background-color: #fff;
+  color: #162443;
+  cursor: pointer;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+:where(select:not([multiple]):not([size])):is(:hover, :focus-visible) {
+  border-color: #2155ef;
+  box-shadow: 0 0 0 3px rgb(33 85 239 / 12%);
+}
+
+:where(select:not([multiple]):not([size])):disabled {
+  cursor: default;
+  opacity: .55;
+}
+
+@supports (appearance: base-select) and selector(select::picker(select)) {
+  :where(select:not([multiple]):not([size])),
+  :where(select:not([multiple]):not([size]))::picker(select) {
+    appearance: base-select;
+  }
+
+  :where(select:not([multiple]):not([size]))::picker(select) {
+    margin-block-start: 4px;
+    max-block-size: min(50vh, 320px);
+    overflow-y: auto;
+    border: 1px solid #d6deea;
+    border-radius: 14px;
+    background: #fff;
+    color: #162443;
+    box-shadow: 0 12px 30px rgb(15 36 92 / 16%);
+  }
+
+  :where(select:not([multiple]):not([size]))::picker-icon {
+    color: #2155ef;
+    transition: rotate 180ms ease;
+  }
+
+  :where(select:not([multiple]):not([size])):open::picker-icon { rotate: 180deg; }
+
+  :where(select:not([multiple]):not([size])) option {
+    gap: 8px;
+    padding: 10px 12px;
+    white-space: normal;
+  }
+
+  :where(select:not([multiple]):not([size])) option:is(:active, :hover, :focus-visible) {
+    background: #2155ef;
+    color: #fff;
+  }
+
+  :where(select:not([multiple]):not([size])) option:checked:not(:hover) {
+    background: #eaf0ff;
+    color: #142c77;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(select), :where(select)::picker-icon { transition: none; }
+}

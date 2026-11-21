@@ -149,4 +149,30 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
   check('seller cannot open the admin '+kind+' queue',(await req(path,{},seller)).status===403)
  }
 
+ const baselineWallet=(await req('/api/seller/finance',{},seller)).data.wallet
+ const newWithdrawal=async amount=>post('/api/seller/finance/requests',{...withdrawal,amountCents:amount,requestKey:randomUUID()})
+ r=await newWithdrawal(100)
+ const approvalId=r.data.id
+ const heldWallet=(await req('/api/seller/finance',{},seller)).data.wallet
+ check('new withdrawal immediately reduces spendable balance',r.status===201&&heldWallet.balanceCents-heldWallet.reservedCents===baselineWallet.balanceCents-baselineWallet.reservedCents-100)
+ const approvalPath='/api/admin/seller-finance/requests/'+approvalId
+ r=await post(approvalPath,{action:'accept'},cookie,'PATCH')
+ check('withdrawal can be accepted without a rate or external reference',r.status===200,r)
+ const acceptedFinance=(await req('/api/seller/finance',{},seller)).data
+ const accepted=acceptedFinance.requests.find(request=>request.id===approvalId)
+ check('acceptance uses an automatic reference and current date',accepted.status==='confirmed'&&/^[1-9]\d{9}$/.test(accepted.transaction_ref)&&Math.abs(Date.now()-Date.parse(accepted.resolved_at))<30000&&!accepted.transfer_reference,accepted)
+ check('acceptance debits once and releases its hold',acceptedFinance.wallet.balanceCents===baselineWallet.balanceCents-100&&acceptedFinance.wallet.reservedCents===baselineWallet.reservedCents)
+ r=await post(approvalPath,{action:'accept'},cookie,'PATCH');check('simple withdrawal cannot be approved twice',r.status===409,r)
+ r=await newWithdrawal(200)
+ const pendingId=r.data.id
+ const archivePath='/api/admin/seller-finance/requests/archive'
+ const archive={kind:'withdrawal',sellerId,confirmUnsent:true}
+ r=await post(archivePath,archive,seller);check('seller cannot clear payment queues',r.status===403,r)
+ r=await post(archivePath,{...archive,confirmUnsent:false},cookie);check('clearing requires explicit confirmation',r.status===400,r)
+ r=await post(archivePath,archive,cookie);check('clearing archives pending and rejected withdrawals',r.status===200&&r.data.archived>=2,r)
+ const afterArchive=(await req('/api/seller/finance',{},seller)).data
+ check('clearing releases the pending hold and keeps accepted payment history',afterArchive.wallet.balanceCents===acceptedFinance.wallet.balanceCents&&afterArchive.wallet.reservedCents===acceptedFinance.wallet.reservedCents&&afterArchive.requests.some(request=>request.id===approvalId)&&!afterArchive.requests.some(request=>request.id===pendingId))
+ const audit=(await db.query('SELECT status,archived_at FROM shop.seller_wallet_requests WHERE id=$1',[pendingId])).rows[0]
+ check('archived request is retained for the financial audit',audit.status==='rejected'&&Boolean(audit.archived_at))
+
 }
