@@ -56,8 +56,16 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  finance=(await req('/api/seller/finance',{},seller)).data;check('rejection releases hold without debit',finance.wallet.balanceCents===20000&&finance.wallet.reservedCents===0)
  r=await post('/api/seller/finance/requests',{...withdrawal,requestKey:randomUUID()});finance=(await req('/api/seller/finance',{},seller)).data;w=finance.requests[0]
  r=await post('/api/admin/seller-finance/requests/'+w.id,{action:'quote',usdRate:'1'},cookie,'PATCH');check('admin locks withdrawal coin conversion',r.status===200,r)
- r=await post('/api/admin/seller-finance/requests/'+w.id,{action:'confirm',verified:true,transferReference:'fixture-outgoing'},cookie,'PATCH');check('admin confirms outgoing transfer',r.status===200,r)
+ const recordedAt='2020-06-15T13:30:00.000Z'
+ r=await post('/api/admin/seller-finance/requests/'+w.id,{action:'confirm',verified:true,transferReference:'fixture-outgoing',recordedAt:'2099-06-15T13:30:00.000Z'},cookie,'PATCH')
+ check('future withdrawal dates are rejected before debiting funds',r.status===409,r)
+ r=await post('/api/admin/seller-finance/requests/'+w.id,{action:'confirm',verified:true,transferReference:'fixture-outgoing',recordedAt},cookie,'PATCH');check('admin confirms outgoing transfer',r.status===200,r)
  finance=(await req('/api/seller/finance',{},seller)).data;check('outgoing transfer debits and releases hold',finance.wallet.balanceCents===5000&&finance.wallet.reservedCents===0)
+ const withdrawalHistory=finance.requests.find(request=>request.id===w.id)
+ const debit=finance.records.find(record=>record.kind==='withdrawal'&&record.reference===String(w.id))
+ check('seller withdrawal history hides the address and shows the recorded time',withdrawalHistory.resolved_at===recordedAt&&!('address' in withdrawalHistory)&&!('network' in withdrawalHistory),withdrawalHistory)
+ check('wallet history shares a stable ten-digit transfer reference',/^[1-9]\d{9}$/.test(withdrawalHistory.transaction_ref)&&debit.displayReference===withdrawalHistory.transaction_ref&&debit.resolvedAt===recordedAt)
+ check('private admin withdrawal queue retains the receiving address',(await req('/api/admin/seller-finance?view=withdrawal',{},cookie)).data.requests.some(request=>request.id===w.id&&request.address===withdrawal.address))
  // Synthetic external sale fixture: no blockchain or live payment is used.
  const o=(await db.query("INSERT INTO shop.purchase_orders(buyer_id,request_key,coin,billing_json,subtotal_cents,status) VALUES($1,$2,'USDT','{}',12345,'paid') RETURNING id",[buyerId,randomUUID()])).rows[0].id
  await db.query("INSERT INTO shop.order_numbers(kind,order_id,number) VALUES('purchase',$1,87654321)",[o])
@@ -129,7 +137,7 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
 
  await db.query("INSERT INTO shop.notifications(user_id,type,title,body,link) VALUES($1,'wallet','Wallet request updated',$2,'/seller/wallet')",[sellerId,'Open My wallet to see the administrator’s response.'])
  const sellerNotices=(await req('/api/notifications',{},seller)).data.notifications.filter(n=>n.type==='wallet')
- check('seller wallet notifications name the action and amount',sellerNotices.some(n=>n.title==='Wallet credited'&&n.body==='$200.00 credited to your wallet.')&&sellerNotices.some(n=>n.title==='Wallet debited'&&n.body==='$150.00 debited from your wallet.')&&sellerNotices.some(n=>n.title==='Withdrawal declined'),sellerNotices.map(n=>n.title))
+ check('seller wallet notifications name the action and amount',sellerNotices.some(n=>n.title==='Wallet credited'&&n.body==='$200.00 credited to your wallet.')&&sellerNotices.some(n=>n.title==='Wallet debited'&&n.body==='$150.00 debited from your wallet.')&&sellerNotices.some(n=>n.title==='Withdrawal rejected'),sellerNotices.map(n=>n.title))
  check('old seller wallet notices omit administrator wording',sellerNotices.some(n=>n.body==='Open My wallet to see the current status.')&&sellerNotices.every(n=>!/admin/i.test(n.title+' '+n.body)))
  const reviewNotices=(await req('/api/notifications',{},cookie)).data.notifications.filter(n=>n.link.startsWith('/admin#payment-type-'))
  check('admin wallet notifications identify what needs review',reviewNotices.some(n=>n.title==='Withdrawal requested'&&n.link==='/admin#payment-type-withdrawals')&&reviewNotices.some(n=>n.title==='Deposit proof received'&&n.link==='/admin#payment-type-deposits')&&reviewNotices.every(n=>!/admin/i.test(n.title+' '+n.body)))

@@ -3,7 +3,6 @@ import {transactionActor} from '../lib/transactionLabels.js'
 import {formatTimestamp} from '../lib/storeDates.js'
 import CryptoWalletIcon,{coinNetworks} from '../components/CryptoWalletIcon.jsx'
 import SellerPaymentReceipt from '../components/SellerPaymentReceipt.jsx'
-import OrderStatusBadge from '../components/OrderStatusBadge.jsx'
 import {Link,useSearchParams} from 'react-router-dom'
 import PasswordInput from '../components/PasswordInput.jsx'
 import SaleConfirmations from '../components/SaleConfirmations.jsx'
@@ -144,6 +143,45 @@ function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUplo
  </dialog>
 }
 
+function PaymentHistory({requests,onOpenDeposit}){
+ const [filter,setFilter]=useState('withdrawals')
+ const shown=requests.filter(request=>{
+  if(filter==='all')return true
+  if(filter==='pending')return !['confirmed','rejected'].includes(request.status)
+  if(filter==='rejected')return request.status==='rejected'
+  return request.status==='confirmed'&&(filter==='completed'||request.kind==='withdrawal')
+ })
+ return <section id="wallet-requests" className={`${panel} mt-7`}>
+  <div className="flex flex-wrap items-center justify-between gap-3">
+   <h2 className="font-semibold">Payment history</h2>
+   <select aria-label="Filter payment history" value={filter} onChange={event=>setFilter(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+    <option value="withdrawals">Accepted withdrawals</option>
+    <option value="completed">Accepted and credited</option>
+    <option value="pending">Pending</option>
+    <option value="rejected">Rejected</option>
+    <option value="all">All transactions</option>
+   </select>
+  </div>
+  <ul className="mt-3 divide-y divide-slate-200">
+   {shown.map(request=>{
+    const status=request.status==='confirmed'?(request.kind==='deposit'?'Credited':'Accepted'):request.status==='rejected'?'Rejected':'Pending'
+    const time=request.resolved_at||(['confirmed','rejected'].includes(request.status)?request.updated_at:request.created_at)
+    return <li key={request.id} className="flex flex-wrap items-start justify-between gap-2 py-4">
+     <div>
+      <p className="font-semibold">{request.kind==='withdrawal'?'Withdrawal':'Deposit'} · {status}</p>
+      <p className="mt-1 text-xs text-slate-600">Ref. {request.transaction_ref}</p>
+      <p className="mt-1 text-xs text-slate-600">{formatTimestamp(time)}</p>
+      {request.status==='awaiting_receipt'&&<button type="button" className="mt-2 text-xs text-blue-700 underline" onClick={()=>onOpenDeposit(request.id)}>Open payment instructions</button>}
+      {request.receiptId&&<a target="_blank" rel="noreferrer" href={sessionUrl(`/api/seller/finance/receipts/${request.receiptId}`)} className="mt-2 inline-block text-xs underline">Open payment proof</a>}
+     </div>
+     {request.kind==='deposit'&&<strong className="text-sm tabular-nums">{money(request.amount_cents)}</strong>}
+    </li>
+   })}
+  </ul>
+  {!shown.length&&<p className="py-5 text-sm text-slate-600">No transactions in this view.</p>}
+ </section>
+}
+
 export default function SellerFinancePage({view='wallet'}){
  const [user,setUser]=useState(null),[data,setData]=useState(null),[analytics,setAnalytics]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[kind,setKind]=useState(''),[depositId,setDepositId]=useState(null),[withdrawalCoin,setWithdrawalCoin]=useState('BTC'),[pinSettingsOpen,setPinSettingsOpen]=useState(null),[key,setKey]=useState(''),[period,setPeriod]=useState('30'),[today,setToday]=useState(()=>new Date().toISOString().slice(0,10))
  const [params]=useSearchParams(),actionStarted=useRef(false)
@@ -179,7 +217,7 @@ export default function SellerFinancePage({view='wallet'}){
  const title=view==='wallet'?'My wallet':view==='statement'?'Financial statement':'Transaction history'
  return <SellerWorkspace user={user}><p className="text-xs font-bold tracking-[.18em] text-[#555555]">{view==='wallet'?'MY WALLET':view==='statement'?'FINANCIAL STATEMENT':'TRANSACTION HISTORY'}</p><h1 className="mt-2 font-serif text-4xl">{title}</h1>{error&&<p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
  {view==='wallet'&&<><div className="mt-7 grid gap-4 md:grid-cols-3">{[['Available to withdraw',Math.max(0,(data?.wallet.balanceCents||0)-(data?.wallet.reservedCents||0))],['Wallet balance',data?.wallet.balanceCents],['Pending withdrawal holds',data?.wallet.reservedCents]].map(([label,v],i)=><section key={label} className={`${panel} ${i===0?'!bg-[#111111] !text-white':''}`}><p className="text-sm opacity-70">{label}</p><p className="mt-5 text-3xl font-semibold">{data?money(v):'—'}</p></section>)}</div><div className="mt-5 flex flex-wrap items-center justify-between gap-4"><p className="max-w-2xl text-xs leading-6 text-[#555555]">Deposits and withdrawals require verification. Paid sales are credited after confirmation. Refunds can reduce your balance.</p><div className="flex gap-2">{['deposit','withdrawal'].map(k=><button key={k} className={button} disabled={!data} onClick={()=>{if(k==='withdrawal'&&!data.hasTransactionPin){setPinSettingsOpen(true);setError('');return}setError('');setKind(k);setKey(crypto.randomUUID())}}>{k==='deposit'?'Deposit funds':'Withdraw'}</button>)}</div></div>
- {pendingDeposit&&<button type="button" className="portal-receipt-callout" onClick={()=>{setError('');setDepositId(pendingDeposit.id)}}>Continue pending deposit</button>}<Link className="mt-5 inline-block text-sm text-blue-700 underline" to="/seller/fund-record">View transaction history</Link><SaleConfirmations sales={data?.sales||[]} onConfirmed={refresh}/><section className={`${panel} mt-6`}><h2 className="font-semibold">Confirmed sale history</h2>{data?.sales.filter(s=>s.releaseStatus).slice(0,20).map(s=><div key={s.orderId} className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm"><div><strong>Order #{s.orderNumber}</strong><p className="mt-1 text-xs text-gray-500">Confirmed by {transactionActor(s.confirmedRole)} · {s.confirmedAt}</p></div><span>{money(s.amountCents)} · {s.releaseStatus}</span></div>)}{data&&!data.sales.some(s=>s.releaseStatus)&&<p className="mt-4 text-sm text-gray-500">Confirmed sales and their credited amounts will appear here.</p>}</section><button type="button" className="mt-6 min-h-11 text-sm font-semibold underline" onClick={()=>setPinSettingsOpen(true)}>Set or reset transaction PIN</button><TransactionPinModal open={Boolean(pinSettingsOpen)} onClose={()=>setPinSettingsOpen(false)} onSaved={async()=>{setError('');await refresh()}}/><section id="wallet-requests" className={`${panel} mt-7`}><h2 className="font-semibold">Deposit & withdrawal history</h2><div className="mt-5 space-y-4">{data?.requests.map(q=><article key={q.id} className="rounded-xl border border-[#e5e5e5] p-4"><div className="flex flex-wrap justify-between gap-3"><div><p className="font-semibold capitalize">{q.kind} #{q.public_id}</p><p className="mt-1 text-xs text-[#555555]">{q.created_at} UTC · {q.coin} · <OrderStatusBadge status={q.status} label={q.status==='awaiting_review'?'Under review':q.status.replaceAll('_',' ')}/></p></div><strong>{money(q.amount_cents)}</strong></div>{q.network&&(q.kind!=='deposit'||q.status!=='awaiting_receipt')&&<div className="mt-4 rounded-lg bg-[#f7f7f7] p-3 text-xs leading-6"><p>{q.kind==='deposit'?'Check the payment instructions before sending:':'Your receiving wallet:'}</p><p className="font-semibold">{q.coin_amount&&`${q.coin_amount} ${q.coin} · `}{q.network}</p><p className="break-all">{q.address}</p>{q.usd_rate&&<p>Rate: ${q.usd_rate} USD / {q.coin}</p>}</div>}{q.instructions&&<p className="mt-3 text-sm">{q.instructions}</p>}{q.submitted_reference&&<p className="mt-3 break-all text-xs">Submitted transaction reference: {q.submitted_reference}</p>}{q.transfer_reference&&<p className="mt-3 break-all text-xs">Transfer reference: {q.transfer_reference}</p>}{q.kind==='deposit'&&q.status==='awaiting_receipt'&&<button type="button" className="mt-3 text-sm text-blue-700 underline" onClick={()=>{setError('');setDepositId(q.id)}}>Open payment instructions</button>}{q.receiptId&&<a target="_blank" rel="noreferrer" href={sessionUrl(`/api/seller/finance/receipts/${q.receiptId}`)} className="mt-3 inline-block text-xs underline">Open payment proof</a>}</article>)}{data&&!data.requests.length&&<p className="py-10 text-center text-sm text-[#555555]">Your wallet requests will appear here.</p>}</div></section></>}
+ {pendingDeposit&&<button type="button" className="portal-receipt-callout" onClick={()=>{setError('');setDepositId(pendingDeposit.id)}}>Continue pending deposit</button>}<Link className="mt-5 inline-block text-sm text-blue-700 underline" to="/seller/fund-record">View transaction history</Link><SaleConfirmations sales={data?.sales||[]} onConfirmed={refresh}/><section className={`${panel} mt-6`}><h2 className="font-semibold">Confirmed sale history</h2>{data?.sales.filter(s=>s.releaseStatus).slice(0,20).map(s=><div key={s.orderId} className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm"><div><strong>Order #{s.orderNumber}</strong><p className="mt-1 text-xs text-gray-500">Confirmed by {transactionActor(s.confirmedRole)} · {s.confirmedAt}</p></div><span>{money(s.amountCents)} · {s.releaseStatus}</span></div>)}{data&&!data.sales.some(s=>s.releaseStatus)&&<p className="mt-4 text-sm text-gray-500">Confirmed sales and their credited amounts will appear here.</p>}</section><button type="button" className="mt-6 min-h-11 text-sm font-semibold underline" onClick={()=>setPinSettingsOpen(true)}>Set or reset transaction PIN</button><TransactionPinModal open={Boolean(pinSettingsOpen)} onClose={()=>setPinSettingsOpen(false)} onSaved={async()=>{setError('');await refresh()}}/><PaymentHistory requests={data?.requests||[]} onOpenDeposit={id=>{setError('');setDepositId(id)}}/></>}
  {view==='statement'&&<><div className="mt-6 flex flex-wrap gap-2">{[['1','Today'],['7','This week'],['30','Last 30 days'],['all','All time']].map(([value,label])=><button className={`rounded-xl border px-4 py-2 text-sm ${period===value?'bg-[#111111] text-white':'bg-white'}`} key={value} onClick={()=>setPeriod(value)}>{label}</button>)}</div><div className="mt-5 grid gap-4 sm:grid-cols-3">{[['Paid product sales',daily.reduce((s,d)=>s+d.salesCents,0)],['Paid with store credit',daily.reduce((s,d)=>s+d.creditSalesCents,0)],['Estimated gross profit (15%)',Math.round(daily.reduce((s,d)=>s+d.salesCents,0)*.15)]].map(([label,v])=><section key={label} className={panel}><p className="text-xs text-[#555555]">{label}</p><p className="mt-4 text-2xl font-semibold">{money(v)}</p></section>)}</div><p className="mt-4 text-xs leading-6 text-[#555555]">Grouped by order creation date (UTC), including paid orders only in sales. Profit is an estimate, not a wallet credit. Shipping and tax are excluded. Refund status is shown in order history; gross sales above are before refunds.</p><div className={`${panel} mt-6 overflow-auto`}><table className="w-full min-w-[480px] text-left text-sm"><thead><tr className="border-b"><th className="py-3">Date (UTC)</th><th>Orders placed</th><th>Paid sales</th><th>Store credit sales</th></tr></thead><tbody>{daily.map(d=><tr key={d.day} className="border-b border-[#e5e5e5]"><td className="py-4">{d.day}</td><td>{d.orders}</td><td>{money(d.salesCents)}</td><td>{money(d.creditSalesCents)}</td></tr>)}</tbody></table>{!daily.length&&<p className="py-8 text-sm text-[#555555]">No orders in this period.</p>}</div></>}
  {view==='record'&&<section className="mt-6 max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-label="Wallet transactions">
   {records.length ? <ul className="divide-y divide-slate-100">
@@ -188,8 +226,8 @@ export default function SellerFinancePage({view='wallet'}){
     <p className={`max-w-[45vw] break-words text-right text-sm font-semibold tabular-nums ${record.delta_cents>0?'text-emerald-700':'text-slate-900'}`}>
      {record.delta_cents>0?'+':''}{money(record.delta_cents)}
     </p>
-    {record.reference&&<p className="col-span-2 break-all text-xs text-slate-600">Ref. {record.reference}</p>}
-    <p className="col-span-2 text-xs text-slate-500">{formatTimestamp(record.created_at)}</p>
+    {record.displayReference&&<p className="col-span-2 text-xs text-slate-600">Ref. {record.displayReference}</p>}
+    <p className="col-span-2 text-xs text-slate-500">{formatTimestamp(record.resolvedAt||record.created_at)}</p>
    </li>)}
   </ul> : <p className="px-4 py-8 text-center text-sm text-slate-600">{data?'No transactions yet.':error?'Transactions are unavailable.':'Loading transactions…'}</p>}
  </section>}
