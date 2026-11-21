@@ -300,6 +300,7 @@ const AnimatedRoutes = () => {
             <Route path="/admin/seller-metrics" element={<AdminSellerMetricsPage />} />
             <Route path="/seller" element={<SellerDashboardPage />} />
             <Route path="/seller/account" element={<SellerAccountPage />} />
+            <Route path="/seller/account/settings" element={<SellerAccountPage view="settings" />} />
             <Route path="/seller/wallet" element={<SellerFinancePage />} />
             <Route path="/seller/financial-statement" element={<SellerFinancePage view="statement" />} />
             <Route path="/seller/fund-record" element={<SellerFinancePage view="record" />} />

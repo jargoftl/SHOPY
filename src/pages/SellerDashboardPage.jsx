@@ -10,7 +10,7 @@ import StoreDates from '../components/StoreDates.jsx'
 import OrderStatusBadge from '../components/OrderStatusBadge.jsx'
 import {paymentStatusLabel} from '../lib/fulfillment.js'
 import {apiRequest} from '../lib/api.js'
-const shortcuts=[[Settings,'Store settings','/seller/account#settings','#ff635b'],[RotateCcw,'Refunds','/seller/refunds','#536aff'],[Package,'Warehouse','/seller/warehouse','#42a8ef'],[Crown,'Store upgrade','/seller/marketing/upgrade','#42a8ef'],[BadgeCheck,'Store level','/seller/marketing/levels','#e9ab2d'],[Gift,'Referrals','/seller/referrals','#35bba0'],[ArrowDownLeft,'Deposit','/seller/wallet?action=deposit','#35bd80'],[ArrowUpRight,'Withdraw','/seller/wallet?action=withdrawal','#5471ff']]
+const shortcuts=[[Settings,'Store settings','/seller/account/settings','#ff635b'],[RotateCcw,'Refunds','/seller/refunds','#536aff'],[Package,'Warehouse','/seller/warehouse','#42a8ef'],[Crown,'Store upgrade','/seller/marketing/upgrade','#42a8ef'],[BadgeCheck,'Store level','/seller/marketing/levels','#e9ab2d'],[Gift,'Referrals','/seller/referrals','#35bba0'],[ArrowDownLeft,'Deposit','/seller/wallet?action=deposit','#35bd80'],[ArrowUpRight,'Withdraw','/seller/wallet?action=withdrawal','#5471ff']]
 export default function SellerDashboardPage(){
  const {t}=useSellerLanguage()
  const [user,setUser]=useState(null),[data,setData]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[days,setDays]=useState(7),[limit,setLimit]=useState(12)
