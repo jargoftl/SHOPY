@@ -20,6 +20,8 @@ const metricFields = [
   { key: 'estimatedProfit', label: 'Estimated profit', prefix: '$' },
 ]
 
+const MAX_CREDIT_SCORE = 1000000000000
+
 const emptyForm = Object.fromEntries(metricFields.map(({ key }) => [key, '']))
 
 const formatTrack = (values) => Array.isArray(values) ? values.join(', ') : ''
@@ -33,6 +35,7 @@ const AdminSellerMetricsPage = () => {
   const [products, setProducts] = useState([])
   const [selectedSellerId, setSelectedSellerId] = useState('')
   const [form, setForm] = useState(emptyForm)
+  const [loadedMetricsSellerId, setLoadedMetricsSellerId] = useState('')
   const [salesTrack, setSalesTrack] = useState('')
   const [visitsTrack, setVisitsTrack] = useState('')
   const [topProductVolumes, setTopProductVolumes] = useState({})
@@ -80,6 +83,7 @@ const AdminSellerMetricsPage = () => {
       .then(metricData => {
         if (!isCurrent) return
         const metrics = metricData.metrics || {}
+        setLoadedMetricsSellerId(selectedSellerId)
         setForm(Object.fromEntries(metricFields.map(({ key }) => [key, metrics[key] ?? ''])))
         setSalesTrack(formatTrack(metrics.salesTrack))
         setVisitsTrack(formatTrack(metrics.visitsTrack))
@@ -95,7 +99,7 @@ const AdminSellerMetricsPage = () => {
 
   const saveMetrics = async (event) => {
     event.preventDefault()
-    if (!selectedSellerId) return
+    if (!selectedSellerId || loadedMetricsSellerId !== selectedSellerId) return
     setIsSaving(true)
     setMessage('')
     const metrics = Object.fromEntries(Object.entries(form).filter(([, value]) => value !== '').map(([key, value]) => [key, Number(value)]))
@@ -151,11 +155,27 @@ const AdminSellerMetricsPage = () => {
         {message && <p role="status" className="border border-[#111111] bg-[#111111] px-4 py-3 text-sm">{message}</p>}
 
         {selectedSellerId && <AdminStoreDates key={selectedSellerId} userId={selectedSellerId} showDateHistory={false}/>}
-        {selectedSellerId && <form onSubmit={saveMetrics} className="space-y-6">
+        {selectedSellerId && loadedMetricsSellerId === selectedSellerId && <form onSubmit={saveMetrics} className="space-y-6">
+          <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7" aria-labelledby="seller-score-heading">
+            <h2 id="seller-score-heading" className="text-lg font-semibold">Seller credit score</h2>
+            <p className="mt-1 text-sm text-[#a3a3a3]">Set a score or increase it by one point, then save dashboard metrics. The default is 100.</p>
+            <div className="mt-3 flex flex-wrap items-end gap-2">
+              <label className="text-xs text-[#a3a3a3]">Credit score
+                <input type="number" min="0" max={MAX_CREDIT_SCORE} step="any" value={form.sellerCreditScore}
+                  onChange={(event) => setForm((current) => ({ ...current, sellerCreditScore: event.target.value }))}
+                  className="mt-1 block h-11 w-36 rounded border border-[#555555] bg-[#111111] px-3 text-sm text-white" placeholder="100" />
+              </label>
+              <button type="button" disabled={isSaving || Number(form.sellerCreditScore) >= MAX_CREDIT_SCORE}
+                className="min-h-11 rounded border border-[#555555] px-3 text-sm disabled:opacity-50"
+                onClick={() => setForm((current) => ({ ...current, sellerCreditScore: String(Math.min(MAX_CREDIT_SCORE, Number(current.sellerCreditScore || 100) + 1)) }))}>
+                Increase by 1
+              </button>
+            </div>
+          </section>
           <section className="border border-[#111111] bg-[#111111] p-5 sm:p-7">
             <div className="mb-5"><h2 className="text-lg font-semibold">Dashboard totals</h2><p className="mt-1 text-xs text-[#777777]">Leave a field blank to use live data where available.</p></div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {metricFields.map(({ key, label, integer, max, step, prefix }) => <label key={key} className="block text-xs text-[#a3a3a3]">{label}
+              {metricFields.filter(({ key }) => key !== 'sellerCreditScore').map(({ key, label, integer, max, step, prefix }) => <label key={key} className="block text-xs text-[#a3a3a3]">{label}
                 <div className="mt-2 flex h-11 items-center border border-[#111111] bg-[#111111] focus-within:border-[#cccccc]">{prefix && <span className="pl-3 text-[#777777]">{prefix}</span>}<input type="number" min="0" max={max || 1000000000000} step={integer ? '1' : step || '0.01'} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm text-white outline-none" placeholder="Use live value" /></div>
               </label>)}
             </div>
