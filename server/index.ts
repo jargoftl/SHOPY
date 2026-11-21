@@ -1510,6 +1510,10 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
         notification.body = 'A withdrawal is ready for review.'
       }
     }
+    if (notification.type === 'wallet' && notification.link === '/admin#seller-finance') {
+      notification.link = notification.title.toLowerCase().includes('withdrawal')
+        ? '/admin#payment-type-withdrawals' : '/admin#payment-type-deposits'
+    }
     if (notification.type === 'balance' && notification.link === '/profile/wallet' && notification.title === 'Account balance updated') {
       notification.body = 'Your wallet balance was updated.'
     }
