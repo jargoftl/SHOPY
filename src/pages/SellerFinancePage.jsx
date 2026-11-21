@@ -1,6 +1,6 @@
-import {Copy, QrCode, X} from 'lucide-react'
+import {ArrowDown, ArrowUp, Circle, Copy, QrCode, X} from 'lucide-react'
 import {transactionActor} from '../lib/transactionLabels.js'
-import {formatTimestamp} from '../lib/storeDates.js'
+import {formatTimestamp,timestampMillis} from '../lib/storeDates.js'
 import CryptoWalletIcon,{coinNetworks} from '../components/CryptoWalletIcon.jsx'
 import SellerPaymentReceipt from '../components/SellerPaymentReceipt.jsx'
 import {Link,useSearchParams} from 'react-router-dom'
@@ -143,6 +143,10 @@ function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUplo
  </dialog>
 }
 
+const paymentHistoryTime=request=>request.resolved_at||(['confirmed','rejected'].includes(request.status)?request.updated_at:request.created_at)
+const ledgerHistoryTime=record=>record.resolvedAt||record.created_at
+const compareHistory=(getTime)=>(first,second)=>timestampMillis(getTime(first))-timestampMillis(getTime(second))||first.id-second.id
+
 function PaymentHistory({requests,onOpenDeposit}){
  const [filter,setFilter]=useState('withdrawals')
  const shown=requests.filter(request=>{
@@ -150,7 +154,7 @@ function PaymentHistory({requests,onOpenDeposit}){
   if(filter==='pending')return !['confirmed','rejected'].includes(request.status)
   if(filter==='rejected')return request.status==='rejected'
   return request.status==='confirmed'&&(filter==='completed'||request.kind==='withdrawal')
- })
+ }).sort(compareHistory(paymentHistoryTime))
  return <section id="wallet-requests" className={`${panel} mt-7`}>
   <div className="flex flex-wrap items-center justify-between gap-3">
    <h2 className="font-semibold">Payment history</h2>
@@ -165,10 +169,10 @@ function PaymentHistory({requests,onOpenDeposit}){
   <ul className="mt-3 divide-y divide-slate-200">
    {shown.map(request=>{
     const status=request.status==='confirmed'?(request.kind==='deposit'?'Credited':'Accepted'):request.status==='rejected'?'Rejected':'Pending'
-    const time=request.resolved_at||(['confirmed','rejected'].includes(request.status)?request.updated_at:request.created_at)
+    const time=paymentHistoryTime(request)
     return <li key={request.id} className="flex flex-wrap items-start justify-between gap-2 py-4">
      <div>
-      <p className="font-semibold">{request.kind==='withdrawal'?'Withdrawal':'Deposit'} · {status}</p>
+      <p className="font-semibold">{request.kind==='withdrawal'?'Withdrawal':'Deposit'} · <span className={status==='Pending'?'inline-flex items-center gap-1 rounded bg-[#fff1e6] px-1.5 py-0.5 text-[#9a370b]':undefined}>{status==='Pending'&&<Circle size={12} aria-hidden="true"/>}{status}</span></p>
       <p className="mt-1 text-xs text-slate-600">Ref. {request.transaction_ref}</p>
       <p className="mt-1 text-xs text-slate-600">{formatTimestamp(time)}</p>
       {request.status==='awaiting_receipt'&&<button type="button" className="mt-2 text-xs text-blue-700 underline" onClick={()=>onOpenDeposit(request.id)}>Open payment instructions</button>}
@@ -212,7 +216,7 @@ export default function SellerFinancePage({view='wallet'}){
   setError('')
  }
  const depositWallets=data?.depositWallets||[]
- const records=(data?.records||[]).filter(record=>record.delta_cents!==0&&(historyFilter==='all'||(historyFilter==='credit'?record.delta_cents>0:record.delta_cents<0)))
+ const records=(data?.records||[]).filter(record=>record.delta_cents!==0&&(historyFilter==='all'||(historyFilter==='credit'?record.delta_cents>0:record.delta_cents<0))).sort(compareHistory(ledgerHistoryTime))
  const daily=(analytics?.daily||[]).filter(d=>period==='all'||d.day>=new Date(new Date(today+'T00:00:00Z').getTime()-(Number(period)-1)*86400000).toISOString().slice(0,10))
  const title=view==='wallet'?'My wallet':view==='statement'?'Financial statement':'Transaction history'
  return <SellerWorkspace user={user}><p className="text-xs font-bold tracking-[.18em] text-[#555555]">{view==='wallet'?'MY WALLET':view==='statement'?'FINANCIAL STATEMENT':'TRANSACTION HISTORY'}</p><h1 className="mt-2 font-serif text-4xl">{title}</h1>{error&&<p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
@@ -227,12 +231,12 @@ export default function SellerFinancePage({view='wallet'}){
   </div>
   {records.length ? <ul className="divide-y divide-slate-100">
    {records.map(record=><li key={record.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-4 sm:px-5">
-    <p className="min-w-0 font-semibold text-slate-900">{record.delta_cents>0?'Credit':'Debit'}</p>
-    <p className={`max-w-[45vw] break-words text-right text-sm font-semibold tabular-nums ${record.delta_cents>0?'text-emerald-700':'text-slate-900'}`}>
+    <p className={`flex min-w-0 items-center gap-1.5 font-semibold ${record.delta_cents<0?'text-red-700':'text-slate-900'}`}>{record.delta_cents>0?<ArrowUp size={17} aria-hidden="true" className="shrink-0 text-emerald-700"/>:<ArrowDown size={17} aria-hidden="true" className="shrink-0"/>}{record.delta_cents>0?'Credit':'Debit'}</p>
+    <p className={`max-w-[45vw] break-words text-right text-sm font-semibold tabular-nums ${record.delta_cents>0?'text-emerald-700':'text-red-700'}`}>
      {record.delta_cents>0?'+':''}{money(record.delta_cents)}
     </p>
     {record.displayReference&&<p className="col-span-2 text-xs text-slate-600">Ref. {record.displayReference}</p>}
-    <p className="col-span-2 text-xs text-slate-500">{formatTimestamp(record.resolvedAt||record.created_at)}</p>
+    <p className="col-span-2 text-xs text-slate-500">{formatTimestamp(ledgerHistoryTime(record))}</p>
    </li>)}
   </ul> : <p className="px-4 py-8 text-center text-sm text-slate-600">{data?'No transactions in this view.':error?'Transactions are unavailable.':'Loading transactions…'}</p>}
  </section>}
