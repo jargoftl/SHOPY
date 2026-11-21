@@ -231,7 +231,7 @@ const MessageCenterPage = () => {
             <section className="flex min-h-[520px] min-w-0 flex-col">
               <div className={`border-b px-5 py-4 ${isAdmin ? 'border-[#111111]' : 'border-[#e5e5e5]'}`}>
                 <h2 className="text-sm font-semibold">{isAdmin ? selectedConversation?.storeName || selectedConversation?.sellerName || 'Choose an account' : <>Message <SiteName /> support</>}</h2>
-                <p className={`mt-1 text-xs ${isAdmin ? 'text-[#777777]' : 'text-[#555555]'}`}>{isAdmin ? selectedConversation?.email || 'Select a conversation to reply.' : 'Messages stay in this chat until you leave. Pending delivery expires after five minutes.'}</p>
+                {isAdmin && <p className="mt-1 text-xs text-[#777777]">{selectedConversation?.email || 'Select a conversation to reply.'}</p>}
               </div>
               <div className="flex-1 space-y-3 overflow-y-auto px-4 py-5 sm:px-6">
                 {messages.map((item) => (
