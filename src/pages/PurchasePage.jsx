@@ -1,3 +1,4 @@
+import { formatOrderReference } from '../lib/orderReference.js'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import DeliveryProgress from '../components/DeliveryProgress.jsx'
 import { useEffect, useRef, useState } from 'react'
@@ -54,7 +55,7 @@ const PurchasePage = () => {
     try {
       const response = await trackedFetch(`/api/purchases/${id}/receipt`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': file.type }, body: file })
       if (!response.ok) { const result = await response.json(); throw new Error(result.error || 'Upload failed.') }
-      navigate('/profile/orders', { replace: true, state: { orderToast: `Order #${order.orderNumber}: receipt submitted. Payment is pending admin verification.` } })
+      navigate('/profile/orders', { replace: true, state: { orderToast: `Order ${formatOrderReference(order)}: receipt submitted. Payment is pending admin verification.` } })
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
   const copy = async () => {
@@ -65,7 +66,7 @@ const PurchasePage = () => {
   return <main className="min-h-screen bg-[#f7f7f7] px-5 py-8 text-[#111111]">
     <div className="mx-auto max-w-3xl"><Link to="/" className="text-2xl font-black"><SiteName logo /></Link>
       <div className="mt-8 rounded-2xl border border-[#e5e5e5] bg-white p-6 sm:p-8">
-        <p className="text-xs uppercase tracking-widest text-[#555555]">Order #{order?.orderNumber || "…"}</p><h1 className="mt-2 text-3xl font-semibold">Your order</h1>
+        <p className="text-xs uppercase tracking-widest text-[#555555]">Order {formatOrderReference(order)}</p><h1 className="mt-2 text-3xl font-semibold">Your order</h1>
         {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
         {notice && <p role="status" className="mt-4 text-sm text-[#111111]">{notice}</p>}
         {!order ? <ContentPlaceholder/> : <>
@@ -85,7 +86,7 @@ const PurchasePage = () => {
       {order.status === 'awaiting_quote' && <div role="status" className="mt-6 flex items-center gap-3 text-sm"><span className="size-5 animate-spin rounded-full border-2 border-[#cccccc] border-t-[#111111]" />Waiting for the support to set your final amount and wallet. You can return from My Orders.</div>}
       {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
       {order.status === 'awaiting_receipt' && <><p className="mt-4 text-sm">Transfer the exact amount of items you are buying, no tips. Thank you.</p><p className="mt-4 text-sm font-semibold">Send {order.coinAmount} {order.coin} · {order.network}</p><p className="mt-1 text-xs text-[#111111]">Final order total: {formatMoney(order.subtotalCents + order.shippingCents + order.taxCents)}</p>{order.usdRate && <p className="mt-1 text-xs text-[#111111]">support-set rate: 1 {order.coin} = ${order.usdRate} USD. This is not a live rate.</p>}<div className="mt-3 flex items-center gap-3 rounded border border-[#e5e5e5] bg-[#f7f7f7] p-3"><span className="min-w-0 flex-1 break-all font-mono text-sm">{order.walletAddress}</span><button type="button" onClick={copy} aria-label="Copy wallet address" className="grid size-10 place-items-center rounded border border-[#cccccc]"><IoCopyOutline size={20} /></button></div>{notice && <p role="status" className="mt-2 text-xs">{notice}</p>}<p className="mt-3 text-xs text-[#555555]">Check the coin and network carefully. Transfers are verified manually.</p><button type="button" onClick={() => setDialogOpen(false)} className="mt-5 bg-[#111111] px-4 py-2 text-sm text-white">Continue to receipt</button></>}
-      {order.status === 'paid' && <p className="mt-5 text-sm">{order.coin === 'BALANCE' ? 'Your account balance has been charged. The store owner or support team will confirm and process your order.' : 'Your payment was confirmed by the support team. Thank you for your order!'}</p>}
+      {order.status === 'paid' && <p className="mt-5 text-sm">{order.coin === 'BALANCE' ? 'Your order will begin processing.' : 'Your payment was confirmed by the support team. Thank you for your order!'}</p>}
       {['awaiting_review', 'rejected'].includes(order.status) && <p className="mt-4 text-sm">Your order is {order.status.replaceAll('_', ' ')}.</p>}
     </dialog>}
   </main>

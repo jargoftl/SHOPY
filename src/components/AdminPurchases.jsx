@@ -1,3 +1,4 @@
+import { formatOrderReference } from '../lib/orderReference.js'
 import DeliveryEmailStatus from './DeliveryEmailStatus.jsx'
 import ContentPlaceholder from './ContentPlaceholder.jsx'
 import {progressToast} from './ProgressToast.jsx'
@@ -46,7 +47,7 @@ const AdminPurchases = ({ selectedNumber, autoOpen=false, showWalletSettings=fal
     const shippingCents = parseAmountCents(data.get('shipping'))
     const taxCents = parseAmountCents(data.get('tax'))
     if (shippingCents === null || taxCents === null) { setMessage('Enter valid shipping and tax amounts.'); return }
-    run(() => apiRequest(`/api/admin/purchases/${order.id}/quote`, { method: 'PUT', body: JSON.stringify({ shippingCents, taxCents, coinAmount: data.get('coinAmount') }) }), `Quote sent for order #${order.orderNumber}.`)
+    run(() => apiRequest(`/api/admin/purchases/${order.id}/quote`, { method: 'PUT', body: JSON.stringify({ shippingCents, taxCents, coinAmount: data.get('coinAmount') }) }), `Quote sent for order ${formatOrderReference(order)}.`)
   }
   const wallet = wallets.find((item) => item.coin === coin)
   return <details id="purchase-orders" open={autoOpen||selectedNumber ? true : undefined} className="mb-8 border border-[#111111] bg-[#111111] p-5 sm:p-7">
@@ -64,9 +65,9 @@ const AdminPurchases = ({ selectedNumber, autoOpen=false, showWalletSettings=fal
       <button disabled={busy} className={button}>Save wallet</button>
     </form>
     </>}
-    {loading ? <ContentPlaceholder/> : orders.length ? <div className="mt-4 divide-y divide-[#111111]">{orders.map((order) => <details key={order.id} open={selectedNumber === String(order.orderNumber) ? true : undefined} className="py-5 text-sm">
-      <summary className="cursor-pointer font-semibold"><span>Order #{order.orderNumber} · {order.buyerName} · {order.coin === 'BALANCE' ? 'Account balance' : order.coin}</span><span className="ml-2 inline-block align-middle"><OrderStatusBadge status={order.status} label={paymentStatusLabel(order.status)} /></span></summary>
-      {order.coin === 'BALANCE' && <p className="mt-2 text-xs text-[#a3a3a3]">Paid from account balance. Confirm this store’s fulfillment status to process the order.</p>}
+    {loading ? <ContentPlaceholder/> : orders.length ? <div className="mt-4 divide-y divide-[#111111]">{orders.map((order) => <details key={order.id} open={[String(order.orderNumber), formatOrderReference(order)].includes(selectedNumber) ? true : undefined} className="py-5 text-sm">
+      <summary className="cursor-pointer font-semibold"><span>Order {formatOrderReference(order)} · {order.buyerName} · {order.coin === 'BALANCE' ? 'Account balance' : order.coin}</span><span className="ml-2 inline-block align-middle"><OrderStatusBadge status={order.status} label={paymentStatusLabel(order.status)} /></span></summary>
+      {order.coin === 'BALANCE' && <p className="mt-2 text-xs text-[#a3a3a3]">Confirm this store’s fulfillment status to process the order.</p>}
       <p className="mt-2 text-xs text-[#a3a3a3]">{order.items.map((item) => `${item.name} × ${item.quantity}`).join(', ')} · Subtotal {formatMoney(order.subtotalCents)}</p>
       <p className="mt-2 text-xs text-[#a3a3a3]">Billing: {Object.values(order.billing).join(', ')}</p>
       {order.coinAmount && <p className="mt-2 break-all text-xs">Quote: {order.coinAmount} {order.coin} · {order.network} · {order.walletAddress} · Total {formatMoney(order.subtotalCents + order.shippingCents + order.taxCents)}</p>}

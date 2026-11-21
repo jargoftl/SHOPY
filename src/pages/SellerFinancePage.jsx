@@ -65,7 +65,7 @@ function DepositAmount({wallet}){
  </div>
 }
 
-function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUploaded}){
+function DepositDialog({wallets,request,requestId,pendingDeposits,onSelectDeposit,hasPin,onSetPin,onClose,onUploaded}){
  const [coin,setCoin]=useState(()=>!requestId&&wallets.some(wallet=>wallet.coin==='BTC')?'BTC':'')
  const [network,setNetwork]=useState(()=>!requestId&&wallets.filter(wallet=>wallet.coin==='BTC').length===1?wallets.find(wallet=>wallet.coin==='BTC').network:'')
  const networks=wallets.filter(wallet=>wallet.coin===coin)
@@ -106,6 +106,15 @@ function DepositDialog({wallets,request,requestId,hasPin,onSetPin,onClose,onUplo
     <h2 ref={heading} tabIndex={-1} id="deposit-dialog-title" className="text-lg font-bold text-slate-900">{coin?`${coin} deposit`:'Deposit funds'}</h2>
     <button type="button" onClick={onClose} disabled={submitting} aria-label="Close deposit" className="grid min-h-9 min-w-9 place-items-center rounded-full hover:bg-slate-100"><X size={20} aria-hidden="true"/></button>
    </div>
+   {!requestId&&pendingDeposits.length>0&&<details className="mt-3 rounded-lg border border-slate-200 p-2.5 text-sm">
+    <summary className="cursor-pointer font-medium">Attach proof to an existing deposit</summary>
+    <div className="mt-2 grid gap-1.5">
+     {pendingDeposits.map(deposit=><button key={deposit.id} type="button" disabled={submitting}
+      onClick={()=>onSelectDeposit(deposit.id)} className="rounded border px-2 py-2 text-left text-xs hover:bg-blue-50">
+      {deposit.coin} · {money(deposit.amount_cents)} · Ref. {deposit.transaction_ref}
+     </button>)}
+    </div>
+   </details>}
    {!coin&&!requestId&&<div className="mt-2 grid gap-2">
     {availableCoins.length?availableCoins.map(type=>{
      const options=wallets.filter(wallet=>wallet.coin===type)
@@ -153,8 +162,7 @@ const compareHistory=(getTime)=>(first,second)=>{
  return b-a
 }
 
-
-function PaymentHistory({requests,onOpenDeposit}){
+function PaymentHistory({requests}){
  const [filter,setFilter]=useState('withdrawals')
  const shown=requests.filter(request=>{
   if(filter==='all')return true
@@ -182,7 +190,6 @@ function PaymentHistory({requests,onOpenDeposit}){
       <p className="font-semibold">{request.kind==='withdrawal'?'Withdrawal':'Deposit'} · <span className={status==='Pending'?'inline-flex items-center gap-1 rounded bg-[#fff1e6] px-1.5 py-0.5 text-[#9a370b]':undefined}>{status==='Pending'&&<Circle size={12} aria-hidden="true"/>}{status}</span></p>
       <p className="mt-1 text-xs text-slate-600">Ref. {request.transaction_ref}</p>
       <p className="mt-1 text-xs text-slate-600">{formatTimestamp(time)}</p>
-      {request.status==='awaiting_receipt'&&<button type="button" className="mt-2 text-xs text-blue-700 underline" onClick={()=>onOpenDeposit(request.id)}>Open payment instructions</button>}
       {request.receiptId&&<a target="_blank" rel="noreferrer" href={sessionUrl(`/api/seller/finance/receipts/${request.receiptId}`)} className="mt-2 inline-block text-xs underline">Open payment proof</a>}
      </div>
      {request.kind==='deposit'&&<strong className="text-sm tabular-nums">{money(request.amount_cents)}</strong>}
@@ -216,7 +223,7 @@ export default function SellerFinancePage({view='wallet'}){
   finally {setBusy(false)}
  }
  const activeDeposit=data?.requests.find(request=>request.id===depositId)
- const pendingDeposit=data?.requests.find(request=>request.kind==='deposit'&&request.status==='awaiting_receipt')
+ const pendingDeposits=data?.requests.filter(request=>request.kind==='deposit'&&request.status==='awaiting_receipt')||[]
  const closePayment=()=>{
   setKind('')
   setDepositId(null)
@@ -228,7 +235,7 @@ export default function SellerFinancePage({view='wallet'}){
  const title=view==='wallet'?'My wallet':view==='statement'?'Financial statement':'Transaction history'
  return <SellerWorkspace user={user}><p className="text-xs font-bold tracking-[.18em] text-[#555555]">{view==='wallet'?'MY WALLET':view==='statement'?'FINANCIAL STATEMENT':'TRANSACTION HISTORY'}</p><h1 className="mt-2 font-serif text-4xl">{title}</h1>{error&&<p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
  {view==='wallet'&&<><div className="mt-7 grid gap-4 md:grid-cols-2">{[['Wallet balance',Math.max(0,(data?.wallet.balanceCents||0)-(data?.wallet.reservedCents||0))],['Pending withdrawals',data?.wallet.reservedCents]].map(([label,v],i)=><section key={label} className={`${panel} ${i===0?'!bg-[#111111] !text-white':''}`}><p className="text-sm opacity-70">{label}</p><p className="mt-5 text-3xl font-semibold">{data?money(v):'—'}</p></section>)}</div><div className="mt-5 flex flex-wrap items-center justify-between gap-4"><p className="max-w-2xl text-xs leading-6 text-[#555555]">Pending withdrawals are taken out of your available wallet balance immediately. Rejected withdrawals are returned to your available balance.</p><div className="flex gap-2">{['deposit','withdrawal'].map(k=><button key={k} className={button} disabled={!data} onClick={()=>{if(k==='withdrawal'&&!data.hasTransactionPin){setPinSettingsOpen(true);setError('');return}setError('');setKind(k);setKey(crypto.randomUUID())}}>{k==='deposit'?'Deposit funds':'Withdraw'}</button>)}</div></div>
- {pendingDeposit&&<button type="button" className="portal-receipt-callout" onClick={()=>{setError('');setDepositId(pendingDeposit.id)}}>Continue pending deposit</button>}<Link className="mt-5 inline-block text-sm text-blue-700 underline" to="/seller/fund-record">View transaction history</Link><SaleConfirmations sales={data?.sales||[]} onConfirmed={refresh}/><section className={`${panel} mt-6`}><h2 className="font-semibold">Confirmed sale history</h2>{data?.sales.filter(s=>s.releaseStatus).slice(0,20).map(s=><div key={s.orderId} className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm"><div><strong>Order #{s.orderNumber}</strong><p className="mt-1 text-xs text-gray-500">Confirmed by {transactionActor(s.confirmedRole)} · {s.confirmedAt}</p></div><span>{money(s.amountCents)} · {s.releaseStatus}</span></div>)}{data&&!data.sales.some(s=>s.releaseStatus)&&<p className="mt-4 text-sm text-gray-500">Confirmed sales and their credited amounts will appear here.</p>}</section><button type="button" className="mt-6 min-h-11 text-sm font-semibold underline" onClick={()=>setPinSettingsOpen(true)}>Set or reset transaction PIN</button><TransactionPinModal open={Boolean(pinSettingsOpen)} onClose={()=>setPinSettingsOpen(false)} onSaved={async()=>{setError('');await refresh()}}/><PaymentHistory requests={data?.requests||[]} onOpenDeposit={id=>{setError('');setDepositId(id)}}/></>}
+ <Link className="mt-5 inline-block text-sm text-blue-700 underline" to="/seller/fund-record">View transaction history</Link><SaleConfirmations sales={data?.sales||[]} onConfirmed={refresh}/><section className={`${panel} mt-6`}><h2 className="font-semibold">Confirmed sale history</h2>{data?.sales.filter(s=>s.releaseStatus).slice(0,20).map(s=><div key={s.orderId} className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm"><div><strong>Order #{s.orderNumber}</strong><p className="mt-1 text-xs text-gray-500">Confirmed by {transactionActor(s.confirmedRole)} · {s.confirmedAt}</p></div><span>{money(s.amountCents)} · {s.releaseStatus}</span></div>)}{data&&!data.sales.some(s=>s.releaseStatus)&&<p className="mt-4 text-sm text-gray-500">Confirmed sales and their credited amounts will appear here.</p>}</section><button type="button" className="mt-6 min-h-11 text-sm font-semibold underline" onClick={()=>setPinSettingsOpen(true)}>Set or reset transaction PIN</button><TransactionPinModal open={Boolean(pinSettingsOpen)} onClose={()=>setPinSettingsOpen(false)} onSaved={async()=>{setError('');await refresh()}}/><PaymentHistory requests={data?.requests||[]}/></>}
  {view==='statement'&&<><div className="mt-6 flex flex-wrap gap-2">{[['1','Today'],['7','This week'],['30','Last 30 days'],['all','All time']].map(([value,label])=><button className={`rounded-xl border px-4 py-2 text-sm ${period===value?'bg-[#111111] text-white':'bg-white'}`} key={value} onClick={()=>setPeriod(value)}>{label}</button>)}</div><div className="mt-5 grid gap-4 sm:grid-cols-3">{[['Paid product sales',daily.reduce((s,d)=>s+d.salesCents,0)],['Paid with store credit',daily.reduce((s,d)=>s+d.creditSalesCents,0)],['Estimated gross profit (15%)',Math.round(daily.reduce((s,d)=>s+d.salesCents,0)*.15)]].map(([label,v])=><section key={label} className={panel}><p className="text-xs text-[#555555]">{label}</p><p className="mt-4 text-2xl font-semibold">{money(v)}</p></section>)}</div><p className="mt-4 text-xs leading-6 text-[#555555]">Grouped by order creation date (UTC), including paid orders only in sales. Profit is an estimate, not a wallet credit. Shipping and tax are excluded. Refund status is shown in order history; gross sales above are before refunds.</p><div className={`${panel} mt-6 overflow-auto`}><table className="w-full min-w-[480px] text-left text-sm"><thead><tr className="border-b"><th className="py-3">Date (UTC)</th><th>Orders placed</th><th>Paid sales</th><th>Store credit sales</th></tr></thead><tbody>{daily.map(d=><tr key={d.day} className="border-b border-[#e5e5e5]"><td className="py-4">{d.day}</td><td>{d.orders}</td><td>{money(d.salesCents)}</td><td>{money(d.creditSalesCents)}</td></tr>)}</tbody></table>{!daily.length&&<p className="py-8 text-sm text-[#555555]">No orders in this period.</p>}</div></>}
  {view==='record'&&<section className="mt-6 max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-label="Wallet transactions">
   <div className="flex justify-end border-b border-slate-100 px-4 py-3">
@@ -247,6 +254,6 @@ export default function SellerFinancePage({view='wallet'}){
    </li>)}
   </ul> : <p className="px-4 py-8 text-center text-sm text-slate-600">{data?'No transactions in this view.':error?'Transactions are unavailable.':'Loading transactions…'}</p>}
  </section>}
- {(kind==='deposit'||depositId)&&<DepositDialog wallets={depositWallets} request={activeDeposit} requestId={depositId} hasPin={data?.hasTransactionPin} onSetPin={()=>setPinSettingsOpen(true)} onClose={closePayment} onUploaded={refresh}/>}
+ {kind==='deposit'&&<DepositDialog key={depositId??'new-deposit'} wallets={depositWallets} request={activeDeposit} requestId={depositId} pendingDeposits={pendingDeposits} onSelectDeposit={setDepositId} hasPin={data?.hasTransactionPin} onSetPin={()=>setPinSettingsOpen(true)} onClose={closePayment} onUploaded={refresh}/>}
  {kind==='withdrawal'&&<div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-5" role="dialog" aria-modal="true" aria-label="Withdraw funds"><form onSubmit={submit} className={`${panel} w-full max-w-lg`}><h2 className="font-serif text-3xl capitalize">Withdraw funds</h2><p className="mt-3 text-xs leading-6 text-[#555555]">Enter the coin, network, and wallet address where you want the admin to send your withdrawal.</p><label className="mt-4 block text-sm">Amount (USD)<input className={input} type="number" name="amount" min="0.01" max="1000000" step="0.01" required/></label><label className="mt-4 block text-sm">Coin<select name="coin" className={input} value={withdrawalCoin} onChange={event=>setWithdrawalCoin(event.target.value)}>{coins.map(c=><option key={c}>{c}</option>)}</select></label><label className="mt-4 block text-sm">Receiving network<input key={withdrawalCoin} name="network" list="withdrawal-networks" required maxLength={100} className={input}/></label><datalist id="withdrawal-networks">{[...new Set([...coinNetworks[withdrawalCoin],...depositWallets.filter(wallet=>wallet.coin===withdrawalCoin).map(wallet=>wallet.network)])].map(network=><option key={network} value={network}/>)}</datalist><label className="mt-4 block text-sm">Your receiving wallet address<input name="address" required maxLength={500} className={input}/></label><label className="mt-4 block text-sm">Four-digit transaction PIN<PasswordInput name="transactionPin"  inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" required className={input}/></label><p className="mt-2 text-xs"><button type="button" onClick={()=>{setKind('');setPinSettingsOpen(true)}} className="underline">Set or reset your PIN in wallet security settings</button></p>{error&&<p className="mt-3 text-sm text-red-700">{error}</p>}<div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={closePayment} className="px-4 text-sm">Cancel</button><button disabled={busy} className={button}>{busy?'Submitting…':'Submit request'}</button></div></form></div>}</SellerWorkspace>
 }

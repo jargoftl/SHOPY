@@ -1,3 +1,4 @@
+import { formatOrderReference } from '../lib/orderReference.js'
 import ContentPlaceholder from './ContentPlaceholder.jsx'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -67,7 +68,7 @@ const BuyerOrders = () => {
     </div>
     <div className="space-y-3">{purchases.map((order) => <article key={order.id} className="overflow-hidden rounded-lg border border-[#e5e5e5] bg-white shadow-[0_2px_12px_rgba(27,50,33,0.04)]">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#f7f7f7] px-4 py-4 sm:px-6">
-        <div><h3 className="text-sm font-semibold text-[#111111]">Order #{order.orderNumber}</h3><p className="mt-1 text-xs text-[#555555]">{order.createdAt} UTC{order.coin === 'BALANCE' && ' · Account balance'}</p></div>
+        <div><h3 className="text-sm font-semibold text-[#111111]">Order {formatOrderReference(order)}</h3><p className="mt-1 text-xs text-[#555555]">{order.createdAt} UTC{order.coin === 'BALANCE' && ' · Account balance'}</p></div>
         <StatusBadge status={order.status} label={paymentStatusLabel(order.status)} />
       </div>
       <div className="grid gap-5 px-4 py-5 sm:px-6 md:grid-cols-[minmax(0,1fr)_minmax(180px,0.55fr)]">

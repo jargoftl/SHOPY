@@ -155,23 +155,23 @@ const PartnerStorePage = () => {
             Top products
           </button>
           <button type="button" role="tab" aria-selected={activeTab === 'all'} onClick={() => setActiveTab('all')} className={`border-b-2 px-1 pb-3 text-sm font-semibold ${activeTab === 'all' ? 'border-[#111111] text-[#111111]' : 'border-transparent text-[#555555]'}`}>
-            All products <span className="ml-1 text-xs font-normal">({products.length})</span>
+            All products
           </button>
         </div>
 
         <div className={`mt-6 ${activeTab === 'all' ? 'grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]' : ''}`}>
           {activeTab === 'all' && <aside className="border-r border-[#e5e5e5] pr-5">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#666]">Categories</h3>
-            <button type="button" onClick={() => setActiveCategory('All products')} aria-pressed={activeCategory === 'All products'} className={`mb-2 flex min-h-10 w-full items-center justify-between border-b border-[#eee] text-left text-sm ${activeCategory === 'All products' ? 'font-semibold text-[#111111]' : 'text-[#555]'}`}>
-              All products <span>{products.length}</span>
+            <button type="button" onClick={() => setActiveCategory('All products')} aria-pressed={activeCategory === 'All products'} className={`mb-2 flex min-h-10 w-full items-center border-b border-[#eee] text-left text-sm ${activeCategory === 'All products' ? 'font-semibold text-[#111111]' : 'text-[#555]'}`}>
+              All products
             </button>
-            {categories.map((category) => <button key={category} type="button" onClick={() => setActiveCategory(category)} aria-pressed={activeCategory === category} className={`flex min-h-10 w-full items-center justify-between border-b border-[#eee] text-left text-sm ${activeCategory === category ? 'font-semibold text-[#111111]' : 'text-[#555]'}`}>
-              <span>{category}</span><span className="text-xs">{products.filter((product) => product.category === category).length}</span>
+            {categories.map((category) => <button key={category} type="button" onClick={() => setActiveCategory(category)} aria-pressed={activeCategory === category} className={`flex min-h-10 w-full items-center border-b border-[#eee] text-left text-sm ${activeCategory === category ? 'font-semibold text-[#111111]' : 'text-[#555]'}`}>
+              {category}
             </button>)}
           </aside>}
           <div className="min-w-0">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-[#555555]">{activeTab==='all'?`${sortedProducts.length ? (page-1)*pageSize+1 : 0}–${Math.min(page*pageSize,sortedProducts.length)} of ${sortedProducts.length}`:visibleProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'}{activeTab === 'top' ? ' · top rated' : ''}</p>
+              {activeTab === 'top' && <p className="text-xs text-[#555555]">{visibleProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'} · top rated</p>}
               {activeTab === 'all' && <label className="flex items-center gap-2 text-xs text-[#666]">Sort
                 <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort store products" className="border border-[#ddd] bg-white px-2 py-2 text-xs text-[#222]">
                   <option value="newest">Newest</option><option value="rating">Top rated</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option>
