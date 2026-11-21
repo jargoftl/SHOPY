@@ -131,7 +131,14 @@ export async function testSellerFinance({req,check,db,cookie,seller,buyer,seller
  const sellerNotices=(await req('/api/notifications',{},seller)).data.notifications.filter(n=>n.type==='wallet')
  check('seller wallet notifications name the action and amount',sellerNotices.some(n=>n.title==='Wallet credited'&&n.body==='$200.00 credited to your wallet.')&&sellerNotices.some(n=>n.title==='Wallet debited'&&n.body==='$150.00 debited from your wallet.')&&sellerNotices.some(n=>n.title==='Withdrawal declined'),sellerNotices.map(n=>n.title))
  check('old seller wallet notices omit administrator wording',sellerNotices.some(n=>n.body==='Open My wallet to see the current status.')&&sellerNotices.every(n=>!/admin/i.test(n.title+' '+n.body)))
- const reviewNotices=(await req('/api/notifications',{},cookie)).data.notifications.filter(n=>n.link==='/admin#seller-finance')
- check('admin wallet notifications identify what needs review',reviewNotices.some(n=>n.title==='Withdrawal requested')&&reviewNotices.some(n=>n.title==='Deposit proof received')&&reviewNotices.every(n=>!/admin/i.test(n.title+' '+n.body)))
+ const reviewNotices=(await req('/api/notifications',{},cookie)).data.notifications.filter(n=>n.link.startsWith('/admin#payment-type-'))
+ check('admin wallet notifications identify what needs review',reviewNotices.some(n=>n.title==='Withdrawal requested'&&n.link==='/admin#payment-type-withdrawals')&&reviewNotices.some(n=>n.title==='Deposit proof received'&&n.link==='/admin#payment-type-deposits')&&reviewNotices.every(n=>!/admin/i.test(n.title+' '+n.body)))
+
+ for(const kind of ['deposit','withdrawal']){
+  const path='/api/admin/seller-finance?view='+kind
+  const queue=await req(path,{},cookie)
+  check('Payment Type '+kind+' queue contains only matching requests',queue.status===200&&queue.data.requests.length>0&&queue.data.requests.every(request=>request.kind===kind)&&!('sales' in queue.data),queue.status)
+  check('seller cannot open the admin '+kind+' queue',(await req(path,{},seller)).status===403)
+ }
 
 }
