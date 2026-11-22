@@ -1,3 +1,4 @@
+import '../styles/admin-dashboard.css'
 import AdminSellerHistoricalSales from '../components/AdminSellerHistoricalSales.jsx'
 import SiteName from '../components/SiteName.jsx'
 import {RecoveryRequests} from '../components/AdminRecovery.jsx'
@@ -7,9 +8,9 @@ import AdminReferrals from '../components/AdminReferrals.jsx'
 import AdminSellerFunding from '../components/AdminSellerFunding.jsx'
 import AdminPaymentType,{paymentSection} from '../components/AdminPaymentType.jsx'
 import SellerNotificationBell from '../components/SellerNotificationBell.jsx'
-import {useEffect,useState} from 'react'
+import {useEffect,useRef,useState} from 'react'
 import {Link,useLocation,useNavigate,useSearchParams} from 'react-router-dom'
-import {LayoutDashboard,Users,ClipboardCheck,ShoppingBag,Wallet,Warehouse,Megaphone,ChartNoAxesCombined,Settings,History,ArrowUpRight,ShieldCheck} from 'lucide-react'
+import {LayoutDashboard,Users,ClipboardCheck,ShoppingBag,Wallet,Warehouse,Megaphone,ChartNoAxesCombined,Settings,History,ArrowUpRight,ShieldCheck,Menu,X,Search,LogOut} from 'lucide-react'
 import {apiRequest} from '../lib/api.js'
 import {useSiteSettings} from '../context/siteSettings.js'
 import AdminAccountDirectory from '../components/AdminAccountDirectory.jsx'
@@ -55,9 +56,9 @@ function AdminToolSearch({isSuperAdmin}){
  const matches=terms.length?tools.map(([label,path,keywords])=>({
   label,path,rank:terms.reduce((score,term)=>score+(label.toLowerCase().includes(term)?2:keywords.includes(term)?1:0),0)
  })).filter(tool=>tool.rank>0).sort((a,b)=>b.rank-a.rank).slice(0,8):[]
- return <div className="mt-4 max-w-xl rounded-xl border border-slate-200 bg-white p-3">
-  <label className="block text-sm font-semibold">Search admin tools
-   <input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search orders, funding, settings, or seller stats" className="mt-2 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"/>
+ return <div className="admin-tool-search">
+  <label><Search size={17} aria-hidden="true"/><span className="sr-only">Search admin tools</span>
+   <input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search orders, funding, settings, or seller stats" className="h-10 min-w-0 flex-1 text-sm"/>
   </label>
   {terms.length>0&&(matches.length?<ul className="mt-2 divide-y divide-slate-100">
    {matches.map(({label,path})=><li key={label}><Link onClick={()=>setQuery('')} to={path} className="flex justify-between gap-2 rounded px-2 py-2 text-sm text-blue-800 hover:bg-blue-50">{label}<ArrowUpRight size={15} aria-hidden="true"/></Link></li>)}
@@ -67,6 +68,7 @@ function AdminToolSearch({isSuperAdmin}){
 
 function activeTab(hash,order){if(order)return 'orders';if(paymentSection(hash))return 'payment-type';const key=hash.replace('#','');return ({'purchase-orders':'orders','refunds':'orders','marketing-requests':'marketing','seller-applications':'applications'})[key]||tabs.find(t=>t[0]===key)?.[0]||'overview'}
 export default function AdminPage(){
+ const menu=useRef(null)
  const location=useLocation(),navigate=useNavigate(),[params]=useSearchParams(),tab=activeTab(location.hash,params.get('order'))
  const {siteName,saveSiteName}=useSiteSettings(),[admin,setAdmin]=useState(null),[data,setData]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[buyerRequestsOpen,setBuyerRequestsOpen]=useState(false)
  useEffect(()=>{let active=true;apiRequest('/api/admin/overview').then(d=>{if(active){setAdmin(d.user);setData({counts:d.counts,users:[],sellers:[],products:[],events:[],usersLoaded:false,eventsLoaded:false})}}).catch(e=>active&&setError(e.message));return()=>{active=false}},[])
@@ -100,8 +102,38 @@ export default function AdminPage(){
   }
  },[tab,admin?.id])
 
- return <div className="admin-workspace min-h-screen bg-[#f7f7f7] text-black"><header className="flex flex-wrap items-center justify-between gap-4 border-b bg-white px-5 py-5 lg:px-8"><Link to="/admin" className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-xl font-black"><SiteName logo/><span className="text-xs font-normal tracking-widest text-gray-500">ADMIN CENTRE</span></Link><div className="flex flex-wrap items-center gap-5 text-xs"><SellerNotificationBell/><span>{admin?.fullName} {admin&&`· #${admin.publicId}`}</span><Link to="/" className="flex items-center gap-1 underline">View website<ArrowUpRight size={13}/></Link><button onClick={async()=>{await apiRequest('/api/auth/logout',{method:'POST'});navigate('/login')}} className="underline">Log out of this tab</button></div></header><div className="mx-auto grid max-w-[1700px] lg:grid-cols-[230px_1fr]"><aside className="min-w-0 border-b bg-white p-4 lg:min-h-screen lg:border-r"><p className="mb-4 px-3 pt-2 text-[10px] font-semibold tracking-[.2em] text-gray-400">MANAGE YOUR MARKETPLACE</p><nav className="flex gap-1 overflow-x-auto lg:flex-col" aria-label="Admin navigation">{tabs.filter(([id])=>id!=='admin-access'||admin?.isSuperAdmin).map(([id,label,Icon])=><Link key={id} to={id==='admin-access'?'/super-admin':`/admin#${id}`} className={`flex shrink-0 items-center gap-3 px-3 py-3 text-sm ${tab===id?'bg-black font-semibold text-white':'text-gray-500 hover:bg-gray-100'}`}><Icon size={17}/>{label}</Link>)}</nav></aside><main className="min-w-0 p-5 pb-24 lg:p-8"><p className="text-xs uppercase tracking-[.18em] text-gray-400">ADMIN WORKSPACE</p><h1 className="mt-2 text-3xl font-semibold">{tabs.find(t=>t[0]===tab)?.[1]}</h1>{admin&&<AdminToolSearch isSuperAdmin={admin.isSuperAdmin}/>}{error&&<p role="alert" className="mt-5 border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}<Link className="ml-2 underline" to="/login?switch=1">Admin login</Link></p>}{notice&&<p role="status" className="mt-5 border bg-white p-4 text-sm">{notice}</p>}{!data&&!error&&<ContentPlaceholder/>}{admin&&data&&<div className="mt-7">
- {tab==='overview'&&<><Link to="/admin/seller-metrics" className="mb-4 inline-flex rounded-lg border bg-white px-4 py-2 text-sm font-semibold">Manage seller credit scores</Link><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[['Registered accounts',data.counts.accounts],['Store profiles',data.counts.stores],['Products',data.counts.products],['Seller applications pending',data.counts.pending]].map(([label,value])=><div key={label} className="border bg-white p-5"><p className="text-xs text-gray-500">{label}</p><p className="mt-4 text-3xl font-semibold">{value.toLocaleString()}</p></div>)}</div><h2 className="mt-8 text-lg font-semibold">What would you like to do?</h2><div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[['applications','Approve a seller','Review identity documents and approve or reject the application.'],['orders','Process an order','Review paid orders and send tracking numbers to sellers.'],['buyer-wallet','Fund a buyer','Credit a buyer balance or review coin deposit requests.'],['payment-type-deposits','Review seller deposits','Open payment proof and confirm funds received.'],['payment-type-withdrawals','Review seller withdrawals','Check the receiving wallet and record a confirmed transfer.'],['accounts','Find an account','Search buyer and seller profiles and open their controls.'],['statistics','Adjust display statistics','Apply labeled display adjustments with a saved audit reason.']].map(([id,label,description])=><Link key={id} to={id==='admin-access'?'/super-admin':`/admin#${id}`} className="border bg-white p-5 hover:border-black"><div className="flex justify-between"><h3 className="font-semibold">{label}</h3><ArrowUpRight size={17}/></div><p className="mt-3 text-sm leading-6 text-gray-500">{description}</p></Link>)}</div></>}
+ return <div className="admin-workspace admin-dashboard min-h-screen">
+  <div className="admin-dashboard-frame">
+   <header className="admin-dashboard-header">
+    <div className="admin-dashboard-brand">
+     <button type="button" className="admin-icon-button" aria-label="Open admin menu" aria-haspopup="dialog" aria-controls="admin-nav-menu" onClick={()=>menu.current.showModal()}><Menu size={21} aria-hidden="true"/></button>
+     <Link to="/admin" className="admin-brand-link"><SiteName logo/></Link>
+    </div>
+    <div className="admin-dashboard-account">
+     <SellerNotificationBell/>
+     {admin&&<span className="admin-dashboard-name">{admin.fullName}<small>#{admin.publicId}</small></span>}
+     <Link to="/" className="admin-icon-button" aria-label="View website" title="View website"><ArrowUpRight size={18} aria-hidden="true"/></Link>
+     <button type="button" className="admin-icon-button" aria-label="Log out of this tab" title="Log out of this tab" onClick={async()=>{await apiRequest('/api/auth/logout',{method:'POST'});navigate('/login')}}><LogOut size={17} aria-hidden="true"/></button>
+    </div>
+   </header>
+   <dialog ref={menu} id="admin-nav-menu" className="admin-nav-drawer" aria-labelledby="admin-nav-title" onClick={event=>{if(event.target===event.currentTarget)menu.current.close()}}>
+    <div className="admin-nav-body">
+     <header><h2 id="admin-nav-title">Menu</h2><button type="button" className="admin-icon-button" aria-label="Close admin menu" onClick={()=>menu.current.close()}><X size={20} aria-hidden="true"/></button></header>
+     <nav aria-label="Admin navigation">
+      {tabs.filter(([id])=>id!=='admin-access'||admin?.isSuperAdmin).map(([id,label,Icon])=><Link key={id}
+       to={id==='admin-access'?'/super-admin':`/admin#${id}`} aria-current={tab===id?'page':undefined} onClick={()=>menu.current.close()}>
+       <Icon size={18} aria-hidden="true"/>{label}
+      </Link>)}
+     </nav>
+    </div>
+   </dialog>
+   <main className="admin-dashboard-main">
+    <div className="admin-dashboard-title">
+     <h1>{tab==='overview'?'Dashboard':tabs.find(item=>item[0]===tab)?.[1]}</h1>
+     {admin&&<AdminToolSearch isSuperAdmin={admin.isSuperAdmin}/>}
+    </div>
+    {error&&<p role="alert" className="mt-5 border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}<Link className="ml-2 underline" to="/login?switch=1">Admin login</Link></p>}{notice&&<p role="status" className="mt-5 border bg-white p-4 text-sm">{notice}</p>}{!data&&!error&&<ContentPlaceholder/>}{admin&&data&&<div className="mt-7">
+ {tab==='overview'&&<><Link to="/admin/seller-metrics" className="admin-primary-link">Manage seller credit scores</Link><div className="admin-metrics-grid">{[['Registered accounts',data.counts.accounts],['Store profiles',data.counts.stores],['Products',data.counts.products],['Seller applications pending',data.counts.pending]].map(([label,value])=><div key={label} className="admin-metric-card"><p>{label}</p><strong>{value.toLocaleString()}</strong></div>)}</div><h2 className="mt-8 text-lg font-semibold">Quick actions</h2><div className="admin-actions-grid">{[['applications','Approve a seller','Review identity documents and approve or reject the application.'],['orders','Process an order','Review paid orders and send tracking numbers to sellers.'],['buyer-wallet','Fund a buyer','Credit a buyer balance or review coin deposit requests.'],['payment-type-deposits','Review seller deposits','Open payment proof and confirm funds received.'],['payment-type-withdrawals','Review seller withdrawals','Check the receiving wallet and record a confirmed transfer.'],['accounts','Find an account','Search buyer and seller profiles and open their controls.'],['statistics','Adjust display statistics','Apply labeled display adjustments with a saved audit reason.']].map(([id,label,description])=><Link key={id} to={id==='admin-access'?'/super-admin':`/admin#${id}`} className="admin-action-card"><div className="flex justify-between"><h3 className="font-semibold">{label}</h3><ArrowUpRight size={17}/></div><p className="mt-3 text-sm leading-6 text-gray-500">{description}</p></Link>)}</div></>}
  {tab==='admin-access'&&(admin.isSuperAdmin?<AdminAccess/>:<p role="alert" className="border bg-white p-5 text-sm">Only the super admin can manage administrator access.</p>)}
  {tab==='account-recovery'&&<RecoveryRequests/>}
  {tab==='accounts'&&<AdminAccountDirectory users={data.users} sellers={data.sellers}/>}
