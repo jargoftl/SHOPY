@@ -1002,22 +1002,27 @@ app.get('/api/stores/:sellerId', async (req, res) => {
   `, sellerId))
   if (!store) return res.status(404).json({ error: 'Store not found.' })
   await database.transaction(async () => {
-    await database.prepare('UPDATE seller_profiles SET visitor_count = visitor_count + 1, last_viewed_at = CURRENT_TIMESTAMP WHERE user_id = ?').run(sellerId)
-    await database.prepare("INSERT INTO store_daily_visits(seller_id,day,visits) VALUES(?,to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC','YYYY-MM-DD'),1) ON CONFLICT(seller_id,day) DO UPDATE SET visits=store_daily_visits.visits+1").run(sellerId)
-    await database.prepare("INSERT INTO store_china_daily_visits(seller_id,day,visits) VALUES(?,to_char(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai','YYYY-MM-DD'),1) ON CONFLICT(seller_id,day) DO UPDATE SET visits=store_china_daily_visits.visits+1").run(sellerId)
-  })()
-  store.visitor_count += 1
+    await database.prepare('UPDATE seller_profiles SET visitor_count = visitor_count + 1, last_viewed_at = now() WHERE user_id = ?').run(sellerId)
+    await database.prepare("INSERT INTO store_daily_visits(seller_id,day,visits) VALUES(?,to_char(now() AT TIME ZONE 'UTC','YYYY-MM-DD'),1) ON CONFLICT(seller_id,day) DO UPDATE SET visits=store_daily_visits.visits+1").run(sellerId)
+    await database.prepare("INSERT INTO store_china_daily_visits(seller_id,day,visits) VALUES(?,to_char(now() AT TIME ZONE 'Asia/Shanghai','YYYY-MM-DD'),1) ON CONFLICT(seller_id,day) DO UPDATE SET visits=store_china_daily_visits.visits+1").run(sellerId)
+  })().then(() => { store.visitor_count += 1 }).catch(() => {
+    console.error('Unable to record storefront visit.')
+  })
   const token = sessionToken(req)
   if (token) {
-    const visitor = (await getRow<{ id: number }>(`
-      SELECT users.id FROM users JOIN sessions ON sessions.user_id = users.id
-      WHERE sessions.token_hash = ? AND sessions.expires_at > ? AND users.role = 'customer'
-    `, hashToken(token), new Date().toISOString()))
-    if (visitor) {
-      await database.prepare(`
-        INSERT INTO buyer_store_visits (user_id, seller_id) VALUES (?, ?)
-        ON CONFLICT(user_id, seller_id) DO UPDATE SET last_visited_at = CURRENT_TIMESTAMP, visit_count = visit_count + 1
-      `).run(visitor.id, sellerId)
+    try {
+      const visitor = (await getRow<{ id: number }>(`
+        SELECT users.id FROM users JOIN sessions ON sessions.user_id = users.id
+        WHERE sessions.token_hash = ? AND sessions.expires_at > ? AND users.role = 'customer'
+      `, hashToken(token), new Date().toISOString()))
+      if (visitor) {
+        await database.prepare(`
+          INSERT INTO buyer_store_visits (user_id, seller_id) VALUES (?, ?)
+          ON CONFLICT(user_id, seller_id) DO UPDATE SET last_visited_at = now(), visit_count = visit_count + 1
+        `).run(visitor.id, sellerId)
+      }
+    } catch {
+      console.error('Unable to record buyer storefront history.')
     }
   }
   const products = (await getRows<ProductRow>(`
