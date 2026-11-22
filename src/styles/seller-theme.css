@@ -289,3 +289,29 @@ html:has(.seller-menu-drawer[open]) { overflow: hidden; }
   .seller-portal.seller-overview .portal-title { font-size: 23px; }
   .seller-portal.seller-overview .portal-card { border-radius: 11px; }
 }
+
+.seller-portal .seller-history-filter { width: min(100%, 12rem); }
+.seller-portal .seller-history-filter > :is(.uiverse-select-trigger, .uiverse-select-options) {
+  background: var(--seller-surface) !important;
+  color: var(--seller-ink) !important;
+  border: 1px solid var(--seller-line);
+  border-radius: 11px;
+  font-size: 13px;
+}
+.seller-portal .seller-history-filter > .uiverse-select-trigger {
+  min-height: 40px;
+  padding-inline: 12px;
+  font-weight: 650;
+}
+.seller-portal .seller-history-filter .uiverse-select-arrow { fill: var(--seller-accent); }
+.seller-portal .seller-history-filter [role="option"] {
+  padding: 9px 10px;
+  border-radius: 7px;
+  background: var(--seller-surface);
+  color: var(--seller-ink);
+  font-size: 13px;
+}
+.seller-portal .seller-history-filter [role="option"]:is(:hover,:focus-visible) {
+  background: var(--seller-soft);
+  color: var(--seller-accent);
+}

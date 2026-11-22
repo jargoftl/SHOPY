@@ -157,12 +157,12 @@ function DepositDialog({wallets,request,requestId,pendingDeposits,onSelectDeposi
 
 const paymentHistoryTime=request=>request.resolved_at||(['confirmed','rejected'].includes(request.status)?request.updated_at:request.created_at)
 const ledgerHistoryTime=record=>record.effective_at||record.resolvedAt||record.created_at
-const compareHistory=(getTime,oldestFirst=false)=>(first,second)=>{
+const compareHistory=(getTime)=>(first,second)=>{
  const a=timestampMillis(getTime(first)),b=timestampMillis(getTime(second))
- if(a===b)return oldestFirst?first.id-second.id:second.id-first.id
+ if(a===b)return second.id-first.id
  if(!Number.isFinite(a))return 1
  if(!Number.isFinite(b))return -1
- return oldestFirst?a-b:b-a
+ return b-a
 }
 
 function PaymentHistory({requests}){
@@ -235,8 +235,13 @@ export default function SellerFinancePage({view='wallet'}){
   setError('')
  }
  const depositWallets=data?.depositWallets||[]
- const compareLedgerDates=compareHistory(ledgerHistoryTime,user?.publicId==='0099019176')
- const records=(data?.records||[]).filter(record=>record.delta_cents!==0&&(historyFilter==='all'||(historyFilter==='credit'?record.delta_cents>0:record.delta_cents<0))).sort((first,second)=>(first.historyPin??Infinity)-(second.historyPin??Infinity)||compareLedgerDates(first,second))
+ const compareLedgerDates=compareHistory(ledgerHistoryTime)
+ const records=(data?.records||[])
+  .filter(record=>record.delta_cents!==0&&(historyFilter==='all'||(historyFilter==='credit'?record.delta_cents>0:record.delta_cents<0)))
+  .sort((first,second)=>{
+   const bottomOrder=(second.historyPin??Infinity)-(first.historyPin??Infinity)
+   return bottomOrder||compareLedgerDates(first,second)
+  })
  const date=new Date(today+'T00:00:00Z')
  const yesterday=new Date(date.getTime()-86400000).toISOString().slice(0,10)
  const weekStart=new Date(date.getTime()-((date.getUTCDay()+6)%7)*86400000).toISOString().slice(0,10)
@@ -304,8 +309,9 @@ export default function SellerFinancePage({view='wallet'}){
   </div>
  </>}
  {view==='record'&&<section className="mt-6 max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-label="Wallet transactions">
-  <div className="flex justify-end border-b border-slate-100 px-4 py-3">
-   <UiverseSelect aria-label="Filter transactions" value={historyFilter} onChange={event=>setHistoryFilter(event.target.value)}>
+  <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+   <span className="text-sm font-medium">Filter</span>
+   <UiverseSelect className="seller-history-filter" aria-label="Filter transactions" value={historyFilter} onChange={event=>setHistoryFilter(event.target.value)}>
     <option value="all">All transactions</option><option value="credit">Credits</option><option value="debit">Debits</option>
    </UiverseSelect>
   </div>
