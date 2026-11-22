@@ -195,8 +195,8 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
      END AS "historyPin",
      CASE WHEN seller.public_id='0099019176'
        AND COALESCE(q.transaction_ref,f.transaction_ref)='5376034972' AND f.delta_cents=7499999
-       THEN '2026-05-20'
-     END AS "historyDisplayDate"
+       THEN '2026-05-20T06:40:07+01:00'
+     END AS "historyDisplayTimestamp"
    FROM seller_fund_records f
    JOIN users seller ON seller.id=f.seller_id
    LEFT JOIN seller_wallet_requests q ON f.kind IN ('deposit','withdrawal') AND q.seller_id=f.seller_id AND q.id::text=f.reference

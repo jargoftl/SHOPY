@@ -1,7 +1,7 @@
 import UiverseSelect from '../components/UiverseSelect.jsx'
 import {ArrowDown, ArrowUp, Circle, Copy, TrendingUp, Wallet, QrCode, X} from 'lucide-react'
 import {transactionActor} from '../lib/transactionLabels.js'
-import {formatStoreDate,formatTimestamp,timestampMillis} from '../lib/storeDates.js'
+import {formatTimestamp,timestampMillis} from '../lib/storeDates.js'
 import CryptoWalletIcon,{coinNetworks} from '../components/CryptoWalletIcon.jsx'
 import SellerPaymentReceipt from '../components/SellerPaymentReceipt.jsx'
 import {Link,useSearchParams} from 'react-router-dom'
@@ -322,7 +322,7 @@ export default function SellerFinancePage({view='wallet'}){
      {record.delta_cents>0?'+':''}{money(record.delta_cents)}
     </p>
     {record.displayReference&&<p className="col-span-2 text-xs text-slate-600">Ref. {record.displayReference}</p>}
-    <p className="col-span-2 text-xs text-slate-500">{record.historyDisplayDate?formatStoreDate(record.historyDisplayDate):formatTimestamp(ledgerHistoryTime(record))}</p>
+    <p className="col-span-2 text-xs text-slate-500">{formatTimestamp(record.historyDisplayTimestamp??ledgerHistoryTime(record))}</p>
    </li>)}
   </ul> : <p className="px-4 py-8 text-center text-sm text-slate-600">{data?'No transactions in this view.':error?'Transactions are unavailable.':'Loading transactions…'}</p>}
  </section>}
