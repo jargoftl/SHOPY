@@ -376,6 +376,10 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     if (!order || !existing) return res.status(404).json({ error: 'Order not found.' })
     if (order.status !== 'paid') return res.status(409).json({ error: 'Payment must be confirmed first.' })
     if (!['pending','confirmed','about_to_send','sent','on_the_way','hold','stalled','delivered'].includes(req.body?.status)) return res.status(400).json({ error: 'Invalid status.' })
+    if (req.user!.role === 'seller' && existing.status === 'pending' && req.body.status !== 'pending'
+      && !await db.prepare("SELECT 1 FROM seller_sale_releases WHERE order_id=? AND seller_id=? AND status='released'").get(orderId,sellerId)) {
+      return res.status(409).json({ error: 'Confirm the order before updating fulfillment.' })
+    }
     if (existing.status !== req.body.status) await db.transaction(async () => {
       await db.prepare('UPDATE purchase_sellers SET status=? WHERE order_id=? AND seller_id=?').run(req.body.status, orderId, sellerId)
       if(req.body.status==='delivered')await queueDeliveryEmail(db,orderId,sellerId)

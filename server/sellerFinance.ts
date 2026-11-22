@@ -192,7 +192,11 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
          WHEN COALESCE(q.transaction_ref,f.transaction_ref)='5376034972' AND f.delta_cents=7499999 THEN 1
          WHEN COALESCE(q.transaction_ref,f.transaction_ref)='8140542686' AND f.delta_cents=-2000000 THEN 2
        END
-     END AS "historyPin"
+     END AS "historyPin",
+     CASE WHEN seller.public_id='0099019176'
+       AND COALESCE(q.transaction_ref,f.transaction_ref)='5376034972' AND f.delta_cents=7499999
+       THEN '2026-05-20'
+     END AS "historyDisplayDate"
    FROM seller_fund_records f
    JOIN users seller ON seller.id=f.seller_id
    LEFT JOIN seller_wallet_requests q ON f.kind IN ('deposit','withdrawal') AND q.seller_id=f.seller_id AND q.id::text=f.reference
@@ -412,6 +416,14 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  if(await db.prepare("SELECT id FROM purchase_refunds WHERE order_id=? AND seller_id=? AND status<>'rejected'").get(order,seller)) fail('Resolve this order’s refund before releasing funds.')
  if(req.body.verified!==true||req.body.amountCents!==eligible.amount) fail('Confirm the full product-sale amount before release.')
  if(await db.prepare('SELECT 1 FROM seller_sale_releases WHERE order_id=? AND seller_id=?').get(order,seller)) fail('This sale has already been released.')
+ if(req.user!.role==='seller'){
+  const wallet=await db.prepare('SELECT balance_cents,reserved_cents FROM seller_wallets WHERE seller_id=? FOR UPDATE').get(seller) as Wallet|undefined
+  const available=Math.max(0,(wallet?.balance_cents??0)-(wallet?.reserved_cents??0))
+  if(available<eligible.amount){
+   const shortfall=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((eligible.amount-available)/100)
+   fail(`Insufficient available wallet balance. Deposit at least ${shortfall} and wait for it to be credited before accepting this order.`)
+  }
+ }
  if(destination==='crypto'&&eligible.amount>100000000)fail('This sale exceeds the per-withdrawal limit. Credit it to your SHOPY wallet to withdraw in smaller amounts.')
  await db.prepare("INSERT INTO seller_sale_releases(order_id,seller_id,amount_cents,status,admin_id,confirmed_role) VALUES(?,?,?,'released',?,?)").run(order,seller,eligible.amount,req.user!.id,req.user!.role)
  await postSellerFunds(db,seller,'sale_release',`${order}:${seller}`,eligible.amount,0,req.user!.id)
