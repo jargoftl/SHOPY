@@ -12,7 +12,7 @@ import {apiRequest} from '../lib/api.js'
 const shortcuts=[[Settings,'Store settings','/seller/account/settings','#ff635b'],[RotateCcw,'Refunds','/seller/refunds','#536aff'],[Package,'Warehouse','/seller/warehouse','#42a8ef'],[Crown,'Store upgrade','/seller/marketing/upgrade','#42a8ef'],[BadgeCheck,'Store level','/seller/marketing/levels','#e9ab2d'],[Gift,'Referrals','/seller/referrals','#35bba0'],[ArrowDownLeft,'Deposit','/seller/wallet?action=deposit','#35bd80'],[ArrowUpRight,'Withdraw','/seller/wallet?action=withdrawal','#5471ff']]
 export default function SellerDashboardPage(){
  const {t}=useSellerLanguage()
- const [user,setUser]=useState(null),[data,setData]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[creditScore,setCreditScore]=useState(null),[days,setDays]=useState(7),[limit,setLimit]=useState(12)
+ const [user,setUser]=useState(null),[data,setData]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[creditScore,setCreditScore]=useState(null),[days,setDays]=useState(7),[heatDay,setHeatDay]=useState(''),[limit,setLimit]=useState(12)
  useEffect(()=>{let active=true;const refresh=()=>Promise.all([apiRequest('/api/auth/me'),apiRequest('/api/seller/analytics')]).then(([u,d])=>{if(active){setUser(u.user);setData(d);setError('')}}).catch(e=>active&&setError(e.message));apiRequest('/api/seller/products').then(d=>active&&setProducts(d.products)).catch(e=>active&&setError(e.message));const tick=()=>{if(document.hidden)return;refresh();apiRequest('/api/seller/dashboard-metrics',{cache:'no-store'}).then(({metrics})=>{if(active)setCreditScore(metrics.sellerCreditScore??5)}).catch(()=>{})};tick();const timer=setInterval(tick,30000);window.addEventListener('focus',tick);document.addEventListener('visibilitychange',tick);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',tick);document.removeEventListener('visibilitychange',tick)}},[])
  const series=useMemo(()=>{
   const config=data?.dashboardMetrics
@@ -36,7 +36,7 @@ export default function SellerDashboardPage(){
   })
  },[data,days])
  const maxSales=Math.max(100,...series.map(d=>d.sales)),maxVisits=Math.max(1,...series.map(d=>d.visits))
- const points=key=>series.map((d,i)=>`${35+i*315/Math.max(1,days-1)},${210-d[key]/(key==='sales'?maxSales:maxVisits)*165}`).join(' ')
+ const activeHeatDay=series.find(row=>row.day===heatDay)??series.at(-1)
  const today=data?.today,visits=(length)=>{const end=new Date((today||'2000-01-01')+'T00:00:00Z');end.setUTCDate(end.getUTCDate()-length+1);const from=end.toISOString().slice(0,10);return (data?.visits||[]).filter(v=>v.day>=from&&v.day<=today).reduce((s,v)=>s+v.visits,0)}
  const todayData=data?.chinaToday
  const metrics=data?.dashboardMetrics??{}
@@ -100,7 +100,35 @@ export default function SellerDashboardPage(){
    </dl>
   </section>)}
  </div>
- <section className="portal-card portal-chart"><div className="portal-chart-head"><h2>{t("Sales & visits")}</h2><div className="portal-period" aria-label="Chart period">{[[1,'Today'],[7,'Last 7 days'],[30,'Last 30 days']].map(([n,label])=><button key={n} aria-pressed={days===n} onClick={()=>setDays(n)}>{t(label)}</button>)}</div></div><div className="portal-chart-legend"><span><i/>{t("Sales (USD)")}</span><span><i/>{t("Visits (right)")}</span></div><svg viewBox="0 0 400 252" role="img" aria-label={`Recorded sales and visits for the last ${days} days`}>{[0,1,2,3,4].map(i=><g key={i}><line x1="35" x2="350" y1={45+i*41.25} y2={45+i*41.25} stroke="#dbe2eb" strokeDasharray="5 5"/><text x="0" y={49+i*41.25} fontSize="13" fill="#687386">{(maxSales*(4-i)/4/100).toFixed(0)}</text><text x="362" y={49+i*41.25} fontSize="13" fill="#687386">{Math.round(maxVisits*(4-i)/4)}</text></g>)}<polyline points={points('visits')} fill="none" stroke="#969da8" strokeWidth="3"/><polyline points={points('sales')} fill="none" stroke="#2155ef" strokeWidth="3"/>{series.map((d,i)=><g key={d.day}><circle cx={35+i*315/Math.max(1,days-1)} cy={210-d.sales/maxSales*165} r="3.5" fill="white" stroke="#2155ef" strokeWidth="2"/><circle cx={35+i*315/Math.max(1,days-1)} cy={210-d.visits/maxVisits*165} r="3" fill="white" stroke="#969da8" strokeWidth="2"/></g>)}<text x="35" y="240" fontSize="13" fill="#687386">{series[0]?.day}</text><text x="270" y="240" fontSize="13" fill="#687386">{series.at(-1)?.day}</text></svg><p className="portal-note">{t(days===1?"China time · sales before refunds":"UTC · sales before refunds")}</p></section>
+ <section className="portal-card" aria-label={t("Store activity heatmap")}>
+  <div className="flex flex-wrap items-start justify-between gap-3">
+   <div><h2>{t("Store activity heatmap")}</h2><p className="mt-1 text-xs text-slate-600">{t(days===1?"China time":"UTC")}</p></div>
+   <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("Heatmap period")}>
+    {[[1,'Today'],[7,'Last 7 days'],[30,'Last 30 days']].map(([n,label])=><button key={n} type="button" aria-pressed={days===n} onClick={()=>{setDays(n);setHeatDay('')}} className={`min-h-9 rounded-lg px-2.5 text-xs font-semibold ${days===n?'bg-blue-700 text-white':'bg-slate-100 text-slate-700'}`}>{t(label)}</button>)}
+   </div>
+  </div>
+  <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
+   <div className="min-w-0 space-y-3">
+    {[['sales','Sales',maxSales,'rgba(37,99,235,'],['visits','Visits',maxVisits,'rgba(13,148,136,']].map(([key,label,max,color])=><div key={key} className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2">
+     <p className="text-xs font-semibold text-slate-700">{t(label)}</p>
+     <div className={`grid gap-1 ${days===30?'grid-cols-10':days===7?'grid-cols-7':'grid-cols-1'}`}>
+      {series.map(row=>{
+       const value=key==='sales'?money(row.sales):number(row.visits)
+       const description=`${row.day} · ${t(label)} ${value}`
+       return <button key={row.day} type="button" aria-label={description} title={description} onClick={()=>setHeatDay(row.day)} aria-pressed={activeHeatDay?.day===row.day}
+        className="min-h-6 rounded border border-slate-200 aria-pressed:ring-2 aria-pressed:ring-slate-800 focus-visible:outline-2 focus-visible:outline-blue-700"
+        style={{backgroundColor:row[key]>0?`${color}${0.18+0.82*row[key]/max})`:'#f1f5f9'}}/>
+      })}
+     </div>
+    </div>)}
+    {activeHeatDay&&<p aria-live="polite" className="text-xs text-slate-600">{activeHeatDay.day} · {t('Sales')} {money(activeHeatDay.sales)} · {t('Visits')} {number(activeHeatDay.visits)}</p>}
+   </div>
+   <div className="rounded-xl bg-indigo-50 px-4 py-3 text-indigo-950">
+    <p className="text-xs font-semibold">{t("Store Followers")}</p>
+    <p className="mt-1 text-xl font-bold tabular-nums">{number(data?.overview.followers)}</p>
+   </div>
+  </div>
+ </section>
  <section className="portal-card portal-shortcuts" aria-label="Store tools">{shortcuts.map(([Icon,label,to,color])=><Link key={to} to={to}><i style={{background:color}}><Icon size={23}/></i><span>{t(label)}</span></Link>)}</section>
  <SaleConfirmations sales={data?.orders||[]} onConfirmed={async()=>setData(await apiRequest('/api/seller/analytics'))}/><section className="portal-card"><div className="portal-section-head"><h2>{t("Recent orders")}</h2><Link to="/seller/orders">{t("View all")}</Link></div>{data?.orders.slice(0,4).map(o=><Link className="portal-order-row" key={o.orderId} to={`/seller/orders?order=${o.orderNumber}`}><div><strong>{formatOrderReference(o)}</strong><OrderStatusBadge status={o.paymentStatus} label={t(paymentStatusLabel(o.paymentStatus))}/></div><strong>{money(o.amountCents)}</strong></Link>)}{data&&!data.orders.length&&<p className="portal-empty">{t("No orders yet.")}</p>}</section>
  <section className="portal-card"><h2>{t("Top 10 best-selling items")}</h2><div className="portal-product-list">{bestSellers.map((p,i)=><Link to={products.some(item=>item.id===p.id&&item.isPublished)?`/products/${p.id}`:'/seller/products'} key={p.id||i} className="portal-product-row">{p.imageUrl?<img src={p.imageUrl} alt="" loading="lazy"/>:<span className="portal-image-placeholder"><Package/></span>}<div><h3>{p.name}</h3><p>{p.units} {t('sold')}</p><strong>{p.salesCents!=null&&<>{money(p.salesCents)} <small>{t("sales")}</small></>}</strong></div></Link>)}</div>{data&&!bestSellers.length&&<p className="portal-empty">{t("Your best-selling items will appear after completed payments.")}</p>}</section>
