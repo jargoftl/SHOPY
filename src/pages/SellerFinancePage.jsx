@@ -234,7 +234,8 @@ export default function SellerFinancePage({view='wallet'}){
   setError('')
  }
  const depositWallets=data?.depositWallets||[]
- const records=(data?.records||[]).filter(record=>record.delta_cents!==0&&(historyFilter==='all'||(historyFilter==='credit'?record.delta_cents>0:record.delta_cents<0))).sort(compareHistory(ledgerHistoryTime))
+ const compareLedgerDates=compareHistory(ledgerHistoryTime)
+ const records=(data?.records||[]).filter(record=>record.delta_cents!==0&&(historyFilter==='all'||(historyFilter==='credit'?record.delta_cents>0:record.delta_cents<0))).sort((first,second)=>(first.historyPin??Infinity)-(second.historyPin??Infinity)||compareLedgerDates(first,second))
  const date=new Date(today+'T00:00:00Z')
  const yesterday=new Date(date.getTime()-86400000).toISOString().slice(0,10)
  const weekStart=new Date(date.getTime()-((date.getUTCDay()+6)%7)*86400000).toISOString().slice(0,10)
@@ -309,7 +310,7 @@ export default function SellerFinancePage({view='wallet'}){
   </div>
   {records.length ? <ul className="divide-y divide-slate-100">
    {records.map(record=><li key={record.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-4 sm:px-5">
-    <p className={`flex min-w-0 items-center gap-1.5 font-semibold ${record.delta_cents<0?'text-red-700':'text-slate-900'}`}>{record.delta_cents>0?<ArrowUp size={17} aria-hidden="true" className="shrink-0 text-emerald-700"/>:<ArrowDown size={17} aria-hidden="true" className="shrink-0"/>}{record.delta_cents>0?'Credit':'Debit'}</p>
+    <p className={`flex min-w-0 items-center gap-1.5 font-semibold ${record.delta_cents<0?'text-red-700':'text-slate-900'}`}>{record.delta_cents>0?<ArrowUp size={17} aria-hidden="true" className="shrink-0 text-emerald-700"/>:<ArrowDown size={17} aria-hidden="true" className="shrink-0"/>}{record.delta_cents>0?'Credit':'Debit'}{record.historyPin&&<span className="ml-1 text-xs font-medium text-slate-600">Pinned</span>}</p>
     <p className={`max-w-[45vw] break-words text-right text-sm font-semibold tabular-nums ${record.delta_cents>0?'text-emerald-700':'text-red-700'}`}>
      {record.delta_cents>0?'+':''}{money(record.delta_cents)}
     </p>
