@@ -168,3 +168,124 @@ html[data-seller-theme] body:has(.seller-bottom-tabs) .theme-control { display: 
   }
   html[data-seller-theme] .theme-panel { left: 0; right: auto; }
 }
+
+html[data-seller-theme] .seller-portal .seller-workspace-header {
+  display: flex !important;
+  gap: 12px;
+  padding: 12px clamp(12px, 3vw, 32px);
+}
+.seller-workspace-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.seller-menu-trigger {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  color: var(--seller-ink, #20262e);
+}
+.seller-menu-trigger:hover { background: var(--seller-raised, #f6f7f8); }
+.seller-menu-trigger:focus-visible, .seller-menu-drawer :is(a,button):focus-visible {
+  outline: 2px solid var(--seller-accent, #2155ef);
+  outline-offset: -2px;
+}
+.seller-portal .seller-menu-drawer {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(365px, 95vw);
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  background: var(--seller-surface, #fff);
+  color: var(--seller-ink, #20262e);
+}
+.seller-menu-drawer::backdrop { background: rgb(14 23 37 / 50%); }
+html:has(.seller-menu-drawer[open]) { overflow: hidden; }
+.seller-menu-content { padding: 14px 16px max(16px, env(safe-area-inset-bottom)); }
+.seller-menu-heading { display: flex; align-items: center; justify-content: space-between; font-size: 17px; font-weight: 650; }
+.seller-menu-tools {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 5px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--seller-line, #e0e4e8);
+}
+.seller-menu-tools a {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 6px;
+  padding: 8px 2px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 12px;
+}
+.seller-menu-tools a > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #fff;
+}
+.seller-menu-links { display: grid; gap: 2px; padding-top: 10px; }
+.seller-menu-links :is(a,button) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 14px;
+}
+.seller-menu-links [aria-current="page"], .seller-menu-tools a:hover, .seller-menu-links :is(a,button):hover {
+  background: var(--seller-soft, #f0f4ff);
+  color: var(--seller-accent, #2155ef);
+}
+.seller-portal .seller-workspace-main {
+  width: 100%;
+  max-width: 1240px;
+  margin-inline: auto;
+  padding: clamp(12px, 3vw, 32px) clamp(12px, 3vw, 32px) 96px;
+}
+.seller-portal.seller-overview .seller-workspace-main { max-width: 1240px; }
+.seller-shop-rows { display: grid; gap: 8px; margin: 12px 0; }
+.seller-shop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--seller-line);
+  border-radius: 10px;
+  background: var(--seller-surface);
+}
+.seller-shop-row dt { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.seller-shop-row dt span { display: grid; flex: none; place-items: center; width: 32px; height: 32px; border-radius: 7px; color: #fff; }
+.seller-shop-row dd { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.seller-overview-select {
+  min-height: 36px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--seller-line);
+  border-radius: 7px;
+  background: var(--seller-surface);
+  color: var(--seller-ink);
+  font-size: 13px;
+}
+@media (min-width: 820px) {
+  .seller-shop-rows { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 600px) {
+  .seller-workspace-header .portal-header-actions { flex-direction: column; align-items: flex-end; gap: 4px; }
+  .seller-workspace-header .seller-language-selector { margin: 0; }
+  .seller-workspace-header .seller-language-selector > span { display: none; }
+  .seller-portal.seller-overview .portal-title { font-size: 23px; }
+  .seller-portal.seller-overview .portal-card { border-radius: 11px; }
+}

@@ -1,13 +1,94 @@
 import SellerLanguageSelector from './SellerLanguageSelector.jsx'
 import {useSellerLanguage} from '../context/SellerLanguageContext.jsx'
-import {useState} from 'react'
+import {useRef} from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Wallet, ChartNoAxesCombined, BookOpen, Package, Warehouse, Store, Users, ShoppingBag, Megaphone, ArrowUpRight } from 'lucide-react'
+import { LayoutDashboard, Wallet, ChartNoAxesCombined, BookOpen, Package, Warehouse, Store, Users, ShoppingBag, ArrowUpRight, Menu, X, Settings, RotateCcw, Crown, BadgeCheck, Gift, ArrowDownLeft, History, MessageCircle, Bell, LogOut, ExternalLink, Star } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 import '../styles/seller-portal.css'
 import SiteName from './SiteName.jsx'
-const links=[['/seller','Overview',LayoutDashboard],['/seller/orders','Shop orders',ShoppingBag],['/seller/financial-statement','Financial statement',ChartNoAxesCombined],['/seller/wallet','My wallet',Wallet],['/seller/fund-record','Transaction history',BookOpen],['/seller/products','Store products',Package],['/seller/warehouse','Warehouse',Warehouse],['/orders','My purchases',ShoppingBag],['/seller/account/settings','Store profile',Store],['/seller/refunds','Refund requests',BookOpen],['/seller/reviews','Product reviews',Store],['/seller/referrals','Referrals & rewards',Users]]
-export default function SellerWorkspace({user,children,overview=false}) {const {language,t}=useSellerLanguage();const navigate=useNavigate();const [menuOpen,setMenuOpen]=useState(false);return <div lang={language} className={`seller-portal account-workspace min-h-screen bg-[#f7f7f7] text-[#111111]${overview?' seller-overview':''}`}><header className="portal-header"><Link to="/" className="text-2xl font-bold"><SiteName logo /><span className="portal-independent">{t("Independent marketplace")}</span></Link><div className="portal-header-actions"><SellerLanguageSelector/><div className="portal-identity text-right text-sm"><span className="block font-semibold">{user?.fullName||t('Your workspace')}</span><span className="text-xs text-[#555555]">{user?.publicId ? `#${user.publicId}`:t('Your business, at a glance')}</span></div></div></header><div className="mx-auto grid max-w-[1700px] lg:grid-cols-[235px_1fr]"><aside className="portal-sidebar min-w-0 border-b border-[#e5e5e5] bg-white p-4 lg:min-h-[calc(100vh-90px)] lg:border-r"><button type="button" className="flex w-full items-center justify-between rounded-lg border p-3 text-sm font-semibold lg:hidden" aria-expanded={menuOpen} aria-controls="seller-workspace-menu" onClick={()=>setMenuOpen(v=>!v)}>{t("Menu")}<span>{menuOpen?'Close −':'Open +'}</span></button><div id="seller-workspace-menu" className={`${menuOpen?'block':'hidden'} lg:block`}><p className="mb-4 px-3 pt-3 text-[10px] font-bold tracking-[.2em] text-[#777777]">YOUR WORKSPACE</p><nav className="mobile-seller-nav flex gap-1 overflow-x-auto lg:flex-col" onClick={e=>{if(e.target.closest('a'))setMenuOpen(false)}}>{links.map(([to,label,Icon])=><NavLink key={to} to={to} end className={({isActive})=>`flex shrink-0 items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${isActive?'bg-[#e5e5e5] font-bold text-[#111111]':'text-[#555555] hover:bg-[#f7f7f7]'}`}><Icon size={18}/>{t(label)}</NavLink>)}<details className="mt-3 rounded-xl border border-[#e5e5e5] p-3 text-sm"><summary className="flex cursor-pointer items-center gap-3"><Megaphone size={18}/>{t("Marketing tools")}</summary><div className="mt-3 space-y-3 pl-7">{[['upgrade','Store upgrade'],['history','Purchase history'],['levels','Store level']].map(([path,label])=><Link key={path} to={`/seller/marketing/${path}`} className="block text-xs underline">{t(label)}</Link>)}</div></details></nav><Link to={user?`/stores/${user.id}`:'/seller/products'} className="mt-6 flex items-center justify-between rounded-xl bg-[#111111] p-4 text-sm text-white"><span className="flex items-center gap-2"><Store size={17}/>{t("Visit my store")}</span><ArrowUpRight size={17}/></Link><Link to="/" className="mt-3 block px-3 py-2 text-sm underline">{t("Shop the marketplace")}</Link><Link to="/messages" className="mt-3 block px-3 py-2 text-sm underline">{t("Messages & support")}</Link><Link to="/messages?view=notifications" className="block px-3 py-2 text-sm underline">{t("Notifications")}</Link>{user?.role==='admin'&&<Link to="/admin" className="block px-3 py-2 text-sm underline">Admin dashboard</Link>}<button className="px-3 py-3 text-sm text-[#555555] underline" onClick={async()=>{try{await apiRequest('/api/auth/logout',{method:'POST'});navigate('/seller/login')}catch{navigate('/seller/login')}}}>{t("Log out")}</button></div></aside><main className="min-w-0 p-5 pb-24 lg:p-10">{children}</main></div></div>}
+const tools = [
+  ['/seller/account/settings', 'Store settings', Settings, '#d74439'],
+  ['/seller/refunds', 'Refunds', RotateCcw, '#4d61d7'],
+  ['/seller/marketing/upgrade', 'Store upgrade', Crown, '#217dc6'],
+  ['/seller/referrals', 'Referrals & rewards', Gift, '#137963'],
+  ['/seller/wallet?action=deposit', 'Deposit', ArrowDownLeft, '#13784d'],
+  ['/seller/wallet?action=withdrawal', 'Withdraw', ArrowUpRight, '#4d61d7'],
+  ['/seller/marketing/levels', 'Store level', BadgeCheck, '#217dc6'],
+]
+
+const links = [
+  ['/seller', 'Overview', LayoutDashboard],
+  ['/seller/orders', 'Shop orders', ShoppingBag],
+  ['/seller/financial-statement', 'Financial statement', ChartNoAxesCombined],
+  ['/seller/wallet', 'My wallet', Wallet],
+  ['/seller/fund-record', 'Transaction history', BookOpen],
+  ['/seller/products', 'Store products', Package],
+  ['/seller/warehouse', 'Warehouse', Warehouse],
+  ['/orders', 'My purchases', ShoppingBag],
+  ['/seller/reviews', 'Product reviews', Star],
+  ['/seller/marketing/history', 'Purchase history', History],
+  ['/messages', 'Messages & support', MessageCircle],
+  ['/messages?view=notifications', 'Notifications', Bell],
+]
+
+export default function SellerWorkspace({ user, children, overview = false }) {
+  const { language, t } = useSellerLanguage()
+  const navigate = useNavigate()
+  const menu = useRef(null)
+
+  async function logout() {
+    menu.current.close()
+    try { await apiRequest('/api/auth/logout', { method: 'POST' }) }
+    catch { /* Continue to sign-in if the session has already ended. */ }
+    navigate('/seller/login')
+  }
+
+  return <div lang={language} className={`seller-portal account-workspace min-h-screen${overview ? ' seller-overview' : ''}`}>
+    <header className="portal-header seller-workspace-header">
+      <div className="seller-workspace-brand">
+        <button type="button" className="seller-menu-trigger" aria-label={t('Open seller menu')}
+          aria-haspopup="dialog" aria-controls="seller-workspace-menu" onClick={() => menu.current.showModal()}>
+          <Menu size={21} aria-hidden="true"/>
+        </button>
+        <Link to="/" className="font-bold"><SiteName logo/></Link>
+      </div>
+      <div className="portal-header-actions">
+        <SellerLanguageSelector/>
+        <div className="portal-identity text-right text-sm">
+          <span className="block font-semibold">{user?.fullName || t('Your workspace')}</span>
+          {user?.publicId && <span className="text-xs">#{user.publicId}</span>}
+        </div>
+      </div>
+    </header>
+    <dialog ref={menu} id="seller-workspace-menu" className="seller-menu-drawer" aria-labelledby="seller-menu-title"
+      onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close() }}>
+      <div className="seller-menu-content">
+        <header className="seller-menu-heading">
+          <h2 id="seller-menu-title">{t('Seller menu')}</h2>
+          <button type="button" className="seller-menu-trigger" aria-label={t('Close seller menu')} onClick={() => menu.current.close()}>
+            <X size={20} aria-hidden="true"/>
+          </button>
+        </header>
+        <nav aria-label={t('Store tools')} className="seller-menu-tools">
+          {tools.map(([to, label, Icon, color]) => <Link key={to} to={to} onClick={() => menu.current.close()}>
+            <span style={{ background: color }}><Icon size={20} aria-hidden="true"/></span>
+            {t(label)}
+          </Link>)}
+        </nav>
+        <nav aria-label={t('Seller workspace')} className="seller-menu-links">
+          {links.map(([to, label, Icon]) => <NavLink key={to} to={to} end onClick={() => menu.current.close()}>
+            <Icon size={17} aria-hidden="true"/>{t(label)}
+          </NavLink>)}
+          <Link to={user ? `/stores/${user.id}` : '/seller/products'} onClick={() => menu.current.close()}><Store size={17} aria-hidden="true"/>{t('Visit my store')}</Link>
+          <Link to="/" onClick={() => menu.current.close()}><ExternalLink size={17} aria-hidden="true"/>{t('Shop the marketplace')}</Link>
+          {user?.role === 'admin' && <Link to="/admin" onClick={() => menu.current.close()}><Settings size={17} aria-hidden="true"/>Admin dashboard</Link>}
+          <button type="button" onClick={logout}><LogOut size={17} aria-hidden="true"/>{t('Log out')}</button>
+        </nav>
+      </div>
+    </dialog>
+    <main className="seller-workspace-main">{children}</main>
+  </div>
+}
 export const money=(cents=0)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100)
 export const panel='rounded-2xl border border-[#e5e5e5] bg-white p-5 shadow-sm'
 export const button='inline-flex items-center justify-center gap-2 rounded-xl bg-[#111111] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50 hover:bg-[#111111]'

@@ -3,14 +3,13 @@ import { formatOrderReference } from '../lib/orderReference.js'
 import {useSellerLanguage} from '../context/SellerLanguageContext.jsx'
 import {useEffect,useMemo,useState} from 'react'
 import {Link} from 'react-router-dom'
-import {Settings,RotateCcw,Gift,ArrowDownLeft,ArrowUpRight,Package,Crown,BadgeCheck} from 'lucide-react'
+import {ArrowUpRight,Package,Star,BadgeCheck,Users} from 'lucide-react'
 import SellerWorkspace,{money} from '../components/SellerWorkspace.jsx'
 import SaleConfirmations from '../components/SaleConfirmations.jsx'
 import StoreDates from '../components/StoreDates.jsx'
 import OrderStatusBadge from '../components/OrderStatusBadge.jsx'
 import {paymentStatusLabel} from '../lib/fulfillment.js'
 import {apiRequest} from '../lib/api.js'
-const shortcuts=[[Settings,'Store settings','/seller/account/settings','#ff635b'],[RotateCcw,'Refunds','/seller/refunds','#536aff'],[Package,'Warehouse','/seller/warehouse','#42a8ef'],[Crown,'Store upgrade','/seller/marketing/upgrade','#42a8ef'],[BadgeCheck,'Store level','/seller/marketing/levels','#e9ab2d'],[Gift,'Referrals','/seller/referrals','#35bba0'],[ArrowDownLeft,'Deposit','/seller/wallet?action=deposit','#35bd80'],[ArrowUpRight,'Withdraw','/seller/wallet?action=withdrawal','#5471ff']]
 const heatmapDays=Array.from({length:31},(_,index)=>index+1)
 const heatmapMonths=Array.from({length:12},(_,index)=>11-index)
 const heatmapColors=['#fff4df','#ffdb71','#ffc038','#ff9a16','#fb720d','#e9450a','#bf2d05']
@@ -68,12 +67,6 @@ export default function SellerDashboardPage(){
    }).sort((first,second)=>second.units-first.units)
   : data?.products.filter(product=>product.units>0)||[]
  const groups=[
-  ['Shop Overview',[
-   ['Overall Rating',number(metrics.overallRating??(data?.overallRating==null?null:Number(data.overallRating).toFixed(2)))],
-   ['Seller Credit Score',number(creditScore??metrics.sellerCreditScore??(data?5:null))],
-   ['Store Followers',number(data?.overview.followers)],
-   ['Total items sold',number(data?(data.overview.unitsSold??0)+(data.historicalSales?.units??0):null)],
-  ]],
   ['Visitor Statistics',[
    ['Today’s Visitors',number(dailyMetrics.todayVisitors??todayData?.visits)],
    ['Total store visits',number(data?.overview.visits)],
@@ -102,17 +95,6 @@ export default function SellerDashboardPage(){
    </div>)}
   </dl>
  </section>
- <div className="seller-overview-statistics">
-  {groups.map(([heading,figures])=><section key={heading} className="portal-card min-w-0">
-   <h2>{t(heading)}</h2>
-   <dl className="seller-overview-stat-values">
-    {figures.map(([label,value])=><div key={label} className="min-w-0">
-     <dt className="text-xs text-slate-600">{t(label)}</dt>
-     <dd className="mt-1 break-words text-sm font-semibold tabular-nums text-slate-900 sm:text-base">{value}</dd>
-    </div>)}
-   </dl>
-  </section>)}
- </div>
  <section className="portal-card seller-overview-heatmap" aria-label={t("Store activity heatmap")}>
   <div className="flex flex-wrap items-center justify-between gap-3">
    <h2>{t("Store activity heatmap")}</h2>
@@ -121,7 +103,7 @@ export default function SellerDashboardPage(){
      {[['visits','Visits'],['sales','Sales']].map(([key,label])=><button key={key} type="button" aria-pressed={heatMetric===key} onClick={()=>setHeatMetric(key)}
       className={`min-h-8 rounded-md px-3 text-xs font-semibold ${heatMetric===key?'bg-orange-700 text-white':'text-orange-950'}`}>{t(label)}</button>)}
     </div>
-    <select aria-label={t("Heatmap year")} value={year} onChange={event=>{setHeatYear(Number(event.target.value));setHeatDay('')}} className="rounded-lg border px-2 text-sm">
+    <select aria-label={t("Heatmap year")} value={year} onChange={event=>{setHeatYear(Number(event.target.value));setHeatDay('')}} className="seller-overview-select">
      {heatYears.map(value=><option key={value}>{value}</option>)}
     </select>
    </div>
@@ -154,7 +136,28 @@ export default function SellerDashboardPage(){
    <p className="rounded-lg bg-orange-50 px-3 py-2 text-orange-950">{t("Store Followers")} <strong className="ml-1 tabular-nums">{number(data?.overview.followers)}</strong></p>
   </div>
  </section>
- <section className="portal-card portal-shortcuts" aria-label="Store tools">{shortcuts.map(([Icon,label,to,color])=><Link key={to} to={to}><i style={{background:color}}><Icon size={23}/></i><span>{t(label)}</span></Link>)}</section>
+ <dl className="seller-shop-rows" aria-label={t('Shop overview')}>
+  {[
+   [Users,'Store Followers',number(data?.overview.followers),'#b85123'],
+   [Star,'Overall Rating',number(metrics.overallRating??(data?.overallRating==null?null:Number(data.overallRating).toFixed(2))),'#396bbc'],
+   [BadgeCheck,'Seller Credit Score',number(creditScore??metrics.sellerCreditScore??(data?5:null)),'#1f8063'],
+   [Package,'Total items sold',number(data?(data.overview.unitsSold??0)+(data.historicalSales?.units??0):null),'#5966af'],
+  ].map(([Icon,label,value,color])=><div className="seller-shop-row" key={label}>
+   <dt><span style={{backgroundColor:color}}><Icon size={18} aria-hidden="true"/></span>{t(label)}</dt>
+   <dd>{value}</dd>
+  </div>)}
+ </dl>
+ <div className="seller-overview-statistics">
+  {groups.map(([heading,figures])=><section key={heading} className="portal-card min-w-0">
+   <h2>{t(heading)}</h2>
+   <dl className="seller-overview-stat-values">
+    {figures.map(([label,value])=><div key={label} className="min-w-0">
+     <dt className="text-xs text-slate-600">{t(label)}</dt>
+     <dd className="mt-1 break-words text-sm font-semibold tabular-nums text-slate-900 sm:text-base">{value}</dd>
+    </div>)}
+   </dl>
+  </section>)}
+ </div>
  <SaleConfirmations sales={data?.orders||[]} onConfirmed={async()=>setData(await apiRequest('/api/seller/analytics'))}/><section className="portal-card"><div className="portal-section-head"><h2>{t("Recent orders")}</h2><Link to="/seller/orders">{t("View all")}</Link></div>{data?.orders.slice(0,4).map(o=><Link className="portal-order-row" key={o.orderId} to={`/seller/orders?order=${o.orderNumber}`}><div><strong>{formatOrderReference(o)}</strong><OrderStatusBadge status={o.paymentStatus} label={t(paymentStatusLabel(o.paymentStatus))}/></div><strong>{money(o.amountCents)}</strong></Link>)}{data&&!data.orders.length&&<p className="portal-empty">{t("No orders yet.")}</p>}</section>
  <section className="portal-card"><h2>{t("Top 10 best-selling items")}</h2><div className="portal-product-list">{bestSellers.map((p,i)=><Link to={products.some(item=>item.id===p.id&&item.isPublished)?`/products/${p.id}`:'/seller/products'} key={p.id||i} className="portal-product-row">{p.imageUrl?<img src={p.imageUrl} alt="" loading="lazy"/>:<span className="portal-image-placeholder"><Package/></span>}<div><h3>{p.name}</h3><p>{p.units} {t('sold')}</p><strong>{p.salesCents!=null&&<>{money(p.salesCents)} <small>{t("sales")}</small></>}</strong></div></Link>)}</div>{data&&!bestSellers.length&&<p className="portal-empty">{t("Your best-selling items will appear after completed payments.")}</p>}</section>
  <section className="portal-card"><div className="portal-section-head"><h2>{t('Store products')}</h2><Link to="/seller/products">{t("Manage")}</Link></div><div className="portal-product-list">{products.slice(0,limit).map(p=><Link to={p.isPublished?`/products/${p.id}`:'/seller/products'} className="portal-product-row" key={p.id}><img src={p.imageUrl} alt="" loading="lazy"/><div><h3>{p.name}</h3><p>{p.category}</p><strong>{money(Math.round(p.price*100))}</strong></div></Link>)}</div>{products.length>limit&&<button className="portal-load-more" onClick={()=>setLimit(n=>n+24)}>{t("Show more products")}</button>}{!products.length&&<Link className="portal-empty" to="/seller/warehouse">{t("Browse the warehouse to add products.")}</Link>}</section>{data?.dates?.establishedOn&&<div className="portal-dates"><StoreDates {...data.dates}/></div>}
