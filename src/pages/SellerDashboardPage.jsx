@@ -12,7 +12,7 @@ import {paymentStatusLabel} from '../lib/fulfillment.js'
 import {apiRequest} from '../lib/api.js'
 const heatmapDays=Array.from({length:31},(_,index)=>index+1)
 const heatmapMonths=Array.from({length:12},(_,index)=>11-index)
-const heatmapColors=['#fff4df','#ffdb71','#ffc038','#ff9a16','#fb720d','#e9450a','#bf2d05']
+const heatmapColors=['var(--heatmap-empty)','#ffe1b4','#ffc46e','#ffa132','#f67e19','#db560c','#a73709']
 const monthName=new Intl.DateTimeFormat('en',{month:'short',timeZone:'UTC'})
 
 export default function SellerDashboardPage(){
@@ -99,41 +99,45 @@ export default function SellerDashboardPage(){
   <div className="flex flex-wrap items-center justify-between gap-3">
    <h2>{t("Store activity heatmap")}</h2>
    <div className="flex flex-wrap items-center gap-2">
-    <div className="flex gap-1 rounded-lg bg-orange-50 p-1" role="group" aria-label={t("Heatmap metric")}>
+    <div className="seller-heatmap-switch" role="group" aria-label={t("Heatmap metric")}>
      {[['visits','Visits'],['sales','Sales']].map(([key,label])=><button key={key} type="button" aria-pressed={heatMetric===key} onClick={()=>setHeatMetric(key)}
-      className={`min-h-8 rounded-md px-3 text-xs font-semibold ${heatMetric===key?'bg-orange-700 text-white':'text-orange-950'}`}>{t(label)}</button>)}
+      className="seller-heatmap-tab">{t(label)}</button>)}
     </div>
     <select aria-label={t("Heatmap year")} value={year} onChange={event=>{setHeatYear(Number(event.target.value));setHeatDay('')}} className="seller-overview-select">
      {heatYears.map(value=><option key={value}>{value}</option>)}
     </select>
    </div>
   </div>
-  <div className="mt-4 overflow-x-auto rounded-lg border border-orange-100" tabIndex={0} aria-label={t("Monthly heatmap grid")}>
-   <table className="w-full min-w-[620px] table-fixed border-separate border-spacing-px text-center text-[10px]">
+  <div className="seller-heatmap-scroll" tabIndex={0} aria-label={t("Monthly heatmap grid")}>
+   <table className="seller-heatmap-grid">
     <thead className="sr-only"><tr><th scope="col">{t("Month")}</th>{heatmapDays.map(day=><th scope="col" key={day}>{day}</th>)}</tr></thead>
     <tbody>{heatmapMonths.map(month=>{
      const monthDate=new Date(Date.UTC(year,month,1))
      const daysInMonth=new Date(Date.UTC(year,month+1,0)).getUTCDate()
      return <tr key={month}>
-      <th scope="row" className="w-10 whitespace-nowrap bg-white font-medium text-slate-700">{monthName.format(monthDate)}</th>
+      <th scope="row" className="seller-heatmap-month">{monthName.format(monthDate)}</th>
       {heatmapDays.map(day=>{
        const date=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
-       if(day>daysInMonth||date>currentDate)return <td key={day} className="h-5 bg-slate-100"/>
+       if(day>daysInMonth||date>currentDate)return <td key={day} className="seller-heatmap-unavailable"/>
        const value=heatmap.get(date)?.[heatMetric]??0
        const shade=value>0?Math.max(1,Math.ceil(value/heatMaximum*(heatmapColors.length-1))):0
        const description=`${date} · ${heatMetric==='sales'?money(value):number(value)+' '+t('Visits')}`
        return <td key={day} className="p-0"><button type="button" aria-label={description} title={description} aria-pressed={date===activeHeatDay} onClick={()=>setHeatDay(date)}
-        style={{backgroundColor:heatmapColors[shade]}} className="block h-5 w-full outline-offset-[-2px] aria-pressed:outline-2 aria-pressed:outline-orange-950 focus-visible:outline-2 focus-visible:outline-slate-900"/></td>
+        style={{backgroundColor:heatmapColors[shade]}} className="seller-heatmap-cell"/></td>
       })}
      </tr>
     })}</tbody>
-    <tfoot aria-hidden="true"><tr><td className="w-10"/>{heatmapDays.map(day=><td key={day} className="py-1 text-slate-700">{day}</td>)}</tr></tfoot>
+    <tfoot aria-hidden="true"><tr><td className="seller-heatmap-month"/>{heatmapDays.map(day=><td key={day}>{day===1||day%5===0?day:null}</td>)}</tr></tfoot>
    </table>
   </div>
-  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
-   <p aria-live="polite">{activeHeatDay} (UTC) · {t('Sales')} {money(selectedHeatValues?.sales??0)} · {t('Visits')} {number(selectedHeatValues?.visits??0)}</p>
+  <div className="seller-heatmap-footer">
+   <p className="seller-heatmap-selection" aria-live="polite">
+    <time dateTime={activeHeatDay}>{activeHeatDay} (UTC)</time>
+    <span>{t('Sales')} <strong>{money(selectedHeatValues?.sales??0)}</strong></span>
+    <span>{t('Visits')} <strong>{number(selectedHeatValues?.visits??0)}</strong></span>
+   </p>
    <div className="flex items-center gap-1" aria-label={t('Heatmap scale')}>{t('Low')}{heatmapColors.map(color=><span key={color} className="size-3 rounded-sm" style={{backgroundColor:color}}/>)}{t('High')}</div>
-   <p className="rounded-lg bg-orange-50 px-3 py-2 text-orange-950">{t("Store Followers")} <strong className="ml-1 tabular-nums">{number(data?.overview.followers)}</strong></p>
+   <p className="seller-heatmap-followers">{t("Store Followers")} <strong className="ml-1 tabular-nums">{number(data?.overview.followers)}</strong></p>
   </div>
  </section>
  <dl className="seller-shop-rows" aria-label={t('Shop overview')}>
