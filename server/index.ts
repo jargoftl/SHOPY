@@ -2179,12 +2179,12 @@ app.get('/api/admin/sellers/:id/dashboard-metrics', requireAuth, requireRole('ad
       metrics = {}
     }
   }
-  const store = (await getRow<{ follower_count: number }>('SELECT follower_count FROM seller_profiles WHERE user_id = ?', sellerId))
+  const store = (await getRow<{ follower_count: number, visitor_count: number }>('SELECT follower_count, visitor_count FROM seller_profiles WHERE user_id = ?', sellerId))
   const chinaDay = chinaMetricsDay()
   if (metrics.dailyDay !== chinaDay) {
     for (const key of dailySellerMetricKeys) delete metrics[key]
   }
-  return res.json({ metrics, chinaDay, adminFollowerCount: store?.follower_count ?? 0 })
+  return res.json({ metrics, chinaDay, totalStoreVisits: store?.visitor_count ?? null, adminFollowerCount: store?.follower_count ?? 0 })
 })
 
 app.patch('/api/admin/sellers/:id/credit-score', requireAuth, requireRole('admin'), async (req, res) => {
@@ -2273,8 +2273,17 @@ app.put('/api/admin/sellers/:id/dashboard-metrics', requireAuth, requireRole('ad
   if (['salesTrack', 'visitsTrack'].some(key => Array.isArray(metrics[key]) && metrics[key].length)) {
     metrics.chartEndDate = new Date().toISOString().slice(0, 10)
   }
+  const totalStoreVisits = req.body.totalStoreVisits
+  if (totalStoreVisits !== undefined && (!Number.isSafeInteger(totalStoreVisits) || totalStoreVisits < 0 || totalStoreVisits > 1000000000)) {
+    return res.status(400).json({ error: 'Enter a whole number of store visits from 0 to 1 billion.' })
+  }
   const savedMetrics = JSON.stringify(metrics)
-  await database.prepare(`
+  const saved = await database.transaction(async () => {
+    if (totalStoreVisits !== undefined) {
+      const result = await database.prepare('UPDATE seller_profiles SET visitor_count=? WHERE user_id=?').run(totalStoreVisits, sellerId)
+      if (!result.changes) return false
+    }
+    await database.prepare(`
     INSERT INTO seller_dashboard_metrics (user_id, metrics_json, updated_at)
     VALUES (?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(user_id) DO UPDATE SET metrics_json = CASE WHEN ?
@@ -2282,6 +2291,9 @@ app.put('/api/admin/sellers/:id/dashboard-metrics', requireAuth, requireRole('ad
       THEN (excluded.metrics_json::jsonb || jsonb_build_object('sellerCreditScore', seller_dashboard_metrics.metrics_json::jsonb -> 'sellerCreditScore'))::text
       ELSE excluded.metrics_json END, updated_at = CURRENT_TIMESTAMP
   `).run(sellerId, savedMetrics, req.body.preserveCreditScore === true)
+    return true
+  })()
+  if (!saved) return res.status(404).json({ error: 'Store profile not found.' })
   return res.json({ metrics })
 })
 

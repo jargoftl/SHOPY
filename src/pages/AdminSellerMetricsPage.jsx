@@ -20,6 +20,8 @@ const metricFields = [
   { key: 'estimatedProfit', label: 'Estimated profit', prefix: '$' },
 ]
 
+const visitorKeys = ['todayVisitors', 'visitorsLast7Days', 'visitorsLast30Days']
+
 const MAX_CREDIT_SCORE = 1000000000000
 
 const emptyForm = Object.fromEntries(metricFields.map(({ key }) => [key, '']))
@@ -34,6 +36,8 @@ const AdminSellerMetricsPage = () => {
   const [sellers, setSellers] = useState([])
   const [products, setProducts] = useState([])
   const [selectedSellerId, setSelectedSellerId] = useState('')
+  const [totalVisits, setTotalVisits] = useState(null)
+  const [totalVisitsEdit, setTotalVisitsEdit] = useState('')
   const [chinaDay, setChinaDay] = useState('')
   const [form, setForm] = useState(emptyForm)
   const [loadedMetricsSellerId, setLoadedMetricsSellerId] = useState('')
@@ -86,6 +90,8 @@ const AdminSellerMetricsPage = () => {
         const metrics = metricData.metrics || {}
         setLoadedMetricsSellerId(selectedSellerId)
         setChinaDay(metricData.chinaDay || '')
+        setTotalVisits(metricData.totalStoreVisits ?? null)
+        setTotalVisitsEdit('')
         setForm(Object.fromEntries(metricFields.map(({ key }) => [key, metrics[key] ?? ''])))
         setSalesTrack(formatTrack(metrics.salesTrack))
         setVisitsTrack(formatTrack(metrics.visitsTrack))
@@ -97,7 +103,7 @@ const AdminSellerMetricsPage = () => {
   }, [selectedSellerId])
 
   useEffect(() => {
-    if (['#store-records','#dashboard-values'].includes(location.hash) && selectedSellerId && loadedMetricsSellerId === selectedSellerId) {
+    if (['#store-records','#dashboard-values','#visitor-statistics'].includes(location.hash) && selectedSellerId && loadedMetricsSellerId === selectedSellerId) {
       document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' })
     }
   }, [location.hash, selectedSellerId, loadedMetricsSellerId])
@@ -142,8 +148,9 @@ const AdminSellerMetricsPage = () => {
     try {
       await apiRequest(`/api/admin/sellers/${selectedSellerId}/dashboard-metrics`, {
         method: 'PUT',
-        body: JSON.stringify({ metrics, chinaDay, preserveCreditScore: true }),
+        body: JSON.stringify({ metrics, chinaDay, preserveCreditScore: true, ...(totalVisitsEdit!==''?{totalStoreVisits:Number(totalVisitsEdit)}:{}) }),
       })
+      if(totalVisitsEdit!==''){setTotalVisits(Number(totalVisitsEdit));setTotalVisitsEdit('')}
       setMessage(`Dashboard values saved for ${selectedSeller?.storeName || selectedSeller?.fullName}.`)
     } catch (error) {
       setMessage(error.message)
@@ -204,12 +211,24 @@ const AdminSellerMetricsPage = () => {
               <button type="submit" disabled={isSaving} className="min-h-11 rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white disabled:opacity-50">Save credit score</button>
             </div>
           </form>}
-        {selectedSellerId && <AdminStoreDates key={selectedSellerId} userId={selectedSellerId} showDateHistory={false}/>}
         {selectedSellerId && loadedMetricsSellerId === selectedSellerId && <form id="dashboard-values" onSubmit={saveMetrics} className="scroll-mt-4 space-y-6">
+          <section id="visitor-statistics" className="scroll-mt-4 rounded-xl border border-slate-300 bg-white p-5 sm:p-7">
+            <h2 className="text-lg font-semibold">Visitor statistics</h2>
+            <p className="mt-1 text-sm text-slate-600">Today’s visitor edit resets at midnight China time. Blank period fields use recorded counts.</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {metricFields.filter(({key})=>visitorKeys.includes(key)).map(({key,label})=><label key={key} className="block text-sm font-medium">{label}
+                <input type="number" min="0" max="1000000000000" step="1" value={form[key]} onChange={event=>setForm(current=>({...current,[key]:event.target.value}))} placeholder="Use recorded count" className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3"/>
+              </label>)}
+              <label className="block text-sm font-medium">Total store visits
+                <input type="number" min="0" max="1000000000" step="1" value={totalVisitsEdit} onChange={event=>setTotalVisitsEdit(event.target.value)} placeholder={totalVisits==null?'No store profile':String(totalVisits)} disabled={totalVisits==null} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3"/>
+              </label>
+            </div>
+            <button disabled={isSaving} type="submit" className="mt-4 min-h-11 rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white disabled:opacity-50">{isSaving?'Saving…':'Save dashboard values'}</button>
+          </section>
           <section className="rounded-xl border border-slate-300 bg-white p-5 sm:p-7">
             <div className="mb-5"><h2 className="text-lg font-semibold">Dashboard totals</h2><p className="mt-1 text-xs text-slate-600">Leave a field blank to use recorded figures. Today’s edits expire at midnight China time.</p></div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {metricFields.filter(({ key }) => key !== 'sellerCreditScore').map(({ key, label, integer, max, step, prefix }) => <label key={key} className="block text-xs text-slate-700">{label}
+              {metricFields.filter(({ key }) => key !== 'sellerCreditScore' && !visitorKeys.includes(key)).map(({ key, label, integer, max, step, prefix }) => <label key={key} className="block text-xs text-slate-700">{label}
                 <div className="mt-2 flex h-11 items-center border border-slate-300 bg-white focus-within:border-[#cccccc]">{prefix && <span className="pl-3 text-slate-600">{prefix}</span>}<input type="number" min="0" max={max || 1000000000000} step={integer ? '1' : step || '0.01'} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm text-slate-950 outline-none" placeholder="Use live value" /></div>
               </label>)}
             </div>
@@ -240,6 +259,7 @@ const AdminSellerMetricsPage = () => {
 
           <div className="flex flex-wrap items-center justify-between gap-4"><p className="text-xs text-slate-600">Selected seller: {selectedSeller?.storeName || selectedSeller?.fullName} · #{selectedSeller?.publicId}</p><button disabled={isSaving} type="submit" className="min-h-11 bg-[#cccccc] px-6 text-sm font-semibold text-[#111111] disabled:opacity-60">{isSaving ? 'Saving…' : 'Save dashboard values'}</button></div>
         </form>}
+        {selectedSellerId && <AdminStoreDates key={selectedSellerId} userId={selectedSellerId} showDateHistory={false}/>}
         {!selectedSellerId && <p className="border border-dashed border-slate-300 px-5 py-12 text-center text-sm text-slate-600">No seller accounts found. Create a seller account, then return here to set its dashboard data.</p>}
       </main>
     </div>
