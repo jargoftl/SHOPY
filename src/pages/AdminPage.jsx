@@ -23,6 +23,22 @@ import RefundList from '../components/RefundList.jsx'
 const tabs=[['overview','Overview',LayoutDashboard],['accounts','People & stores',Users],['applications','Seller approval',ClipboardCheck],['orders','Orders & tracking',ShoppingBag],['payment-type','Payment Type',Wallet],['seller-funding','Seller funding',Wallet],['seller-sales-history','Adding Seller Sales History',History],['buyer-wallet','Buyer funding',Wallet],['warehouse','Warehouse',Warehouse],['marketing','Marketing requests',Megaphone],['referrals','Referrals & rewards',Users],['statistics','Display statistics',ChartNoAxesCombined],['activity','Account activity',History],['settings','Site settings',Settings],['admin-access','Manage admins',ShieldCheck],['account-recovery','Account recovery',ShieldCheck]]
 const toolLinks=[
  ['Edit store followers and visit stats','/admin/seller-metrics#store-records','increase followers follower count store visitor views traffic people visited last viewed opening date rating items sold'],
+ ['Edit seller dashboard figures','/admin/seller-metrics#dashboard-values','daily today increase decrease visits visitors numbers people visited sales amounts orders profit rating total products weekly monthly'],
+ ['Edit sales and visitor chart','/admin/seller-metrics#dashboard-values','chart graph traffic daily history historical visits sales'],
+ ['Edit top-selling product counts','/admin/seller-metrics#dashboard-values','best sellers items units sold products rankings'],
+ ['Fund a seller wallet','/admin#seller-funding','add credit manual seller balance money funds'],
+ ['Fund a buyer account','/admin#buyer-wallet','add credit manual buyer customer balance money funds'],
+ ['Review buyer deposits and withdrawals','/admin#buyer-wallet','buyer customer approval reject transaction receipt payout'],
+ ['Manage people and stores','/admin#accounts','find search users customers buyer seller edit profile email store name suspend delete'],
+ ['Approve a seller application','/admin#applications','accept reject pending registration verify documents identity'],
+ ['Manage orders and shipment tracking','/admin#orders','orders logistics courier carrier tracking payment fulfillment dispatch'],
+ ['Manage warehouse products','/admin#warehouse','items catalog inventory import upload add edit remove stock'],
+ ['Edit historical seller sales','/admin#seller-sales-history','add old offline sale order item history revenue'],
+ ['Handle login recovery','/admin#account-recovery','forgot reset password login restore access'],
+ ['Change site settings','/admin#settings','site name branding appearance settings'],
+ ['Review account activity','/admin#activity','audit log login history activity'],
+ ['Review marketing requests','/admin#marketing','promotion ads boost store upgrade level'],
+ ['Manage referral rewards','/admin#referrals','referral invite reward commission'],
  ['Seller credit score','/admin#seller-funding','increase credit score 100 seller points'],
  ['Review seller deposits','/admin#payment-type-deposits','approve deposit receipt proof payment'],
  ['Review seller withdrawals','/admin#payment-type-withdrawals','approve reject withdrawal crypto transfer'],
@@ -32,14 +48,14 @@ const toolLinks=[
 
 function AdminToolSearch({isSuperAdmin}){
  const [query,setQuery]=useState('')
- const terms=query.toLowerCase().trim().split(/[^a-z0-9]+/).filter(term=>term&&!['a','on','the','to','of','i','can','how'].includes(term))
+ const terms=query.toLowerCase().trim().split(/[^a-z0-9]+/).filter(term=>term&&!['a','on','the','to','of','i','can','how','that','for','in','an','my','want'].includes(term))
  const tools=[...toolLinks,...tabs.filter(([id])=>id!=='admin-access'||isSuperAdmin).map(([id,label])=>[label,id==='admin-access'?'/super-admin':`/admin#${id}`,''])]
  const matches=terms.length?tools.map(([label,path,keywords])=>({
   label,path,rank:terms.reduce((score,term)=>score+(label.toLowerCase().includes(term)?2:keywords.includes(term)?1:0),0)
  })).filter(tool=>tool.rank>0).sort((a,b)=>b.rank-a.rank).slice(0,8):[]
  return <div className="mt-4 max-w-xl rounded-xl border border-slate-200 bg-white p-3">
   <label className="block text-sm font-semibold">Search admin tools
-   <input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Try increasing store followers" className="mt-2 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"/>
+   <input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search orders, funding, settings, or seller stats" className="mt-2 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"/>
   </label>
   {terms.length>0&&(matches.length?<ul className="mt-2 divide-y divide-slate-100">
    {matches.map(({label,path})=><li key={label}><Link onClick={()=>setQuery('')} to={path} className="flex justify-between gap-2 rounded px-2 py-2 text-sm text-blue-800 hover:bg-blue-50">{label}<ArrowUpRight size={15} aria-hidden="true"/></Link></li>)}

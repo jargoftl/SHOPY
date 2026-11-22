@@ -2160,6 +2160,9 @@ app.get('/api/admin/sellers', requireAuth, requireRole('admin'), async (_req, re
   return res.json({ sellers })
 })
 
+const chinaMetricsDay = () => new Date(Date.now() + 28800000).toISOString().slice(0, 10)
+const dailySellerMetricKeys = ['todayVisitors', 'todayOrders', 'todaySales', 'estimatedProfit'] as const
+
 app.get('/api/admin/sellers/:id/dashboard-metrics', requireAuth, requireRole('admin'), async (req, res) => {
   const sellerId = Number(req.params.id)
   const seller = (await getRow<{ id: number }>("SELECT id FROM users WHERE id = ? AND role = 'seller'", sellerId))
@@ -2177,7 +2180,11 @@ app.get('/api/admin/sellers/:id/dashboard-metrics', requireAuth, requireRole('ad
     }
   }
   const store = (await getRow<{ follower_count: number }>('SELECT follower_count FROM seller_profiles WHERE user_id = ?', sellerId))
-  return res.json({ metrics, adminFollowerCount: store?.follower_count ?? 0 })
+  const chinaDay = chinaMetricsDay()
+  if (metrics.dailyDay !== chinaDay) {
+    for (const key of dailySellerMetricKeys) delete metrics[key]
+  }
+  return res.json({ metrics, chinaDay, adminFollowerCount: store?.follower_count ?? 0 })
 })
 
 app.patch('/api/admin/sellers/:id/credit-score', requireAuth, requireRole('admin'), async (req, res) => {
@@ -2256,6 +2263,16 @@ app.put('/api/admin/sellers/:id/dashboard-metrics', requireAuth, requireRole('ad
     metrics.topProducts = topProducts
   }
 
+  const chinaDay = chinaMetricsDay()
+  if (dailySellerMetricKeys.some(key => metrics[key] !== undefined)) {
+    if (req.body.chinaDay && req.body.chinaDay !== chinaDay) {
+      return res.status(409).json({ error: 'A new day has started in China. Reload Seller Metrics before saving today’s figures.' })
+    }
+    metrics.dailyDay = chinaDay
+  }
+  if (['salesTrack', 'visitsTrack'].some(key => Array.isArray(metrics[key]) && metrics[key].length)) {
+    metrics.chartEndDate = new Date().toISOString().slice(0, 10)
+  }
   const savedMetrics = JSON.stringify(metrics)
   await database.prepare(`
     INSERT INTO seller_dashboard_metrics (user_id, metrics_json, updated_at)

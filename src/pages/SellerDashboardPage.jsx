@@ -14,16 +14,37 @@ export default function SellerDashboardPage(){
  const {t}=useSellerLanguage()
  const [user,setUser]=useState(null),[data,setData]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[creditScore,setCreditScore]=useState(null),[days,setDays]=useState(7),[limit,setLimit]=useState(12)
  useEffect(()=>{let active=true;const refresh=()=>Promise.all([apiRequest('/api/auth/me'),apiRequest('/api/seller/analytics')]).then(([u,d])=>{if(active){setUser(u.user);setData(d);setError('')}}).catch(e=>active&&setError(e.message));apiRequest('/api/seller/products').then(d=>active&&setProducts(d.products)).catch(e=>active&&setError(e.message));const tick=()=>{if(document.hidden)return;refresh();apiRequest('/api/seller/dashboard-metrics',{cache:'no-store'}).then(({metrics})=>{if(active)setCreditScore(metrics.sellerCreditScore??5)}).catch(()=>{})};tick();const timer=setInterval(tick,30000);window.addEventListener('focus',tick);document.addEventListener('visibilitychange',tick);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',tick);document.removeEventListener('visibilitychange',tick)}},[])
- const series=useMemo(()=>{const end=new Date((data?.today||new Date().toISOString().slice(0,10))+'T00:00:00Z');return Array.from({length:days},(_,i)=>{const date=new Date(end);date.setUTCDate(date.getUTCDate()-days+1+i);const day=date.toISOString().slice(0,10);return {day,sales:data?.daily.find(d=>d.day===day)?.salesCents||0,visits:data?.visits.find(d=>d.day===day)?.visits||0}})},[data,days])
+ const series=useMemo(()=>{
+  const config=data?.dashboardMetrics
+  const chinaDay=data?.chinaDay
+  const daily=config?.dailyDay&&config.dailyDay===chinaDay?config:{}
+  if(days===1&&data?.chinaToday){
+   return [{day:chinaDay,sales:daily.todaySales==null?data.chinaToday.salesCents:Math.round(daily.todaySales*100),visits:daily.todayVisitors??data.chinaToday.visits}]
+  }
+  const end=new Date((data?.today||new Date().toISOString().slice(0,10))+'T00:00:00Z')
+  const chartEnd=Date.parse(config?.chartEndDate+'T00:00:00Z')
+  function configuredValue(track,date){
+   const offset=(chartEnd-date.getTime())/86400000
+   return Array.isArray(track)?track[track.length-1-offset]:undefined
+  }
+  return Array.from({length:days},(_,i)=>{
+   const date=new Date(end)
+   date.setUTCDate(date.getUTCDate()-days+1+i)
+   const day=date.toISOString().slice(0,10)
+   const sales=configuredValue(config?.salesTrack,date)
+   return {day,sales:sales==null?(data?.daily.find(row=>row.day===day)?.salesCents??0):Math.round(sales*100),visits:configuredValue(config?.visitsTrack,date)??data?.visits.find(row=>row.day===day)?.visits??0}
+  })
+ },[data,days])
  const maxSales=Math.max(100,...series.map(d=>d.sales)),maxVisits=Math.max(1,...series.map(d=>d.visits))
  const points=key=>series.map((d,i)=>`${35+i*315/Math.max(1,days-1)},${210-d[key]/(key==='sales'?maxSales:maxVisits)*165}`).join(' ')
  const today=data?.today,visits=(length)=>{const end=new Date((today||'2000-01-01')+'T00:00:00Z');end.setUTCDate(end.getUTCDate()-length+1);const from=end.toISOString().slice(0,10);return (data?.visits||[]).filter(v=>v.day>=from&&v.day<=today).reduce((s,v)=>s+v.visits,0)}
  const todayData=data?.chinaToday
  const metrics=data?.dashboardMetrics??{}
+ const dailyMetrics=metrics.dailyDay&&metrics.dailyDay===data?.chinaDay?metrics:{}
  const number=value=>value==null?'—':Number(value).toLocaleString()
  const dollars=value=>value==null?'—':money(Math.round(value*100))
  const totalSales=metrics.totalSalesAmount??(data&&(data.overview.salesCents+(data.historicalSales?.salesCents||0))/100)
- const todaySales=todayData?(todayData.salesCents??0)/100:null
+ const todaySales=dailyMetrics.todaySales??(todayData?(todayData.salesCents??0)/100:null)
  const profit=(override,sales,fundingCents,rate)=>override!=null
   ? dollars(override)
   : sales==null||fundingCents==null?'—':money(Math.round((Math.round(sales*100)+Number(fundingCents))*rate/100))
@@ -33,6 +54,13 @@ export default function SellerDashboardPage(){
   ['Total Orders',number(metrics.totalOrders??data?.overview.paidOrders),'bg-[#758df5] text-slate-950'],
   ['Total Profit',profit(metrics.totalProfit,totalSales,data?.funding?.total_cents,20),'bg-[#58d2c9] text-slate-950'],
  ]
+ const bestSellers=metrics.topProducts?.length
+  ? metrics.topProducts.flatMap(({productId,salesVolume})=>{
+    const product=products.find(item=>Number(item.id)===Number(productId))
+    const recorded=data?.products.find(item=>Number(item.id)===Number(productId))
+    return product&&salesVolume>0?[{...product,units:salesVolume,salesCents:recorded?.salesCents}]:[]
+   }).sort((first,second)=>second.units-first.units)
+  : data?.products.filter(product=>product.units>0)||[]
  const groups=[
   ['Shop Overview',[
    ['Overall Rating',number(metrics.overallRating??(data?.overallRating==null?null:Number(data.overallRating).toFixed(2)))],
@@ -40,15 +68,15 @@ export default function SellerDashboardPage(){
    ['Store Followers',number(data?.overview.followers)],
   ]],
   ['Visitor Statistics',[
-   ['Today’s Visitors',number(todayData?.visits)],
+   ['Today’s Visitors',number(dailyMetrics.todayVisitors??todayData?.visits)],
    ['Total store visits',number(data?.overview.visits)],
    ['Last 7 days',number(metrics.visitorsLast7Days??(data?visits(7):null))],
    ['Last 30 days',number(metrics.visitorsLast30Days??(data?visits(30):null))],
   ]],
   ['Today’s Statistics',[
-   ['Today’s Orders',number(todayData?.orders)],
+   ['Today’s Orders',number(dailyMetrics.todayOrders??todayData?.orders)],
    ['Today’s Sales',dollars(todaySales)],
-   ['Estimated Profit',profit(null,todaySales,data?.funding?.today_cents,15)],
+   ['Estimated Profit',profit(dailyMetrics.estimatedProfit,todaySales,data?.funding?.today_cents,15)],
   ]],
  ]
  return <SellerWorkspace user={user}><h1 className="portal-title">{t("Store overview")}</h1>{error&&<p role="alert" className="portal-error">{error}</p>}
@@ -72,10 +100,10 @@ export default function SellerDashboardPage(){
    </dl>
   </section>)}
  </div>
- <section className="portal-card portal-chart"><div className="portal-chart-head"><h2>{t("Sales & visits")}</h2><div className="portal-period" aria-label="Chart period">{[[1,'Today'],[7,'Last 7 days'],[30,'Last 30 days']].map(([n,label])=><button key={n} aria-pressed={days===n} onClick={()=>setDays(n)}>{t(label)}</button>)}</div></div><div className="portal-chart-legend"><span><i/>{t("Sales (USD)")}</span><span><i/>{t("Visits (right)")}</span></div><svg viewBox="0 0 400 252" role="img" aria-label={`Recorded sales and visits for the last ${days} days`}>{[0,1,2,3,4].map(i=><g key={i}><line x1="35" x2="350" y1={45+i*41.25} y2={45+i*41.25} stroke="#dbe2eb" strokeDasharray="5 5"/><text x="0" y={49+i*41.25} fontSize="13" fill="#687386">{(maxSales*(4-i)/4/100).toFixed(0)}</text><text x="362" y={49+i*41.25} fontSize="13" fill="#687386">{Math.round(maxVisits*(4-i)/4)}</text></g>)}<polyline points={points('visits')} fill="none" stroke="#969da8" strokeWidth="3"/><polyline points={points('sales')} fill="none" stroke="#2155ef" strokeWidth="3"/>{series.map((d,i)=><g key={d.day}><circle cx={35+i*315/Math.max(1,days-1)} cy={210-d.sales/maxSales*165} r="3.5" fill="white" stroke="#2155ef" strokeWidth="2"/><circle cx={35+i*315/Math.max(1,days-1)} cy={210-d.visits/maxVisits*165} r="3" fill="white" stroke="#969da8" strokeWidth="2"/></g>)}<text x="35" y="240" fontSize="13" fill="#687386">{series[0]?.day}</text><text x="270" y="240" fontSize="13" fill="#687386">{series.at(-1)?.day}</text></svg><p className="portal-note">{t("Recorded activity · UTC · sales shown before refunds")}</p></section>
+ <section className="portal-card portal-chart"><div className="portal-chart-head"><h2>{t("Sales & visits")}</h2><div className="portal-period" aria-label="Chart period">{[[1,'Today'],[7,'Last 7 days'],[30,'Last 30 days']].map(([n,label])=><button key={n} aria-pressed={days===n} onClick={()=>setDays(n)}>{t(label)}</button>)}</div></div><div className="portal-chart-legend"><span><i/>{t("Sales (USD)")}</span><span><i/>{t("Visits (right)")}</span></div><svg viewBox="0 0 400 252" role="img" aria-label={`Recorded sales and visits for the last ${days} days`}>{[0,1,2,3,4].map(i=><g key={i}><line x1="35" x2="350" y1={45+i*41.25} y2={45+i*41.25} stroke="#dbe2eb" strokeDasharray="5 5"/><text x="0" y={49+i*41.25} fontSize="13" fill="#687386">{(maxSales*(4-i)/4/100).toFixed(0)}</text><text x="362" y={49+i*41.25} fontSize="13" fill="#687386">{Math.round(maxVisits*(4-i)/4)}</text></g>)}<polyline points={points('visits')} fill="none" stroke="#969da8" strokeWidth="3"/><polyline points={points('sales')} fill="none" stroke="#2155ef" strokeWidth="3"/>{series.map((d,i)=><g key={d.day}><circle cx={35+i*315/Math.max(1,days-1)} cy={210-d.sales/maxSales*165} r="3.5" fill="white" stroke="#2155ef" strokeWidth="2"/><circle cx={35+i*315/Math.max(1,days-1)} cy={210-d.visits/maxVisits*165} r="3" fill="white" stroke="#969da8" strokeWidth="2"/></g>)}<text x="35" y="240" fontSize="13" fill="#687386">{series[0]?.day}</text><text x="270" y="240" fontSize="13" fill="#687386">{series.at(-1)?.day}</text></svg><p className="portal-note">{t(days===1?"China time · sales before refunds":"UTC · sales before refunds")}</p></section>
  <section className="portal-card portal-shortcuts" aria-label="Store tools">{shortcuts.map(([Icon,label,to,color])=><Link key={to} to={to}><i style={{background:color}}><Icon size={23}/></i><span>{t(label)}</span></Link>)}</section>
  <SaleConfirmations sales={data?.orders||[]} onConfirmed={async()=>setData(await apiRequest('/api/seller/analytics'))}/><section className="portal-card"><div className="portal-section-head"><h2>{t("Recent orders")}</h2><Link to="/seller/orders">{t("View all")}</Link></div>{data?.orders.slice(0,4).map(o=><Link className="portal-order-row" key={o.orderId} to={`/seller/orders?order=${o.orderNumber}`}><div><strong>{formatOrderReference(o)}</strong><OrderStatusBadge status={o.paymentStatus} label={t(paymentStatusLabel(o.paymentStatus))}/></div><strong>{money(o.amountCents)}</strong></Link>)}{data&&!data.orders.length&&<p className="portal-empty">{t("No orders yet.")}</p>}</section>
- <section className="portal-card"><h2>{t("Top 10 best-selling items")}</h2><div className="portal-product-list">{data?.products.filter(p=>p.units>0).map((p,i)=><Link to={products.some(item=>item.id===p.id&&item.isPublished)?`/products/${p.id}`:'/seller/products'} key={p.id||i} className="portal-product-row">{p.imageUrl?<img src={p.imageUrl} alt="" loading="lazy"/>:<span className="portal-image-placeholder"><Package/></span>}<div><h3>{p.name}</h3><p>{p.units} {t('sold')}</p><strong>{money(p.salesCents)} <small>{t("sales")}</small></strong></div></Link>)}</div>{data&&!data.products.some(p=>p.units>0)&&<p className="portal-empty">{t("Your best-selling items will appear after completed payments.")}</p>}</section>
+ <section className="portal-card"><h2>{t("Top 10 best-selling items")}</h2><div className="portal-product-list">{bestSellers.map((p,i)=><Link to={products.some(item=>item.id===p.id&&item.isPublished)?`/products/${p.id}`:'/seller/products'} key={p.id||i} className="portal-product-row">{p.imageUrl?<img src={p.imageUrl} alt="" loading="lazy"/>:<span className="portal-image-placeholder"><Package/></span>}<div><h3>{p.name}</h3><p>{p.units} {t('sold')}</p><strong>{p.salesCents!=null&&<>{money(p.salesCents)} <small>{t("sales")}</small></>}</strong></div></Link>)}</div>{data&&!bestSellers.length&&<p className="portal-empty">{t("Your best-selling items will appear after completed payments.")}</p>}</section>
  <section className="portal-card"><div className="portal-section-head"><h2>{t('Store products')}</h2><Link to="/seller/products">{t("Manage")}</Link></div><div className="portal-product-list">{products.slice(0,limit).map(p=><Link to={p.isPublished?`/products/${p.id}`:'/seller/products'} className="portal-product-row" key={p.id}><img src={p.imageUrl} alt="" loading="lazy"/><div><h3>{p.name}</h3><p>{p.category}</p><strong>{money(Math.round(p.price*100))}</strong></div></Link>)}</div>{products.length>limit&&<button className="portal-load-more" onClick={()=>setLimit(n=>n+24)}>{t("Show more products")}</button>}{!products.length&&<Link className="portal-empty" to="/seller/warehouse">{t("Browse the warehouse to add products.")}</Link>}</section>{data?.dates?.establishedOn&&<div className="portal-dates"><StoreDates {...data.dates}/></div>}
  </SellerWorkspace>
 }

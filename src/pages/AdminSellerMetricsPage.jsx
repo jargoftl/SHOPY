@@ -34,6 +34,7 @@ const AdminSellerMetricsPage = () => {
   const [sellers, setSellers] = useState([])
   const [products, setProducts] = useState([])
   const [selectedSellerId, setSelectedSellerId] = useState('')
+  const [chinaDay, setChinaDay] = useState('')
   const [form, setForm] = useState(emptyForm)
   const [loadedMetricsSellerId, setLoadedMetricsSellerId] = useState('')
   const [salesTrack, setSalesTrack] = useState('')
@@ -84,6 +85,7 @@ const AdminSellerMetricsPage = () => {
         if (!isCurrent) return
         const metrics = metricData.metrics || {}
         setLoadedMetricsSellerId(selectedSellerId)
+        setChinaDay(metricData.chinaDay || '')
         setForm(Object.fromEntries(metricFields.map(({ key }) => [key, metrics[key] ?? ''])))
         setSalesTrack(formatTrack(metrics.salesTrack))
         setVisitsTrack(formatTrack(metrics.visitsTrack))
@@ -95,8 +97,8 @@ const AdminSellerMetricsPage = () => {
   }, [selectedSellerId])
 
   useEffect(() => {
-    if (location.hash === '#store-records' && selectedSellerId && loadedMetricsSellerId === selectedSellerId) {
-      document.getElementById('store-records')?.scrollIntoView({ block: 'start' })
+    if (['#store-records','#dashboard-values'].includes(location.hash) && selectedSellerId && loadedMetricsSellerId === selectedSellerId) {
+      document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' })
     }
   }, [location.hash, selectedSellerId, loadedMetricsSellerId])
 
@@ -140,7 +142,7 @@ const AdminSellerMetricsPage = () => {
     try {
       await apiRequest(`/api/admin/sellers/${selectedSellerId}/dashboard-metrics`, {
         method: 'PUT',
-        body: JSON.stringify({ metrics, preserveCreditScore: true }),
+        body: JSON.stringify({ metrics, chinaDay, preserveCreditScore: true }),
       })
       setMessage(`Dashboard values saved for ${selectedSeller?.storeName || selectedSeller?.fullName}.`)
     } catch (error) {
@@ -203,9 +205,9 @@ const AdminSellerMetricsPage = () => {
             </div>
           </form>}
         {selectedSellerId && <AdminStoreDates key={selectedSellerId} userId={selectedSellerId} showDateHistory={false}/>}
-        {selectedSellerId && loadedMetricsSellerId === selectedSellerId && <form onSubmit={saveMetrics} className="space-y-6">
+        {selectedSellerId && loadedMetricsSellerId === selectedSellerId && <form id="dashboard-values" onSubmit={saveMetrics} className="scroll-mt-4 space-y-6">
           <section className="rounded-xl border border-slate-300 bg-white p-5 sm:p-7">
-            <div className="mb-5"><h2 className="text-lg font-semibold">Dashboard totals</h2><p className="mt-1 text-xs text-slate-600">Leave a field blank to use live data where available.</p></div>
+            <div className="mb-5"><h2 className="text-lg font-semibold">Dashboard totals</h2><p className="mt-1 text-xs text-slate-600">Leave a field blank to use recorded figures. Today’s edits expire at midnight China time.</p></div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {metricFields.filter(({ key }) => key !== 'sellerCreditScore').map(({ key, label, integer, max, step, prefix }) => <label key={key} className="block text-xs text-slate-700">{label}
                 <div className="mt-2 flex h-11 items-center border border-slate-300 bg-white focus-within:border-[#cccccc]">{prefix && <span className="pl-3 text-slate-600">{prefix}</span>}<input type="number" min="0" max={max || 1000000000000} step={integer ? '1' : step || '0.01'} value={form[key]} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm text-slate-950 outline-none" placeholder="Use live value" /></div>
@@ -214,7 +216,7 @@ const AdminSellerMetricsPage = () => {
           </section>
 
           <section className="rounded-xl border border-slate-300 bg-white p-5 sm:p-7">
-            <div className="mb-5"><h2 className="text-lg font-semibold">Visitor and sales chart</h2><p className="mt-1 text-xs text-slate-600">Enter up to 31 daily values, separated by commas.</p></div>
+            <div className="mb-5"><h2 className="text-lg font-semibold">Visitor and sales chart</h2><p className="mt-1 text-xs text-slate-600">Enter up to 31 daily values, oldest first, ending today (UTC). Sales values are in USD.</p></div>
             <div className="grid gap-4 md:grid-cols-2">
               <label className="block text-xs text-slate-700">Sales volume history
                 <textarea value={salesTrack} onChange={(event) => setSalesTrack(event.target.value)} rows={3} className="mt-2 w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-[#cccccc]" placeholder="120, 185, 90, 240" />
