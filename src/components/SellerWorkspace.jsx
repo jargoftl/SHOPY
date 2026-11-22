@@ -64,7 +64,7 @@ export default function SellerWorkspace({ user, children, overview = false }) {
       onClick={event => { if (event.target === event.currentTarget) event.currentTarget.close() }}>
       <div className="seller-menu-content">
         <header className="seller-menu-heading">
-          <h2 id="seller-menu-title">{t('Seller menu')}</h2>
+          <h2 id="seller-menu-title">{t('Menu')}</h2>
           <button type="button" className="seller-menu-trigger" aria-label={t('Close seller menu')} onClick={() => menu.current.close()}>
             <X size={20} aria-hidden="true"/>
           </button>

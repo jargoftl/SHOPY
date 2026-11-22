@@ -4,7 +4,7 @@ import { formatOrderReference } from '../lib/orderReference.js'
 import {useSellerLanguage} from '../context/SellerLanguageContext.jsx'
 import {useEffect,useMemo,useState} from 'react'
 import {Link} from 'react-router-dom'
-import {ArrowUpRight,Package,Star,BadgeCheck,Users,ChevronDown,ChartPie} from 'lucide-react'
+import {ArrowUpRight,Package,Star,BadgeCheck,Users,ChevronDown,ChartPie,ClipboardList,Trophy} from 'lucide-react'
 import SellerWorkspace,{money} from '../components/SellerWorkspace.jsx'
 import SaleConfirmations from '../components/SaleConfirmations.jsx'
 import StoreDates from '../components/StoreDates.jsx'
@@ -161,8 +161,42 @@ export default function SellerDashboardPage(){
    </dl>
   </section>)}
  </div>
- <SaleConfirmations sales={data?.orders||[]} onConfirmed={async()=>setData(await apiRequest('/api/seller/analytics'))}/><section className="portal-card"><div className="portal-section-head"><h2>{t("Recent orders")}</h2><Link to="/seller/orders">{t("View all")}</Link></div>{data?.orders.slice(0,4).map(o=><Link className="portal-order-row" key={o.orderId} to={`/seller/orders?order=${o.orderNumber}`}><div><strong>{formatOrderReference(o)}</strong><OrderStatusBadge status={o.paymentStatus} label={t(paymentStatusLabel(o.paymentStatus))}/></div><strong>{money(o.amountCents)}</strong></Link>)}{data&&!data.orders.length&&<p className="portal-empty">{t("No orders yet.")}</p>}</section>
- <section className="portal-card"><h2>{t("Top 10 best-selling items")}</h2><div className="portal-product-list">{bestSellers.map((p,i)=><Link to={products.some(item=>item.id===p.id&&item.isPublished)?`/products/${p.id}`:'/seller/products'} key={p.id||i} className="portal-product-row">{p.imageUrl?<img src={p.imageUrl} alt="" loading="lazy"/>:<span className="portal-image-placeholder"><Package/></span>}<div><h3>{p.name}</h3><p>{p.units} {t('sold')}</p><strong>{p.salesCents!=null&&<>{money(p.salesCents)} <small>{t("sales")}</small></>}</strong></div></Link>)}</div>{data&&!bestSellers.length&&<p className="portal-empty">{t("Your best-selling items will appear after completed payments.")}</p>}</section>
+ <SaleConfirmations sales={data?.orders||[]} onConfirmed={async()=>setData(await apiRequest('/api/seller/analytics'))}/>
+ <div className="seller-overview-lists">
+  <section className="portal-card seller-list-card" aria-labelledby="seller-recent-orders">
+   <header className="seller-list-heading">
+    <h2 id="seller-recent-orders"><span><ClipboardList size={18} aria-hidden="true"/></span>{t('Recent orders')}</h2>
+    <Link to="/seller/orders">{t('View all')}<ArrowUpRight size={14} aria-hidden="true"/></Link>
+   </header>
+   {data?.orders.length>0?<ul className="seller-list-rows">
+    {data.orders.slice(0,4).map(order=><li key={order.orderId}>
+     <Link className="seller-list-order" to={`/seller/orders?order=${order.orderNumber}`}>
+      <div><strong>{formatOrderReference(order)}</strong><OrderStatusBadge status={order.paymentStatus} label={t(paymentStatusLabel(order.paymentStatus))}/></div>
+      <strong className="seller-list-amount">{money(order.amountCents)}</strong>
+     </Link>
+    </li>)}
+   </ul>:data&&<p className="portal-empty">{t('No orders yet.')}</p>}
+  </section>
+  <section className="portal-card seller-list-card" aria-labelledby="seller-best-sellers">
+   <header className="seller-list-heading">
+    <h2 id="seller-best-sellers"><span><Trophy size={18} aria-hidden="true"/></span>{t('Top 10 best-selling items')}</h2>
+   </header>
+   {bestSellers.length>0?<ul className="seller-list-rows">
+    {bestSellers.slice(0,10).map((product,index)=><li key={product.id||index}>
+     <Link className="seller-list-product" to={products.some(item=>item.id===product.id&&item.isPublished)?`/products/${product.id}`:'/seller/products'}>
+      <span className="seller-list-image">{product.imageUrl?<img src={product.imageUrl} alt="" loading="lazy"/>:<Package size={20} aria-hidden="true"/>}</span>
+      <div>
+       <h3>{product.name}</h3>
+       <div className="seller-list-product-meta">
+        <span>{number(product.units)} {t('sold')}</span>
+        {product.salesCents!=null&&<span><strong className="seller-list-amount">{money(product.salesCents)}</strong> {t('sales')}</span>}
+       </div>
+      </div>
+     </Link>
+    </li>)}
+   </ul>:data&&<p className="portal-empty">{t('Your best-selling items will appear after completed payments.')}</p>}
+  </section>
+ </div>
  <section className="portal-card"><div className="portal-section-head"><h2>{t('Store products')}</h2><Link to="/seller/products">{t("Manage")}</Link></div><div className="portal-product-list">{products.slice(0,limit).map(p=><Link to={p.isPublished?`/products/${p.id}`:'/seller/products'} className="portal-product-row" key={p.id}><img src={p.imageUrl} alt="" loading="lazy"/><div><h3>{p.name}</h3><p>{p.category}</p><strong>{money(Math.round(p.price*100))}</strong></div></Link>)}</div>{products.length>limit&&<button className="portal-load-more" onClick={()=>setLimit(n=>n+24)}>{t("Show more products")}</button>}{!products.length&&<Link className="portal-empty" to="/seller/warehouse">{t("Browse the warehouse to add products.")}</Link>}</section>{data?.dates?.establishedOn&&<div className="portal-dates"><StoreDates {...data.dates}/></div>}
  </SellerWorkspace>
 }

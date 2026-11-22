@@ -218,3 +218,50 @@
   border-bottom: 1px solid var(--seller-line);
 }
 .seller-activity-legend li > span { width: 10px; height: 10px; border-radius: 50%; }
+
+.seller-overview-lists { display: grid; gap: 12px; align-items: start; }
+.seller-overview .seller-list-card { min-width: 0; margin: 0; }
+.seller-overview .seller-list-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.seller-overview .seller-list-heading h2 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 16px; }
+.seller-list-heading h2 > span, .seller-list-image {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--seller-accent);
+}
+.seller-list-heading h2 > span { width: 34px; height: 34px; border-radius: 9px; background: var(--seller-soft); }
+.seller-overview .seller-list-heading > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding-inline: 8px;
+  border-radius: 8px;
+  color: var(--seller-accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+.seller-list-rows { margin-top: 10px; }
+.seller-list-rows > li + li { border-top: 1px solid var(--seller-line); }
+.seller-overview .seller-list-rows :is(.seller-list-order, .seller-list-product) {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px;
+  border-radius: 8px;
+  color: var(--seller-ink);
+  font-size: 13px;
+  text-decoration: none;
+}
+.seller-overview .seller-list-rows a:is(:hover,:focus-visible), .seller-overview .seller-list-heading > a:hover { background: var(--seller-raised); }
+.seller-list-order { grid-template-columns: minmax(0, 1fr) auto; }
+.seller-list-order > div { display: grid; justify-items: start; gap: 5px; overflow-wrap: anywhere; }
+.seller-list-amount { color: var(--seller-accent); font-variant-numeric: tabular-nums; }
+.seller-list-product { grid-template-columns: 54px minmax(0, 1fr); }
+.seller-list-image { width: 54px; height: 54px; border-radius: 8px; background: var(--seller-raised); overflow: hidden; }
+.seller-list-image img { width: 100%; height: 100%; object-fit: contain; }
+.seller-list-product h3 { margin: 0; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.seller-list-product-meta { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 4px; color: var(--seller-muted); font-size: 12px; }
+@media (min-width: 900px) {
+  .seller-overview-lists { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+}
