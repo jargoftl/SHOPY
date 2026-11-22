@@ -10,33 +10,38 @@ import OrderStatusBadge from '../components/OrderStatusBadge.jsx'
 import {paymentStatusLabel} from '../lib/fulfillment.js'
 import {apiRequest} from '../lib/api.js'
 const shortcuts=[[Settings,'Store settings','/seller/account/settings','#ff635b'],[RotateCcw,'Refunds','/seller/refunds','#536aff'],[Package,'Warehouse','/seller/warehouse','#42a8ef'],[Crown,'Store upgrade','/seller/marketing/upgrade','#42a8ef'],[BadgeCheck,'Store level','/seller/marketing/levels','#e9ab2d'],[Gift,'Referrals','/seller/referrals','#35bba0'],[ArrowDownLeft,'Deposit','/seller/wallet?action=deposit','#35bd80'],[ArrowUpRight,'Withdraw','/seller/wallet?action=withdrawal','#5471ff']]
+const heatmapDays=Array.from({length:31},(_,index)=>index+1)
+const heatmapMonths=Array.from({length:12},(_,index)=>11-index)
+const heatmapColors=['#fff4df','#ffdb71','#ffc038','#ff9a16','#fb720d','#e9450a','#bf2d05']
+const monthName=new Intl.DateTimeFormat('en',{month:'short',timeZone:'UTC'})
+
 export default function SellerDashboardPage(){
  const {t}=useSellerLanguage()
- const [user,setUser]=useState(null),[data,setData]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[creditScore,setCreditScore]=useState(null),[days,setDays]=useState(7),[heatDay,setHeatDay]=useState(''),[limit,setLimit]=useState(12)
+ const [user,setUser]=useState(null),[data,setData]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[creditScore,setCreditScore]=useState(null),[heatMetric,setHeatMetric]=useState('visits'),[heatYear,setHeatYear]=useState(null),[heatDay,setHeatDay]=useState(''),[limit,setLimit]=useState(12)
  useEffect(()=>{let active=true;const refresh=()=>Promise.all([apiRequest('/api/auth/me'),apiRequest('/api/seller/analytics')]).then(([u,d])=>{if(active){setUser(u.user);setData(d);setError('')}}).catch(e=>active&&setError(e.message));apiRequest('/api/seller/products').then(d=>active&&setProducts(d.products)).catch(e=>active&&setError(e.message));const tick=()=>{if(document.hidden)return;refresh();apiRequest('/api/seller/dashboard-metrics',{cache:'no-store'}).then(({metrics})=>{if(active)setCreditScore(metrics.sellerCreditScore??5)}).catch(()=>{})};tick();const timer=setInterval(tick,30000);window.addEventListener('focus',tick);document.addEventListener('visibilitychange',tick);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',tick);document.removeEventListener('visibilitychange',tick)}},[])
- const series=useMemo(()=>{
+ const currentDate=data?.today||new Date().toISOString().slice(0,10)
+ const currentYear=Number(currentDate.slice(0,4))
+ const year=heatYear??currentYear
+ const heatmap=useMemo(()=>{
+  const rows=new Map()
+  for(const row of data?.daily||[])rows.set(row.day,{sales:row.salesCents,visits:0})
+  for(const row of data?.visits||[])rows.set(row.day,{...rows.get(row.day),visits:row.visits})
   const config=data?.dashboardMetrics
-  const chinaDay=data?.chinaDay
-  const daily=config?.dailyDay&&config.dailyDay===chinaDay?config:{}
-  if(days===1&&data?.chinaToday){
-   return [{day:chinaDay,sales:daily.todaySales==null?data.chinaToday.salesCents:Math.round(daily.todaySales*100),visits:daily.todayVisitors??data.chinaToday.visits}]
+  for(const [key,track] of [['sales',config?.salesTrack],['visits',config?.visitsTrack]]){
+   if(!Array.isArray(track)||!config.chartEndDate)continue
+   track.forEach((value,index)=>{
+    const date=new Date(config.chartEndDate+'T00:00:00Z')
+    date.setUTCDate(date.getUTCDate()+index-track.length+1)
+    const day=date.toISOString().slice(0,10)
+    rows.set(day,{...rows.get(day),[key]:key==='sales'?Math.round(value*100):value})
+   })
   }
-  const end=new Date((data?.today||new Date().toISOString().slice(0,10))+'T00:00:00Z')
-  const chartEnd=Date.parse(config?.chartEndDate+'T00:00:00Z')
-  function configuredValue(track,date){
-   const offset=(chartEnd-date.getTime())/86400000
-   return Array.isArray(track)?track[track.length-1-offset]:undefined
-  }
-  return Array.from({length:days},(_,i)=>{
-   const date=new Date(end)
-   date.setUTCDate(date.getUTCDate()-days+1+i)
-   const day=date.toISOString().slice(0,10)
-   const sales=configuredValue(config?.salesTrack,date)
-   return {day,sales:sales==null?(data?.daily.find(row=>row.day===day)?.salesCents??0):Math.round(sales*100),visits:configuredValue(config?.visitsTrack,date)??data?.visits.find(row=>row.day===day)?.visits??0}
-  })
- },[data,days])
- const maxSales=Math.max(100,...series.map(d=>d.sales)),maxVisits=Math.max(1,...series.map(d=>d.visits))
- const activeHeatDay=series.find(row=>row.day===heatDay)??series.at(-1)
+  return rows
+ },[data])
+ const heatYears=[...new Set([currentYear,...Array.from(heatmap.keys(),day=>Number(day.slice(0,4)))])].sort((a,b)=>b-a)
+ const heatMaximum=Math.max(1,...[...heatmap].filter(([day])=>day.startsWith(String(year))&&day<=currentDate).map(([,row])=>row[heatMetric]??0))
+ const activeHeatDay=heatDay|| (year===currentYear?currentDate:`${year}-12-31`)
+ const selectedHeatValues=heatmap.get(activeHeatDay)
  const today=data?.today,visits=(length)=>{const end=new Date((today||'2000-01-01')+'T00:00:00Z');end.setUTCDate(end.getUTCDate()-length+1);const from=end.toISOString().slice(0,10);return (data?.visits||[]).filter(v=>v.day>=from&&v.day<=today).reduce((s,v)=>s+v.visits,0)}
  const todayData=data?.chinaToday
  const metrics=data?.dashboardMetrics??{}
@@ -101,32 +106,44 @@ export default function SellerDashboardPage(){
   </section>)}
  </div>
  <section className="portal-card" aria-label={t("Store activity heatmap")}>
-  <div className="flex flex-wrap items-start justify-between gap-3">
-   <div><h2>{t("Store activity heatmap")}</h2><p className="mt-1 text-xs text-slate-600">{t(days===1?"China time":"UTC")}</p></div>
-   <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("Heatmap period")}>
-    {[[1,'Today'],[7,'Last 7 days'],[30,'Last 30 days']].map(([n,label])=><button key={n} type="button" aria-pressed={days===n} onClick={()=>{setDays(n);setHeatDay('')}} className={`min-h-9 rounded-lg px-2.5 text-xs font-semibold ${days===n?'bg-orange-700 text-white':'bg-slate-100 text-slate-700'}`}>{t(label)}</button>)}
+  <div className="flex flex-wrap items-center justify-between gap-3">
+   <h2>{t("Store activity heatmap")}</h2>
+   <div className="flex flex-wrap items-center gap-2">
+    <div className="flex gap-1 rounded-lg bg-orange-50 p-1" role="group" aria-label={t("Heatmap metric")}>
+     {[['visits','Visits'],['sales','Sales']].map(([key,label])=><button key={key} type="button" aria-pressed={heatMetric===key} onClick={()=>setHeatMetric(key)}
+      className={`min-h-8 rounded-md px-3 text-xs font-semibold ${heatMetric===key?'bg-orange-700 text-white':'text-orange-950'}`}>{t(label)}</button>)}
+    </div>
+    <select aria-label={t("Heatmap year")} value={year} onChange={event=>{setHeatYear(Number(event.target.value));setHeatDay('')}} className="rounded-lg border px-2 text-sm">
+     {heatYears.map(value=><option key={value}>{value}</option>)}
+    </select>
    </div>
   </div>
-  <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
-   <div className="min-w-0 space-y-3">
-    {[['sales','Sales',maxSales,'rgba(234,88,12,'],['visits','Visits',maxVisits,'rgba(180,83,9,']].map(([key,label,max,color])=><div key={key} className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2">
-     <p className="text-xs font-semibold text-slate-700">{t(label)}</p>
-     <div className={`grid gap-1 ${days===30?'grid-cols-10':days===7?'grid-cols-7':'grid-cols-1'}`}>
-      {series.map(row=>{
-       const value=key==='sales'?money(row.sales):number(row.visits)
-       const description=`${row.day} · ${t(label)} ${value}`
-       return <button key={row.day} type="button" aria-label={description} title={description} onClick={()=>setHeatDay(row.day)} aria-pressed={activeHeatDay?.day===row.day}
-        className="min-h-6 rounded border border-slate-200 aria-pressed:ring-2 aria-pressed:ring-slate-800 focus-visible:outline-2 focus-visible:outline-orange-700"
-        style={{backgroundColor:row[key]>0?`${color}${0.18+0.82*row[key]/max})`:'#fff7ed'}}/>
+  <div className="mt-4 overflow-x-auto rounded-lg border border-orange-100" tabIndex={0} aria-label={t("Monthly heatmap grid")}>
+   <table className="w-full min-w-[620px] table-fixed border-separate border-spacing-px text-center text-[10px]">
+    <thead className="sr-only"><tr><th scope="col">{t("Month")}</th>{heatmapDays.map(day=><th scope="col" key={day}>{day}</th>)}</tr></thead>
+    <tbody>{heatmapMonths.map(month=>{
+     const monthDate=new Date(Date.UTC(year,month,1))
+     const daysInMonth=new Date(Date.UTC(year,month+1,0)).getUTCDate()
+     return <tr key={month}>
+      <th scope="row" className="w-10 whitespace-nowrap bg-white font-medium text-slate-700">{monthName.format(monthDate)}</th>
+      {heatmapDays.map(day=>{
+       const date=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+       if(day>daysInMonth||date>currentDate)return <td key={day} className="h-5 bg-slate-100"/>
+       const value=heatmap.get(date)?.[heatMetric]??0
+       const shade=value>0?Math.max(1,Math.ceil(value/heatMaximum*(heatmapColors.length-1))):0
+       const description=`${date} · ${heatMetric==='sales'?money(value):number(value)+' '+t('Visits')}`
+       return <td key={day} className="p-0"><button type="button" aria-label={description} title={description} aria-pressed={date===activeHeatDay} onClick={()=>setHeatDay(date)}
+        style={{backgroundColor:heatmapColors[shade]}} className="block h-5 w-full outline-offset-[-2px] aria-pressed:outline-2 aria-pressed:outline-orange-950 focus-visible:outline-2 focus-visible:outline-slate-900"/></td>
       })}
-     </div>
-    </div>)}
-    {activeHeatDay&&<p aria-live="polite" className="text-xs text-slate-600">{activeHeatDay.day} · {t('Sales')} {money(activeHeatDay.sales)} · {t('Visits')} {number(activeHeatDay.visits)}</p>}
-   </div>
-   <div className="rounded-xl bg-orange-50 px-4 py-3 text-orange-950">
-    <p className="text-xs font-semibold">{t("Store Followers")}</p>
-    <p className="mt-1 text-xl font-bold tabular-nums">{number(data?.overview.followers)}</p>
-   </div>
+     </tr>
+    })}</tbody>
+    <tfoot aria-hidden="true"><tr><td className="w-10"/>{heatmapDays.map(day=><td key={day} className="py-1 text-slate-700">{day}</td>)}</tr></tfoot>
+   </table>
+  </div>
+  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
+   <p aria-live="polite">{activeHeatDay} (UTC) · {t('Sales')} {money(selectedHeatValues?.sales??0)} · {t('Visits')} {number(selectedHeatValues?.visits??0)}</p>
+   <div className="flex items-center gap-1" aria-label={t('Heatmap scale')}>{t('Low')}{heatmapColors.map(color=><span key={color} className="size-3 rounded-sm" style={{backgroundColor:color}}/>)}{t('High')}</div>
+   <p className="rounded-lg bg-orange-50 px-3 py-2 text-orange-950">{t("Store Followers")} <strong className="ml-1 tabular-nums">{number(data?.overview.followers)}</strong></p>
   </div>
  </section>
  <section className="portal-card portal-shortcuts" aria-label="Store tools">{shortcuts.map(([Icon,label,to,color])=><Link key={to} to={to}><i style={{background:color}}><Icon size={23}/></i><span>{t(label)}</span></Link>)}</section>
