@@ -4,26 +4,23 @@ import { formatOrderReference } from '../lib/orderReference.js'
 import {useSellerLanguage} from '../context/SellerLanguageContext.jsx'
 import {useEffect,useMemo,useState} from 'react'
 import {Link} from 'react-router-dom'
-import {ArrowUpRight,Package,Star,BadgeCheck,Users} from 'lucide-react'
+import {ArrowUpRight,Package,Star,BadgeCheck,Users,ChevronDown,ChartPie} from 'lucide-react'
 import SellerWorkspace,{money} from '../components/SellerWorkspace.jsx'
 import SaleConfirmations from '../components/SaleConfirmations.jsx'
 import StoreDates from '../components/StoreDates.jsx'
 import OrderStatusBadge from '../components/OrderStatusBadge.jsx'
 import {paymentStatusLabel} from '../lib/fulfillment.js'
 import {apiRequest} from '../lib/api.js'
-const heatmapDays=Array.from({length:31},(_,index)=>index+1)
-const heatmapMonths=Array.from({length:12},(_,index)=>11-index)
-const heatmapColors=['var(--heatmap-empty)','#ffe1b4','#ffc46e','#ffa132','#f67e19','#db560c','#a73709']
-const monthName=new Intl.DateTimeFormat('en',{month:'short',timeZone:'UTC'})
+const monthColors=['#bc4211','#eb7924','#ffbd6d','#d45d34','#9b4b31','#efa052','#775449','#cc8831','#a74f64','#c3736c','#ff9e37','#914016']
 
 export default function SellerDashboardPage(){
- const {t}=useSellerLanguage()
- const [user,setUser]=useState(null),[data,setData]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[creditScore,setCreditScore]=useState(null),[heatMetric,setHeatMetric]=useState('visits'),[heatYear,setHeatYear]=useState(null),[heatDay,setHeatDay]=useState(''),[limit,setLimit]=useState(12)
+ const {language,t}=useSellerLanguage()
+ const [user,setUser]=useState(null),[data,setData]=useState(null),[products,setProducts]=useState([]),[error,setError]=useState(''),[creditScore,setCreditScore]=useState(null),[chartMetric,setChartMetric]=useState('visits'),[chartYear,setChartYear]=useState(null),[limit,setLimit]=useState(12)
  useEffect(()=>{let active=true;const refresh=()=>Promise.all([apiRequest('/api/auth/me'),apiRequest('/api/seller/analytics')]).then(([u,d])=>{if(active){setUser(u.user);setData(d);setError('')}}).catch(e=>active&&setError(e.message));apiRequest('/api/seller/products').then(d=>active&&setProducts(d.products)).catch(e=>active&&setError(e.message));const tick=()=>{if(document.hidden)return;refresh();apiRequest('/api/seller/dashboard-metrics',{cache:'no-store'}).then(({metrics})=>{if(active)setCreditScore(metrics.sellerCreditScore??5)}).catch(()=>{})};tick();const timer=setInterval(tick,30000);window.addEventListener('focus',tick);document.addEventListener('visibilitychange',tick);return()=>{active=false;clearInterval(timer);window.removeEventListener('focus',tick);document.removeEventListener('visibilitychange',tick)}},[])
  const currentDate=data?.today||new Date().toISOString().slice(0,10)
  const currentYear=Number(currentDate.slice(0,4))
- const year=heatYear??currentYear
- const heatmap=useMemo(()=>{
+ const year=chartYear??currentYear
+ const activityByDay=useMemo(()=>{
   const rows=new Map()
   for(const row of data?.daily||[])rows.set(row.day,{sales:row.salesCents,visits:0})
   for(const row of data?.visits||[])rows.set(row.day,{...rows.get(row.day),visits:row.visits})
@@ -39,10 +36,23 @@ export default function SellerDashboardPage(){
   }
   return rows
  },[data])
- const heatYears=[...new Set([currentYear,...Array.from(heatmap.keys(),day=>Number(day.slice(0,4)))])].sort((a,b)=>b-a)
- const heatMaximum=Math.max(1,...[...heatmap].filter(([day])=>day.startsWith(String(year))&&day<=currentDate).map(([,row])=>row[heatMetric]??0))
- const activeHeatDay=heatDay|| (year===currentYear?currentDate:`${year}-12-31`)
- const selectedHeatValues=heatmap.get(activeHeatDay)
+ const chartYears=[...new Set([currentYear,...Array.from(activityByDay.keys(),day=>Number(day.slice(0,4)))])].sort((a,b)=>b-a)
+ const monthlyTotals=Array(12).fill(0)
+ for(const [day,row] of activityByDay){
+  if(day.startsWith(`${year}-`)&&day<=currentDate)monthlyTotals[Number(day.slice(5,7))-1]+=row[chartMetric]??0
+ }
+ const monthName=new Intl.DateTimeFormat(language,{month:'short',timeZone:'UTC'})
+ const chartMonths=monthlyTotals.flatMap((value,index)=>value>0?[{
+  value,color:monthColors[index],label:monthName.format(new Date(Date.UTC(year,index,1))),
+ }]:[])
+ const chartTotal=chartMonths.reduce((sum,month)=>sum+month.value,0)
+ let chartOffset=0
+ const chartStops=chartMonths.map(month=>{
+  const start=chartOffset
+  chartOffset+=month.value
+  return `${month.color} ${100*start/chartTotal}% ${100*chartOffset/chartTotal}%`
+ })
+ const formatChartValue=value=>chartMetric==='sales'?money(value):value.toLocaleString(language)
  const today=data?.today,visits=(length)=>{const end=new Date((today||'2000-01-01')+'T00:00:00Z');end.setUTCDate(end.getUTCDate()-length+1);const from=end.toISOString().slice(0,10);return (data?.visits||[]).filter(v=>v.day>=from&&v.day<=today).reduce((s,v)=>s+v.visits,0)}
  const todayData=data?.chinaToday
  const metrics=data?.dashboardMetrics??{}
@@ -96,51 +106,31 @@ export default function SellerDashboardPage(){
    </div>)}
   </dl>
  </section>
- <section className="portal-card seller-overview-heatmap" aria-label={t("Store activity heatmap")}>
-  <div className="flex flex-wrap items-center justify-between gap-3">
-   <h2>{t("Store activity heatmap")}</h2>
-   <div className="flex flex-wrap items-center gap-2">
-    <div className="seller-heatmap-switch" role="group" aria-label={t("Heatmap metric")}>
-     {[['visits','Visits'],['sales','Sales']].map(([key,label])=><button key={key} type="button" aria-pressed={heatMetric===key} onClick={()=>setHeatMetric(key)}
-      className="seller-heatmap-tab">{t(label)}</button>)}
+ <details className="portal-card seller-activity-chart">
+  <summary>
+   <ChartPie size={19} aria-hidden="true"/><span>{t('Sales & visits')}</span><ChevronDown size={18} aria-hidden="true"/>
+  </summary>
+  <div className="seller-activity-content">
+   <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="seller-activity-switch" role="group" aria-label={t('Chart metric')}>
+     {[['visits','Visits'],['sales','Sales']].map(([key,label])=><button key={key} type="button" aria-pressed={chartMetric===key} onClick={()=>setChartMetric(key)}>{t(label)}</button>)}
     </div>
-    <UiverseSelect aria-label={t("Heatmap year")} value={year} onChange={event=>{setHeatYear(Number(event.target.value));setHeatDay('')}} className="seller-overview-select">
-     {heatYears.map(value=><option key={value}>{value}</option>)}
+    <UiverseSelect aria-label={t('Chart year')} value={year} onChange={event=>setChartYear(Number(event.target.value))} className="seller-overview-select">
+     {chartYears.map(value=><option key={value} value={value}>{value}</option>)}
     </UiverseSelect>
    </div>
+   <div className="seller-activity-breakdown">
+    <div className="seller-activity-ring" style={chartTotal?{backgroundImage:`conic-gradient(${chartStops.join(', ')})`}:undefined}>
+     <div aria-live="polite"><strong>{formatChartValue(chartTotal)}</strong><span>{t(chartMetric==='sales'?'Sales':'Visits')} · {year}</span></div>
+    </div>
+    {chartMonths.length>0?<ul className="seller-activity-legend" aria-label={t('Monthly breakdown')}>
+     {chartMonths.map(month=><li key={month.label}>
+      <span aria-hidden="true" style={{backgroundColor:month.color}}/>{month.label}<strong>{formatChartValue(month.value)}</strong>
+     </li>)}
+    </ul>:<p className="text-sm">{t('No recorded activity for this year.')}</p>}
+   </div>
   </div>
-  <div className="seller-heatmap-scroll" tabIndex={0} aria-label={t("Monthly heatmap grid")}>
-   <table className="seller-heatmap-grid">
-    <thead className="sr-only"><tr><th scope="col">{t("Month")}</th>{heatmapDays.map(day=><th scope="col" key={day}>{day}</th>)}</tr></thead>
-    <tbody>{heatmapMonths.map(month=>{
-     const monthDate=new Date(Date.UTC(year,month,1))
-     const daysInMonth=new Date(Date.UTC(year,month+1,0)).getUTCDate()
-     return <tr key={month}>
-      <th scope="row" className="seller-heatmap-month">{monthName.format(monthDate)}</th>
-      {heatmapDays.map(day=>{
-       const date=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
-       if(day>daysInMonth||date>currentDate)return <td key={day} className="seller-heatmap-unavailable"/>
-       const value=heatmap.get(date)?.[heatMetric]??0
-       const shade=value>0?Math.max(1,Math.ceil(value/heatMaximum*(heatmapColors.length-1))):0
-       const description=`${date} · ${heatMetric==='sales'?money(value):number(value)+' '+t('Visits')}`
-       return <td key={day} className="p-0"><button type="button" aria-label={description} title={description} aria-pressed={date===activeHeatDay} onClick={()=>setHeatDay(date)}
-        style={{backgroundColor:heatmapColors[shade]}} className="seller-heatmap-cell"/></td>
-      })}
-     </tr>
-    })}</tbody>
-    <tfoot aria-hidden="true"><tr><td className="seller-heatmap-month"/>{heatmapDays.map(day=><td key={day}>{day===1||day%5===0?day:null}</td>)}</tr></tfoot>
-   </table>
-  </div>
-  <div className="seller-heatmap-footer">
-   <p className="seller-heatmap-selection" aria-live="polite">
-    <time dateTime={activeHeatDay}>{activeHeatDay} (UTC)</time>
-    <span>{t('Sales')} <strong>{money(selectedHeatValues?.sales??0)}</strong></span>
-    <span>{t('Visits')} <strong>{number(selectedHeatValues?.visits??0)}</strong></span>
-   </p>
-   <div className="flex items-center gap-1" aria-label={t('Heatmap scale')}>{t('Low')}{heatmapColors.map(color=><span key={color} className="size-3 rounded-sm" style={{backgroundColor:color}}/>)}{t('High')}</div>
-   <p className="seller-heatmap-followers">{t("Store Followers")} <strong className="ml-1 tabular-nums">{number(data?.overview.followers)}</strong></p>
-  </div>
- </section>
+ </details>
  <dl className="seller-shop-rows" aria-label={t('Shop overview')}>
   {[
    [Users,'Store Followers',number(data?.overview.followers),'#b85123'],
