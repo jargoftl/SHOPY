@@ -157,12 +157,12 @@ function DepositDialog({wallets,request,requestId,pendingDeposits,onSelectDeposi
 
 const paymentHistoryTime=request=>request.resolved_at||(['confirmed','rejected'].includes(request.status)?request.updated_at:request.created_at)
 const ledgerHistoryTime=record=>record.effective_at||record.resolvedAt||record.created_at
-const compareHistory=(getTime)=>(first,second)=>{
+const compareHistory=(getTime,oldestFirst=false)=>(first,second)=>{
  const a=timestampMillis(getTime(first)),b=timestampMillis(getTime(second))
- if(a===b)return second.id-first.id
+ if(a===b)return oldestFirst?first.id-second.id:second.id-first.id
  if(!Number.isFinite(a))return 1
  if(!Number.isFinite(b))return -1
- return b-a
+ return oldestFirst?a-b:b-a
 }
 
 function PaymentHistory({requests}){
@@ -235,7 +235,7 @@ export default function SellerFinancePage({view='wallet'}){
   setError('')
  }
  const depositWallets=data?.depositWallets||[]
- const compareLedgerDates=compareHistory(ledgerHistoryTime)
+ const compareLedgerDates=compareHistory(ledgerHistoryTime,user?.publicId==='0099019176')
  const records=(data?.records||[]).filter(record=>record.delta_cents!==0&&(historyFilter==='all'||(historyFilter==='credit'?record.delta_cents>0:record.delta_cents<0))).sort((first,second)=>(first.historyPin??Infinity)-(second.historyPin??Infinity)||compareLedgerDates(first,second))
  const date=new Date(today+'T00:00:00Z')
  const yesterday=new Date(date.getTime()-86400000).toISOString().slice(0,10)
@@ -311,7 +311,7 @@ export default function SellerFinancePage({view='wallet'}){
   </div>
   {records.length ? <ul className="divide-y divide-slate-100">
    {records.map(record=><li key={record.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-4 sm:px-5">
-    <p className={`flex min-w-0 items-center gap-1.5 font-semibold ${record.delta_cents<0?'text-red-700':'text-slate-900'}`}>{record.delta_cents>0?<ArrowUp size={17} aria-hidden="true" className="shrink-0 text-emerald-700"/>:<ArrowDown size={17} aria-hidden="true" className="shrink-0"/>}{record.delta_cents>0?'Credit':'Debit'}{record.historyPin&&<span className="ml-1 text-xs font-medium text-slate-600">Pinned</span>}</p>
+    <p className={`flex min-w-0 items-center gap-1.5 font-semibold ${record.delta_cents<0?'text-red-700':'text-slate-900'}`}>{record.delta_cents>0?<ArrowUp size={17} aria-hidden="true" className="shrink-0 text-emerald-700"/>:<ArrowDown size={17} aria-hidden="true" className="shrink-0"/>}{record.delta_cents>0?'Credit':'Debit'}</p>
     <p className={`max-w-[45vw] break-words text-right text-sm font-semibold tabular-nums ${record.delta_cents>0?'text-emerald-700':'text-red-700'}`}>
      {record.delta_cents>0?'+':''}{money(record.delta_cents)}
     </p>
