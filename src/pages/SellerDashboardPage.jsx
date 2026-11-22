@@ -197,6 +197,29 @@ export default function SellerDashboardPage(){
    </ul>:data&&<p className="portal-empty">{t('Your best-selling items will appear after completed payments.')}</p>}
   </section>
  </div>
- <section className="portal-card"><div className="portal-section-head"><h2>{t('Store products')}</h2><Link to="/seller/products">{t("Manage")}</Link></div><div className="portal-product-list">{products.slice(0,limit).map(p=><Link to={p.isPublished?`/products/${p.id}`:'/seller/products'} className="portal-product-row" key={p.id}><img src={p.imageUrl} alt="" loading="lazy"/><div><h3>{p.name}</h3><p>{p.category}</p><strong>{money(Math.round(p.price*100))}</strong></div></Link>)}</div>{products.length>limit&&<button className="portal-load-more" onClick={()=>setLimit(n=>n+24)}>{t("Show more products")}</button>}{!products.length&&<Link className="portal-empty" to="/seller/warehouse">{t("Browse the warehouse to add products.")}</Link>}</section>{data?.dates?.establishedOn&&<div className="portal-dates"><StoreDates {...data.dates}/></div>}
+ <section className="portal-card seller-list-card seller-catalog-preview" aria-labelledby="seller-store-products">
+  <header className="seller-list-heading">
+   <h2 id="seller-store-products"><span><Package size={18} aria-hidden="true"/></span>{t('Store products')}</h2>
+   <Link to="/seller/products">{t('Manage')}<ArrowUpRight size={14} aria-hidden="true"/></Link>
+  </header>
+  {products.length>0?<ul className="seller-list-rows">
+   {products.slice(0,limit).map(product=><li key={product.id}>
+    <Link to={product.isPublished?`/products/${product.id}`:'/seller/products'} className="seller-list-product">
+     <span className="seller-list-image">{product.imageUrl?<img src={product.imageUrl} alt="" loading="lazy"/>:<Package size={20} aria-hidden="true"/>}</span>
+     <div>
+      <h3>{product.name}</h3>
+      <div className="seller-list-product-meta">
+       {product.category&&<span>{product.category}</span>}
+       <strong className="seller-list-amount">{money(Math.round(product.price*100))}</strong>
+      </div>
+     </div>
+    </Link>
+   </li>)}
+  </ul>:<Link className="portal-empty" to="/seller/warehouse">{t('Browse the warehouse to add products.')}</Link>}
+  {products.length>limit&&<button type="button" className="seller-catalog-more" onClick={()=>setLimit(count=>count+24)}>
+   {t('Show more products')}<ChevronDown size={16} aria-hidden="true"/>
+  </button>}
+ </section>
+ {data?.dates?.establishedOn&&<div className="seller-overview-store-date"><StoreDates {...data.dates}/></div>}
  </SellerWorkspace>
 }

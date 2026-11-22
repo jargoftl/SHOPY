@@ -265,3 +265,40 @@
 @media (min-width: 900px) {
   .seller-overview-lists { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
 }
+
+.seller-overview .seller-catalog-preview { margin-top: 12px; }
+.seller-catalog-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  margin-top: 12px;
+  border: 1px solid var(--seller-line);
+  border-radius: 9px;
+  background: var(--seller-raised);
+  color: var(--seller-accent);
+  font-size: 13px;
+  font-weight: 650;
+}
+.seller-catalog-more:hover { background: var(--seller-soft); }
+.seller-overview-store-date { margin-top: 12px; }
+.seller-overview-store-date > section {
+  margin: 0;
+  gap: 10px;
+  padding: 10px 13px;
+  border-color: var(--seller-line);
+  background: var(--seller-surface);
+  color: var(--seller-ink);
+  box-shadow: none;
+}
+.seller-overview-store-date > section > span {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--seller-soft);
+  color: var(--seller-accent);
+}
+.seller-overview-store-date p { color: var(--seller-muted); }
+.seller-overview-store-date time { font-size: 15px; line-height: 1.5; }
