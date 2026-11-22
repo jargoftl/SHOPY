@@ -253,7 +253,7 @@ const SellerPage = () => {
           <p className="mt-2 text-sm text-[#555555]">Published items become visible on the storefront.</p>
 
           {pendingPublish&&<ProductPublishConfirmation product={productForm} busy={isSaving} onCancel={()=>setPendingPublish(null)} onConfirm={()=>saveProduct({preventDefault(){},currentTarget:pendingPublish},true)}/>}
-          <form id="seller-product-form" key={editingProduct?.id || 'new-product'} className="mt-6 space-y-4 bg-white p-5 sm:p-6" onSubmit={saveProduct}>
+          <form id="seller-product-form" key={editingProduct?.id || 'new-product'} className="seller-catalog-form mt-5 space-y-4 bg-white p-4 sm:p-6" onSubmit={saveProduct}>
             <label className="block text-sm font-medium">Product name
               <input name="name" value={productForm.name} onChange={(event) => setProductForm((current) => ({ ...current, name: event.target.value }))} maxLength={500} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" placeholder="Example: Mira Everyday Tote" />
             </label>
@@ -291,7 +291,7 @@ const SellerPage = () => {
             {editingProduct && <button type="button" onClick={cancelEdit} className="w-full border border-[#ccc] px-4 py-3 text-sm">Cancel editing</button>}
           </form>
 
-          <details className="mt-4 bg-white p-5 sm:p-6">
+          <details className="seller-category-tools mt-4 bg-white p-4 sm:p-6">
             <summary className="cursor-pointer text-sm font-semibold">Manage categories ({categories.length})</summary>
             <form className="mt-4 flex gap-2" onSubmit={addCategory}>
               <input value={newCategory} onChange={(event) => setNewCategory(event.target.value)} maxLength={60} required className="h-10 min-w-0 flex-1 border border-[#cccccc] px-3 text-sm outline-none focus:border-black" placeholder="New category name" />
@@ -318,10 +318,10 @@ const SellerPage = () => {
 
           <label className="portal-product-search"><span className="sr-only">Search store products</span><input type="search" value={catalogSearch} onChange={e=>{setCatalogSearch(e.target.value);setCatalogLimit(24)}} placeholder="Search product name or category"/></label>
           <div className="portal-catalog-shortcuts"><Link to="/seller/warehouse">Product warehouse →</Link><Link to="/seller/reviews">Product reviews →</Link></div>
-          <div className="seller-catalog-list divide-y divide-[#eee] bg-white">
+          <div className="seller-catalog-list">
             {products.filter(p=>`${p.name} ${p.category}`.toLowerCase().includes(catalogSearch.toLowerCase())).slice(0,catalogLimit).map((product) => (
               <article id={`seller-product-${product.id}`} key={product.id} className="flex items-center gap-3 p-4 sm:gap-4 sm:p-5">
-                <img src={product.imageUrl} alt="" className="size-16 shrink-0 bg-[#f7f7f7] object-cover" />
+                <img src={product.imageUrl} alt="" className="size-16 shrink-0 object-contain" loading="lazy" />
                 <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{product.name}</h3><p className="mt-1 text-xs text-[#555555]">{product.category} · ${product.price.toFixed(2)}{product.compareAtPrice ? ` · Was $${product.compareAtPrice.toFixed(2)}` : ''}</p><p className="mt-1 text-[10px] uppercase tracking-wide text-[#777]">{product.isPublished ? 'Published' : 'Draft'}</p></div>
                 <div className="catalog-item-actions flex shrink-0 gap-2">
                   <button type="button" onClick={() => editProduct(product)} aria-label={`Edit ${product.name}`} className="border border-[#ddd] px-3 py-2 text-xs hover:border-black">Edit</button>
