@@ -1,3 +1,4 @@
+import { sellerLanguages as languages } from '../i18n/sellerLanguage.js'
 import UiverseSelect from '../components/UiverseSelect.jsx'
 import StoreStats from '../components/StoreStats.jsx'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
@@ -24,15 +25,6 @@ import {
   ShoppingCart,
   X,
 } from 'lucide-react'
-
-const languages = [
-  { code: 'en', name: 'English', flag: '🇺🇸' },
-  { code: 'zh', name: '中文', flag: '🇨🇳' },
-  { code: 'es', name: 'Español', flag: '🇪🇸' },
-  { code: 'fr', name: 'Français', flag: '🇫🇷' },
-  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-  { code: 'ja', name: '日本語', flag: '🇯🇵' },
-]
 
 const heroSlides = [
   {

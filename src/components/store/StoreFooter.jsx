@@ -49,7 +49,7 @@ const StoreFooter = ({ language, setLanguage, languages, text }) => (
             <Languages size={16} aria-hidden="true" />
             <span className="sr-only">Choose language</span>
             <UiverseSelect value={language} onChange={(event) => setLanguage(event.target.value)} className="max-w-40 bg-[#111111] py-1 text-xs text-[#f7f7f7] outline-offset-2">
-              {languages.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
+              {languages.map((item) => <option key={item.code} value={item.code}>{`${item.flag} ${item.name}`}</option>)}
             </UiverseSelect>
           </label>
         </div>

@@ -136,7 +136,7 @@ export default function UiverseSelect({ children, className = '', style, value, 
       const time = Date.now()
       const text = (time - search.current.time < 700 ? search.current.text : '') + event.key.toLocaleLowerCase()
       search.current = { text, time }
-      items.find(item => item.textContent.trim().toLocaleLowerCase().startsWith(text))?.focus()
+      items.find(item => item.textContent.replace(/^\p{Regional_Indicator}{2}\s*/u, '').trim().toLocaleLowerCase().startsWith(text))?.focus()
       return
     }
     const index = items.indexOf(document.activeElement)

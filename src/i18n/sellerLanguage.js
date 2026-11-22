@@ -1,4 +1,11 @@
-export const sellerLanguages=[{code:'en',name:'English'},{code:'zh',name:'中文'},{code:'es',name:'Español'},{code:'fr',name:'Français'},{code:'de',name:'Deutsch'},{code:'ja',name:'日本語'}]
+export const sellerLanguages = [
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'zh', name: '中文', flag: '🇨🇳' },
+  { code: 'es', name: 'Español', flag: '🇪🇸' },
+  { code: 'fr', name: 'Français', flag: '🇫🇷' },
+  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+  { code: 'ja', name: '日本語', flag: '🇯🇵' },
+]
 // Human-written interface translations; product names and stored records remain unchanged.
 const rows=[
 ['Transaction history','交易记录','Historial de transacciones','Historique des transactions','Transaktionsverlauf','取引履歴'],
