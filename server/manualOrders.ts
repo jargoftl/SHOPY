@@ -261,7 +261,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
         await recordShipmentEvent(db,orderId,sellerId,'pending',req.user!.id,req.user!.role,'Order placed')
         await notify.run(sellerId, 'purchase', `New order #${number}`, useBalance ? 'Paid' : 'Payment is pending confirmation. Do not fulfill until the administrator confirms payment.', `/seller/orders?order=${number}`)
       }
-      await db.prepare("INSERT INTO notifications (user_id,type,title,body,link) SELECT id,'purchase',?,?,? FROM users WHERE role='admin'").run(`Order #${number} created`, useBalance ? `${req.user!.full_name} paid from their account balance. The store owner or administrator can confirm fulfillment.` : `${req.user!.full_name} selected ${coin}.`, `/admin?order=${number}#purchase-orders`)
+      await db.prepare("INSERT INTO notifications (user_id,type,title,body,link) SELECT id,'purchase',?,?,? FROM users WHERE role='admin'").run(useBalance ? `Paid · Order #${number}` : `Order #${number} created`, useBalance ? '' : `${req.user!.full_name} selected ${coin}.`, `/admin?order=${number}#purchase-orders`)
       return { id: orderId, created: true }
     })())
     if (!purchase) return res.status(409).json({ error: 'Insufficient account balance for this order.' })

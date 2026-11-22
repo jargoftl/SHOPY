@@ -1508,6 +1508,15 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
       notification.body = 'Paid'
     }
 
+    const paidAdminOrder = notification.type === 'purchase' && notification.link?.startsWith('/admin?') &&
+      notification.link.endsWith('#purchase-orders') && notification.body.endsWith(' paid from their account balance. The store owner or administrator can confirm fulfillment.')
+      ? notification.title.match(/^Order #(\d+) created$/)
+      : null
+    if (paidAdminOrder) {
+      notification.title = `Paid · Order #${paidAdminOrder[1]}`
+      notification.body = ''
+    }
+
     if (notification.type === 'wallet' && ['/seller/wallet', '/profile/wallet'].includes(notification.link) && notification.title === 'Admin funding added') {
       const amount = notification.body.match(/^\$[0-9]+\.[0-9]{2}(?= credited to your (?:seller wallet|account balance)\.)/)?.[0]
       notification.title = 'Credited to wallet'

@@ -98,7 +98,11 @@ export default function OrderNotifications() {
   if (!showBell && !toast && !error) return null
   return <div data-preserve-theme className="fixed right-4 top-20 z-[70] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2">
     {showBell && <Link to="/messages?view=notifications" aria-label={`Notifications, ${unread} unread`} className="relative grid size-11 place-items-center rounded-full border border-[#e5e5e5] bg-white text-[#111111] shadow-md"><Bell size={20} />{unread > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-[#d84250] px-1.5 py-0.5 text-xs font-bold text-white">{unread > 99 ? '99+' : unread}</span>}</Link>}
-    {toast && <div role="status" className="w-80 max-w-full rounded-xl border border-[#cccccc] bg-white p-4 text-[#111111] shadow-lg"><div className="flex items-start gap-3"><div className="flex-1"><p className="font-semibold">{toast.title}</p><p className="mt-1 text-sm">{toast.body}</p><Link to={toast.link} onClick={() => setToast(null)} className="mt-2 inline-block text-sm underline">{toast.linkLabel || 'View order'}</Link></div><button type="button" aria-label="Dismiss notification" onClick={() => setToast(null)}><X size={18} /></button></div></div>}
+    {toast && <div role="status" className="w-80 max-w-full rounded-xl border border-[#cccccc] bg-white p-4 text-[#111111] shadow-lg"><div className="flex items-start gap-3"><div className="flex-1">{toast.body ? <>
+      <p className="font-semibold">{toast.title}</p>
+      <p className="mt-1 text-sm">{toast.body}</p>
+      <Link to={toast.link} onClick={() => setToast(null)} className="mt-2 inline-block text-sm underline">{toast.linkLabel || 'View order'}</Link>
+    </> : <Link to={toast.link} onClick={() => setToast(null)} className="font-semibold hover:underline">{toast.title}</Link>}</div><button type="button" aria-label="Dismiss notification" onClick={() => setToast(null)}><X size={18} /></button></div></div>}
     {error && <p role="status" className="rounded border border-red-200 bg-white p-2 text-xs text-red-800">{error}</p>}
   </div>
 }
