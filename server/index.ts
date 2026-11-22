@@ -2355,7 +2355,7 @@ app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res
     fullName: event.full_name,
     email: event.email,
   }))
-  return res.json({ events })
+  return res.set('Cache-Control', 'no-store').json({ events })
 })
 
 registerReferrals(app,database,requireAuth,requireRole)

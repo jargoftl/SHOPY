@@ -20,7 +20,7 @@ import AdminWarehouse from '../components/AdminWarehouse.jsx'
 import AdminMarketing from '../components/AdminMarketing.jsx'
 import AdminDisplayStats from '../components/AdminDisplayStats.jsx'
 import RefundList from '../components/RefundList.jsx'
-const tabs=[['overview','Overview',LayoutDashboard],['accounts','People & stores',Users],['applications','Seller approval',ClipboardCheck],['orders','Orders & tracking',ShoppingBag],['payment-type','Payment Type',Wallet],['seller-funding','Seller funding',Wallet],['seller-sales-history','Adding Seller Sales History',History],['buyer-wallet','Buyer funding',Wallet],['warehouse','Warehouse',Warehouse],['marketing','Marketing requests',Megaphone],['referrals','Referrals & rewards',Users],['statistics','Display statistics',ChartNoAxesCombined],['activity','Account activity',History],['settings','Site settings',Settings],['admin-access','Manage admins',ShieldCheck],['account-recovery','Account recovery',ShieldCheck]]
+const tabs=[['overview','Overview',LayoutDashboard],['accounts','People & stores',Users],['applications','Seller approval',ClipboardCheck],['orders','Orders & tracking',ShoppingBag],['payment-type','Payment Type',Wallet],['seller-funding','Seller funding',Wallet],['seller-sales-history','Adding Seller Sales History',History],['buyer-wallet','Buyer funding',Wallet],['warehouse','Warehouse',Warehouse],['marketing','Marketing requests',Megaphone],['referrals','Referrals & rewards',Users],['statistics','Display statistics',ChartNoAxesCombined],['activity','Login activity',History],['settings','Site settings',Settings],['admin-access','Manage admins',ShieldCheck],['account-recovery','Account recovery',ShieldCheck]]
 const toolLinks=[
  ['Edit store followers and visit stats','/admin/seller-metrics#store-records','increase followers follower count store visitor views traffic people visited last viewed opening date rating items sold'],
  ['Edit today’s orders','/admin/seller-metrics#today-orders','increase decrease order count number today daily seller'],
@@ -38,7 +38,7 @@ const toolLinks=[
  ['Edit historical seller sales','/admin#seller-sales-history','add old offline sale order item history revenue'],
  ['Handle login recovery','/admin#account-recovery','forgot reset password login restore access'],
  ['Change site settings','/admin#settings','site name branding appearance settings'],
- ['Review account activity','/admin#activity','audit log login history activity'],
+ ['View login IPs and locations','/admin#activity','audit log login history activity sign in country city'],
  ['Review marketing requests','/admin#marketing','promotion ads boost store upgrade level'],
  ['Manage referral rewards','/admin#referrals','referral invite reward commission'],
  ['Seller credit score','/admin#seller-funding','increase credit score 100 seller points'],
@@ -72,9 +72,33 @@ export default function AdminPage(){
  useEffect(()=>{let active=true;apiRequest('/api/admin/overview').then(d=>{if(active){setAdmin(d.user);setData({counts:d.counts,users:[],sellers:[],products:[],events:[],usersLoaded:false,eventsLoaded:false})}}).catch(e=>active&&setError(e.message));return()=>{active=false}},[])
  useEffect(()=>{if(!admin||!data)return;let active=true
  if(['accounts','statistics'].includes(tab)&&!data.usersLoaded)Promise.all([apiRequest('/api/admin/users'),apiRequest('/api/admin/sellers')]).then(([u,s])=>{if(active)setData(d=>({...d,users:u.users,sellers:s.sellers,usersLoaded:true}))}).catch(e=>active&&setError(e.message))
- if(tab==='activity'&&!data.eventsLoaded)apiRequest('/api/admin/events').then(e=>{if(active)setData(d=>({...d,events:e.events,eventsLoaded:true}))}).catch(e=>active&&setError(e.message))
  return()=>{active=false}
- },[tab,admin?.id,data?.usersLoaded,data?.eventsLoaded])
+ },[tab,admin?.id,data?.usersLoaded])
+
+ useEffect(()=>{
+  if(tab!=='activity'||!admin?.id)return
+  let active=true
+  let pending=false
+  async function refresh(){
+   if(document.hidden||pending)return
+   pending=true
+   try{
+    const {events}=await apiRequest('/api/admin/events',{cache:'no-store',background:true})
+    if(active)setData(previous=>({...previous,events,eventsLoaded:true}))
+   }catch(error){if(active)setError(error.message)}
+   finally{pending=false}
+  }
+  refresh()
+  const timer=window.setInterval(refresh,15000)
+  window.addEventListener('focus',refresh)
+  document.addEventListener('visibilitychange',refresh)
+  return()=>{
+   active=false
+   window.clearInterval(timer)
+   window.removeEventListener('focus',refresh)
+   document.removeEventListener('visibilitychange',refresh)
+  }
+ },[tab,admin?.id])
 
  return <div className="admin-workspace min-h-screen bg-[#f7f7f7] text-black"><header className="flex flex-wrap items-center justify-between gap-4 border-b bg-white px-5 py-5 lg:px-8"><Link to="/admin" className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-xl font-black"><SiteName logo/><span className="text-xs font-normal tracking-widest text-gray-500">ADMIN CENTRE</span></Link><div className="flex flex-wrap items-center gap-5 text-xs"><SellerNotificationBell/><span>{admin?.fullName} {admin&&`· #${admin.publicId}`}</span><Link to="/" className="flex items-center gap-1 underline">View website<ArrowUpRight size={13}/></Link><button onClick={async()=>{await apiRequest('/api/auth/logout',{method:'POST'});navigate('/login')}} className="underline">Log out of this tab</button></div></header><div className="mx-auto grid max-w-[1700px] lg:grid-cols-[230px_1fr]"><aside className="min-w-0 border-b bg-white p-4 lg:min-h-screen lg:border-r"><p className="mb-4 px-3 pt-2 text-[10px] font-semibold tracking-[.2em] text-gray-400">MANAGE YOUR MARKETPLACE</p><nav className="flex gap-1 overflow-x-auto lg:flex-col" aria-label="Admin navigation">{tabs.filter(([id])=>id!=='admin-access'||admin?.isSuperAdmin).map(([id,label,Icon])=><Link key={id} to={id==='admin-access'?'/super-admin':`/admin#${id}`} className={`flex shrink-0 items-center gap-3 px-3 py-3 text-sm ${tab===id?'bg-black font-semibold text-white':'text-gray-500 hover:bg-gray-100'}`}><Icon size={17}/>{label}</Link>)}</nav></aside><main className="min-w-0 p-5 pb-24 lg:p-8"><p className="text-xs uppercase tracking-[.18em] text-gray-400">ADMIN WORKSPACE</p><h1 className="mt-2 text-3xl font-semibold">{tabs.find(t=>t[0]===tab)?.[1]}</h1>{admin&&<AdminToolSearch isSuperAdmin={admin.isSuperAdmin}/>}{error&&<p role="alert" className="mt-5 border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}<Link className="ml-2 underline" to="/login?switch=1">Admin login</Link></p>}{notice&&<p role="status" className="mt-5 border bg-white p-4 text-sm">{notice}</p>}{!data&&!error&&<ContentPlaceholder/>}{admin&&data&&<div className="mt-7">
  {tab==='overview'&&<><Link to="/admin/seller-metrics" className="mb-4 inline-flex rounded-lg border bg-white px-4 py-2 text-sm font-semibold">Manage seller credit scores</Link><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[['Registered accounts',data.counts.accounts],['Store profiles',data.counts.stores],['Products',data.counts.products],['Seller applications pending',data.counts.pending]].map(([label,value])=><div key={label} className="border bg-white p-5"><p className="text-xs text-gray-500">{label}</p><p className="mt-4 text-3xl font-semibold">{value.toLocaleString()}</p></div>)}</div><h2 className="mt-8 text-lg font-semibold">What would you like to do?</h2><div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[['applications','Approve a seller','Review identity documents and approve or reject the application.'],['orders','Process an order','Review paid orders and send tracking numbers to sellers.'],['buyer-wallet','Fund a buyer','Credit a buyer balance or review coin deposit requests.'],['payment-type-deposits','Review seller deposits','Open payment proof and confirm funds received.'],['payment-type-withdrawals','Review seller withdrawals','Check the receiving wallet and record a confirmed transfer.'],['accounts','Find an account','Search buyer and seller profiles and open their controls.'],['statistics','Adjust display statistics','Apply labeled display adjustments with a saved audit reason.']].map(([id,label,description])=><Link key={id} to={id==='admin-access'?'/super-admin':`/admin#${id}`} className="border bg-white p-5 hover:border-black"><div className="flex justify-between"><h3 className="font-semibold">{label}</h3><ArrowUpRight size={17}/></div><p className="mt-3 text-sm leading-6 text-gray-500">{description}</p></Link>)}</div></>}
@@ -91,7 +115,7 @@ export default function AdminPage(){
  {tab==='referrals'&&<AdminReferrals/>}
  {tab==='marketing'&&<AdminMarketing/>}
  {tab==='statistics'&&<AdminDisplayStats sellers={data.sellers.filter(s=>data.users.some(u=>u.id===s.id&&u.role==='seller'))}/>}
- {tab==='activity'&&<section className="border bg-white p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">Recent account sign-ins and registrations</h2><button className="text-xs underline" onClick={async()=>{try{const result=await apiRequest('/api/admin/events');setData(d=>({...d,events:result.events}))}catch(e){setError(e.message)}}}>Refresh activity</button></div>{data.events.map(e=><div key={e.id} className="mt-4 flex flex-wrap justify-between gap-3 border-b pb-4 text-sm"><Link to={`/admin/users/${e.userId}`} className="underline">{e.fullName} · #{e.publicId}</Link><span>{e.type}</span><span className="text-xs text-gray-500">IP: {e.ipAddress||'Not recorded'} · {e.location?`${e.location} (approximate)`:'Location unavailable'}</span><time className="text-xs text-gray-500">{e.createdAt} UTC</time></div>)}</section>}
+ {tab==='activity'&&<section className="border bg-white p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">Recent account sign-ins and registrations</h2><button className="text-xs underline" onClick={async()=>{try{const result=await apiRequest('/api/admin/events');setData(d=>({...d,events:result.events}))}catch(e){setError(e.message)}}}>Refresh activity</button></div>{data.eventsLoaded&&!data.events.length&&<p className="mt-4 text-sm">No sign-ins or registrations recorded yet.</p>}{data.events.map(e=><div key={e.id} className="mt-4 flex flex-wrap justify-between gap-3 border-b pb-4 text-sm"><Link to={`/admin/users/${e.userId}`} className="underline">{e.fullName} · #{e.publicId}</Link><span>{e.type==='login'?'Signed in':'Registered'}</span><div className="min-w-0 break-words text-xs"><p><strong>IP address</strong> {e.ipAddress||'Not recorded'}</p><p className="mt-1"><strong>Approximate location</strong> {e.location||'Unavailable'}</p></div><time className="text-xs text-gray-500">{e.createdAt} UTC</time></div>)}</section>}
  {tab==='settings'&&<form className="max-w-xl border bg-white p-5" onSubmit={async e=>{e.preventDefault();setBusy(true);setError('');try{await saveSiteName(new FormData(e.currentTarget).get('siteName'));setNotice('Site name saved.')}catch(e){setError(e.message)}finally{setBusy(false)}}}><h2 className="font-semibold">Website name</h2><label className="mt-4 block text-sm">Site name<input name="siteName" defaultValue={siteName} required maxLength={60} className="mt-2 block w-full border p-3"/></label><button disabled={busy} className="mt-4 bg-black px-5 py-3 text-sm font-semibold text-white">Save changes</button></form>}
  </div>}</main></div></div>
 }

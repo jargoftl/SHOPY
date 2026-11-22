@@ -42,12 +42,20 @@ export default function SellerDashboardPage(){
   if(day.startsWith(`${year}-`)&&day<=currentDate)monthlyTotals[Number(day.slice(5,7))-1]+=row[chartMetric]??0
  }
  const monthName=new Intl.DateTimeFormat(language,{month:'short',timeZone:'UTC'})
- const chartMonths=monthlyTotals.flatMap((value,index)=>value>0?[{
+ const recordedMonths=monthlyTotals.flatMap((value,index)=>value>0?[{
   value,color:monthColors[index],label:monthName.format(new Date(Date.UTC(year,index,1))),
  }]:[])
- const chartTotal=chartMonths.reduce((sum,month)=>sum+month.value,0)
+ const recordedTotal=recordedMonths.reduce((sum,month)=>sum+month.value,0)
+ const showStoreVisitTotal=chartMetric==='visits'&&year===currentYear&&data?.overview.visits!=null
+ const chartTotal=showStoreVisitTotal?Number(data.overview.visits):recordedTotal
+ // Only show monthly shares that fit within the saved store total.
+ const chartMonths=showStoreVisitTotal&&recordedTotal>chartTotal?[]:recordedMonths
+ const remainingVisits=showStoreVisitTotal?chartTotal-(recordedTotal>chartTotal?0:recordedTotal):0
+ const chartSegments=remainingVisits>0
+  ? [...chartMonths,{ value:remainingVisits,color:'#b96639',label:t(chartMonths.length?'Other visits':'Total store visits') }]
+  : chartMonths
  let chartOffset=0
- const chartStops=chartMonths.map(month=>{
+ const chartStops=chartSegments.map(month=>{
   const start=chartOffset
   chartOffset+=month.value
   return `${month.color} ${100*start/chartTotal}% ${100*chartOffset/chartTotal}%`
@@ -121,10 +129,10 @@ export default function SellerDashboardPage(){
    </div>
    <div className="seller-activity-breakdown">
     <div className="seller-activity-ring" style={chartTotal?{backgroundImage:`conic-gradient(${chartStops.join(', ')})`}:undefined}>
-     <div aria-live="polite"><strong>{formatChartValue(chartTotal)}</strong><span>{t(chartMetric==='sales'?'Sales':'Visits')} · {year}</span></div>
+     <div aria-live="polite"><strong>{formatChartValue(chartTotal)}</strong><span>{showStoreVisitTotal?t('Total store visits'):`${t(chartMetric==='sales'?'Sales':'Visits')} · ${year}`}</span></div>
     </div>
-    {chartMonths.length>0?<ul className="seller-activity-legend" aria-label={t('Monthly breakdown')}>
-     {chartMonths.map(month=><li key={month.label}>
+    {chartSegments.length>0?<ul className="seller-activity-legend" aria-label={t('Monthly breakdown')}>
+     {chartSegments.map(month=><li key={month.label}>
       <span aria-hidden="true" style={{backgroundColor:month.color}}/>{month.label}<strong>{formatChartValue(month.value)}</strong>
      </li>)}
     </ul>:<p className="text-sm">{t('No recorded activity for this year.')}</p>}
