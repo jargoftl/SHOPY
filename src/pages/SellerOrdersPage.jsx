@@ -1,4 +1,4 @@
-import { ChevronDown, Search } from 'lucide-react'
+import { Check, ChevronDown, Package, Search } from 'lucide-react'
 import TransactionPinModal from '../components/TransactionPinModal.jsx'
 import { formatOrderReference } from '../lib/orderReference.js'
 import HistoricalSalesHistory from '../components/HistoricalSalesHistory.jsx'
@@ -155,26 +155,33 @@ const SellerOrdersPage = () => {
       const profit=order.subtotalCents-Math.round(order.subtotalCents*100/115)
       const fields=[
        ['Consignee name',<button type="button" onClick={()=>openOrder(order,'contact')} className="text-left text-blue-700 underline">{(order.sellerContact?.name??order.buyerName)||'Edit contact'}</button>],
-       ['Order time',formatTimestamp(order.createdAt)],
-       ['Product amount',formatMoney(order.subtotalCents)],
        ['Estimated profit',formatMoney(profit)],
        ['Purchase status',purchaseBadge(shipment?.releaseStatus)],
        ['Logistics status',logisticsBadge(shipment)],
       ]
-      return <li key={order.id} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-       <div className="flex flex-wrap items-start justify-between gap-2">
-        <h2 className="min-w-0 break-words text-base font-semibold">Order {formatOrderReference(order)}</h2>
-        <OrderStatusBadge {...orderPaymentBadge(order)}/>
-       </div>
-       <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4 rounded-xl bg-slate-50 p-3">
+      const firstItem=order.items[0]
+      return <li key={order.id} className="seller-order-card">
+       <header className="seller-order-card-header">
+        <div className="seller-order-thumbnail">
+         {firstItem?.imageUrl?<img src={firstItem.imageUrl} alt="" loading="lazy"/>:<Package size={20} aria-hidden="true"/>}
+        </div>
+        <div className="seller-order-card-title">
+         <h2>{firstItem?.name||'Order'}{order.items.length>1&&<span> +{order.items.length-1} more</span>}</h2>
+         <p>Order {formatOrderReference(order)}</p>
+         <time dateTime={order.createdAt}>{formatTimestamp(order.createdAt)}</time>
+        </div>
+        <strong>{formatMoney(order.subtotalCents)}</strong>
+       </header>
+       <div className="mt-3"><OrderStatusBadge {...orderPaymentBadge(order)}/></div>
+       <dl className="seller-order-card-fields">
         {fields.map(([label,value])=><div key={label} className="min-w-0">
          <dt className="text-xs font-medium text-slate-600">{label}</dt>
          <dd className="mt-1 break-words text-sm font-semibold text-slate-900">{value}</dd>
         </div>)}
        </dl>
-       <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" onClick={()=>openOrder(order,'view')} className="min-h-11 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-900">View order</button>
-        {canPurchase(order)&&<button type="button" onClick={()=>openOrder(order,'purchase')} className="min-h-11 rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white">Purchase</button>}
+       <div className="seller-order-card-actions">
+        <button type="button" onClick={()=>openOrder(order,'view')} className="seller-order-view">View order</button>
+        {canPurchase(order)&&<button type="button" onClick={()=>openOrder(order,'purchase')} className="seller-order-confirm"><Check size={17} aria-hidden="true"/> Confirm order</button>}
        </div>
       </li>
      })}
@@ -217,7 +224,7 @@ const SellerOrdersPage = () => {
         <label className="text-sm font-medium">Transaction PIN<PasswordInput name="transactionPin" required inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" className="mt-1 w-full rounded-lg border p-2"/></label>
         <button type="button" onClick={()=>setPinOpen(true)} className="justify-self-start text-sm text-blue-700 underline">Create or reset transaction PIN</button>
         <p className="text-xs text-slate-600">Confirm the paid sale to credit the proceeds to your website wallet.</p>
-        <button disabled={busy} className="justify-self-start rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy?'Confirming…':'Confirm purchase'}</button>
+        <button disabled={busy} className="inline-flex min-h-10 items-center gap-2 justify-self-start rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Check size={17} aria-hidden="true"/>{busy?'Confirming…':'Confirm purchase'}</button>
        </form>}
        {selected.mode==='view'&&<section className="mt-4 min-w-0"><h2 className="mb-3 text-sm font-semibold">Dispatch & tracking</h2>{shipment&&<><OrderStatusBadge status={shipment.status} label={fulfillmentLabel(shipment.status)}/><details className="portal-shipment-details"><summary>Shipment details & updates</summary><div className="mt-3"><DeliveryProgress compact status={shipment.status}/></div><div className="mt-4 grid min-w-0 gap-3 rounded-xl bg-gray-50 p-4 sm:grid-cols-2"><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Tracking number</p><p className="mt-1 break-all font-mono text-sm font-semibold">{shipment.trackingNumber||'Not assigned yet'}</p></div><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Carrier</p><div className="mt-1 flex flex-wrap items-center gap-2 text-sm">{(!shipment.carrier||/^arrive(?: logistics)?$/i.test(shipment.carrier.trim()))&&<img src="/arrive-logistics.webp" alt="" className="h-6 w-24 object-contain object-left"/>}<span className="break-words">{shipment.carrier||'Arrive Logistics'}</span></div></div>{shipment.carrierTrackingNumber&&<p className="break-all text-xs text-gray-500 sm:col-span-2">Carrier reference: {shipment.carrierTrackingNumber}</p>}</div><label className="mt-4 block text-xs font-medium">Update fulfillment<select aria-label={`Logistics for order ${formatOrderReference(order)}`} disabled={busy||order.status!=='paid'} value={shipment.status} onChange={e=>update(order,e.target.value)} className="mt-2 block min-h-12 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm disabled:opacity-50">{fulfillmentOptions.map(([status,label])=><option key={status} value={status}>{label}</option>)}</select></label><DeliveryEmailStatus shipment={shipment} orderId={order.id}/><ShipmentHistory trackingNumber={shipment.trackingNumber} revision={reload}/></details></>}{order.status!=='paid'&&<p className="mt-3 text-xs text-gray-500">Payment not confirmed</p>}</section>}
        {confirmError&&<p role="alert" className="mt-2 text-sm text-red-700">{confirmError}</p>}

@@ -321,7 +321,7 @@ const AnimatedRoutes = () => {
       </Suspense>
       <MobileBottomNav />
       <SellerBottomNav/>
-      <ThemeToggle />
+      <ThemeToggle seller={sellerWorkspace} />
       <OrderNotifications />
       <CartToast />
     </>
