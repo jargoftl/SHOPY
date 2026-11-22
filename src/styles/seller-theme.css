@@ -285,7 +285,7 @@ html:has(.seller-menu-drawer[open]) { overflow: hidden; }
 @media (max-width: 600px) {
   .seller-workspace-header .portal-header-actions { flex-direction: column; align-items: flex-end; gap: 4px; }
   .seller-workspace-header .seller-language-selector { margin: 0; }
-  .seller-workspace-header .seller-language-selector > span { display: none; }
+  .seller-workspace-header .seller-language-selector > span:not(.uiverse-select) { display: none; }
   .seller-portal.seller-overview .portal-title { font-size: 23px; }
   .seller-portal.seller-overview .portal-card { border-radius: 11px; }
 }

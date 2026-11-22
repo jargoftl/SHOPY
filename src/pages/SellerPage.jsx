@@ -1,3 +1,4 @@
+import UiverseSelect from '../components/UiverseSelect.jsx'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import ProductPublishConfirmation from '../components/ProductPublishConfirmation.jsx'
 import {progressToast} from '../components/ProgressToast.jsx'
@@ -258,7 +259,7 @@ const SellerPage = () => {
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-sm font-medium">Category
-                <select name="category" value={productForm.category} onChange={(event) => setProductForm((current) => ({ ...current, category: event.target.value }))} required className="mt-2 h-11 w-full border border-[#cccccc] bg-white px-3 text-sm outline-none focus:border-black">
+                <UiverseSelect name="category" value={productForm.category} onChange={(event) => setProductForm((current) => ({ ...current, category: event.target.value }))} required className="mt-2 h-11 w-full border border-[#cccccc] bg-white px-3 text-sm outline-none focus:border-black">
                   <option value="" disabled>Select category</option>
                   {taxonomyCategoryGroups.map((group) => (
                     <optgroup key={group.name} label={group.name}>
@@ -270,7 +271,7 @@ const SellerPage = () => {
                       {additionalCategories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}
                     </optgroup>
                   )}
-                </select>
+                </UiverseSelect>
               </label>
               <label className="block text-sm font-medium">Price
                 <input name="price" type="number" value={productForm.price} onChange={(event) => setProductForm((current) => ({ ...current, price: event.target.value }))} min="0" max="1000000" step="0.01" required className="mt-2 h-11 w-full border border-[#cccccc] px-3 text-sm outline-none focus:border-black" placeholder="49.00" />

@@ -1,4 +1,5 @@
-import { Check, ChevronDown, Package, Search } from 'lucide-react'
+import UiverseSelect from '../components/UiverseSelect.jsx'
+import { Check, Package, Search } from 'lucide-react'
 import TransactionPinModal from '../components/TransactionPinModal.jsx'
 import { formatOrderReference } from '../lib/orderReference.js'
 import HistoricalSalesHistory from '../components/HistoricalSalesHistory.jsx'
@@ -70,12 +71,11 @@ function OrderFilter({label,value,onChange,options}){
  return <label className="min-w-0 text-xs font-medium text-slate-700">
   {label}
   <span className="relative mt-1 block">
-   <select value={value} onChange={event=>onChange(event.target.value)} style={{appearance:'none',height:36,minHeight:36}}
-    className="block w-full rounded-full border border-slate-200 bg-slate-50 py-0 pl-3 pr-7 text-xs font-medium text-slate-900 focus-visible:outline-2 focus-visible:outline-blue-600">
+   <UiverseSelect value={value} onChange={event=>onChange(event.target.value)}
+    className="block w-full">
     <option value="all">All</option>
     {options.map(([key,text])=><option key={key} value={key}>{text}</option>)}
-   </select>
-   <ChevronDown aria-hidden="true" size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500"/>
+   </UiverseSelect>
   </span>
  </label>
 }
@@ -226,7 +226,7 @@ const SellerOrdersPage = () => {
         <p className="text-xs text-slate-600">Confirm the paid sale to credit the proceeds to your website wallet.</p>
         <button disabled={busy} className="inline-flex min-h-10 items-center gap-2 justify-self-start rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Check size={17} aria-hidden="true"/>{busy?'Confirming…':'Confirm purchase'}</button>
        </form>}
-       {selected.mode==='view'&&<section className="mt-4 min-w-0"><h2 className="mb-3 text-sm font-semibold">Dispatch & tracking</h2>{shipment&&<><OrderStatusBadge status={shipment.status} label={fulfillmentLabel(shipment.status)}/><details className="portal-shipment-details"><summary>Shipment details & updates</summary><div className="mt-3"><DeliveryProgress compact status={shipment.status}/></div><div className="mt-4 grid min-w-0 gap-3 rounded-xl bg-gray-50 p-4 sm:grid-cols-2"><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Tracking number</p><p className="mt-1 break-all font-mono text-sm font-semibold">{shipment.trackingNumber||'Not assigned yet'}</p></div><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Carrier</p><div className="mt-1 flex flex-wrap items-center gap-2 text-sm">{(!shipment.carrier||/^arrive(?: logistics)?$/i.test(shipment.carrier.trim()))&&<img src="/arrive-logistics.webp" alt="" className="h-6 w-24 object-contain object-left"/>}<span className="break-words">{shipment.carrier||'Arrive Logistics'}</span></div></div>{shipment.carrierTrackingNumber&&<p className="break-all text-xs text-gray-500 sm:col-span-2">Carrier reference: {shipment.carrierTrackingNumber}</p>}</div><label className="mt-4 block text-xs font-medium">Update fulfillment<select aria-label={`Logistics for order ${formatOrderReference(order)}`} disabled={busy||order.status!=='paid'} value={shipment.status} onChange={e=>update(order,e.target.value)} className="mt-2 block min-h-12 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm disabled:opacity-50">{fulfillmentOptions.map(([status,label])=><option key={status} value={status}>{label}</option>)}</select></label><DeliveryEmailStatus shipment={shipment} orderId={order.id}/><ShipmentHistory trackingNumber={shipment.trackingNumber} revision={reload}/></details></>}{order.status!=='paid'&&<p className="mt-3 text-xs text-gray-500">Payment not confirmed</p>}</section>}
+       {selected.mode==='view'&&<section className="mt-4 min-w-0"><h2 className="mb-3 text-sm font-semibold">Dispatch & tracking</h2>{shipment&&<><OrderStatusBadge status={shipment.status} label={fulfillmentLabel(shipment.status)}/><details className="portal-shipment-details"><summary>Shipment details & updates</summary><div className="mt-3"><DeliveryProgress compact status={shipment.status}/></div><div className="mt-4 grid min-w-0 gap-3 rounded-xl bg-gray-50 p-4 sm:grid-cols-2"><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Tracking number</p><p className="mt-1 break-all font-mono text-sm font-semibold">{shipment.trackingNumber||'Not assigned yet'}</p></div><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Carrier</p><div className="mt-1 flex flex-wrap items-center gap-2 text-sm">{(!shipment.carrier||/^arrive(?: logistics)?$/i.test(shipment.carrier.trim()))&&<img src="/arrive-logistics.webp" alt="" className="h-6 w-24 object-contain object-left"/>}<span className="break-words">{shipment.carrier||'Arrive Logistics'}</span></div></div>{shipment.carrierTrackingNumber&&<p className="break-all text-xs text-gray-500 sm:col-span-2">Carrier reference: {shipment.carrierTrackingNumber}</p>}</div><label className="mt-4 block text-xs font-medium">Update fulfillment<UiverseSelect aria-label={`Logistics for order ${formatOrderReference(order)}`} disabled={busy||order.status!=='paid'} value={shipment.status} onChange={e=>update(order,e.target.value)} className="mt-2 block min-h-12 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm disabled:opacity-50">{fulfillmentOptions.map(([status,label])=><option key={status} value={status}>{label}</option>)}</UiverseSelect></label><DeliveryEmailStatus shipment={shipment} orderId={order.id}/><ShipmentHistory trackingNumber={shipment.trackingNumber} revision={reload}/></details></>}{order.status!=='paid'&&<p className="mt-3 text-xs text-gray-500">Payment not confirmed</p>}</section>}
        {confirmError&&<p role="alert" className="mt-2 text-sm text-red-700">{confirmError}</p>}
       </>
      })()}

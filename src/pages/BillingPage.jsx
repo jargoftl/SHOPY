@@ -1,3 +1,4 @@
+import UiverseSelect from '../components/UiverseSelect.jsx'
 import { getCountries, getCountryCallingCode, parsePhoneNumberFromString } from 'libphonenumber-js/min'
 import SiteName from '../components/SiteName.jsx'
 import { useEffect, useRef, useState } from 'react'
@@ -170,15 +171,15 @@ const BillingPage = () => {
             <label className="block text-sm font-medium">Email address<input name="email" type="email" value={billing.email || ''} onChange={updateBilling} autoComplete="email" maxLength={200} required className="mt-2 h-12 w-full rounded border px-3" /></label>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <label className="block min-w-0 text-sm font-medium">Phone country code
-                <select value={phoneCountry || detectedCountry || ''} onChange={changePhoneCountry} className="mt-2 h-12 w-full rounded border bg-white px-3">
+                <UiverseSelect value={phoneCountry || detectedCountry || ''} onChange={changePhoneCountry} className="mt-2 h-12 w-full rounded border bg-white px-3">
                   <option value="">Choose a country</option>
                   {phoneCountries.map(({code,label,dial,flag})=><option key={code} value={code}>{flag} {label} (+{dial})</option>)}
-                </select>
+                </UiverseSelect>
               </label>
               <label className="block text-sm font-medium">Phone number<input name="phone" type="tel" value={billing.phone || ''} onChange={updateBilling} autoComplete="tel" maxLength={40} required className="mt-2 h-12 w-full rounded border px-3" /></label>
             </div>
             <label className="block text-sm font-medium">Choose a delivery address
-              <select value={selectedAddressId} onChange={event=>selectAddress(event.target.value)} className="mt-2 h-12 w-full rounded border bg-white px-3 text-sm">
+              <UiverseSelect value={selectedAddressId} onChange={event=>selectAddress(event.target.value)} className="mt-2 h-12 w-full rounded border bg-white px-3 text-sm">
                 <option value="">Add new address</option>
                 {addresses.length>0&&<optgroup label="Your saved addresses">
                   {addresses.map(address=><option key={address.id} value={address.id}>{[address.address,address.city].filter(Boolean).join(', ')}{address.isDefault?' (default)':''}</option>)}
@@ -186,7 +187,7 @@ const BillingPage = () => {
                 <optgroup label="Example addresses · China">
                   {exampleAddresses.map((address,index)=><option key={address} value={`example-${index}`}>{address}</option>)}
                 </optgroup>
-              </select>
+              </UiverseSelect>
             </label>
             <label className="block text-sm font-medium">Delivery address<input name="address" value={billing.address || ''} onChange={updateBilling} autoComplete="street-address" placeholder="Enter the full delivery address" maxLength={200} required className="mt-2 h-12 w-full rounded border px-3" /></label>
             {message && <p role="alert" className="text-sm text-[#a33]">{message}</p>}

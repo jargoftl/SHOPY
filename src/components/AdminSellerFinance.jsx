@@ -1,3 +1,4 @@
+import UiverseSelect from './UiverseSelect.jsx'
 import {Circle} from 'lucide-react'
 import {formatTimestamp,timestampMillis} from '../lib/storeDates.js'
 import CryptoWalletIcon from './CryptoWalletIcon.jsx'
@@ -145,9 +146,9 @@ export default function AdminSellerFinance({view}){
     <button type="button" className={`${button} mt-2`} disabled={busy||loadedQuery!==query} onClick={clearRequests}>Clear pending and rejected requests</button>
    </div>}
    <label className="mt-4 inline-block text-xs">Status
-    <select value={statusFilter} onChange={event=>setStatusFilter(event.target.value)} className={field}>
+    <UiverseSelect value={statusFilter} onChange={event=>setStatusFilter(event.target.value)} className={field}>
      <option value="all">All statuses</option><option value="pending">Pending</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option>
-    </select>
+    </UiverseSelect>
    </label>
    <div className="mt-5 space-y-4">{requests.map(q=><article key={q.id} className="rounded-xl border border-[#444] p-4"><div className="flex flex-wrap justify-between gap-3"><div><p className="font-semibold">{q.storeName} · #{q.sellerPublicId}</p><p className="mt-1 text-xs text-[#a3a3a3]">{q.kind==='deposit'&&`#${q.transaction_ref} · ${q.coin} · `} {q.status==='confirmed'?'Accepted':q.status==='rejected'?'Rejected':<span className="inline-flex items-center gap-1 rounded bg-[#fff1e6] px-1.5 py-0.5 font-semibold text-[#9a370b]"><Circle size={12} aria-hidden="true"/>Pending</span>} · {formatTimestamp(q.resolved_at||q.created_at)}</p></div><strong>{money(q.amount_cents)}</strong></div>{q.kind==='withdrawal'&&<WithdrawalReview request={q} busy={busy} onUpdate={body=>update(q.id,body)}/>}{q.address&&q.kind==='deposit'&&<div className="mt-3 text-xs"><div className="flex flex-wrap items-center gap-2"><CryptoWalletIcon coin={q.coin}/>{q.coin_amount} {q.coin}<CryptoWalletIcon network={q.network}/>{q.network}</div><p className="mt-2 break-all">{q.address}</p></div>}{q.kind==='deposit'&&q.submitted_reference&&<p className="mt-3 break-all text-xs">Seller’s transaction reference: {q.submitted_reference}</p>}{q.kind==='deposit'&&q.transfer_reference&&<p className="mt-3 break-all text-xs">Transfer: {q.transfer_reference}</p>}{q.receiptId&&<a className="mt-3 inline-block text-sm text-[#cccccc] underline" target="_blank" rel="noreferrer" href={sessionUrl(`/api/seller/finance/receipts/${q.receiptId}`)}>Open payment proof</a>}
  {q.status==='requested'&&<form className="mt-4 grid gap-3 sm:grid-cols-3" onSubmit={event=>{

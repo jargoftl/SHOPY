@@ -1,3 +1,4 @@
+import UiverseSelect from '../components/UiverseSelect.jsx'
 import AdminStoreDates from '../components/AdminStoreDates.jsx'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import SiteName from '../components/SiteName.jsx'
@@ -186,9 +187,9 @@ const AdminSellerMetricsPage = ({sellerId} = {}) => {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Seller accounts</p><h1 className="mt-2 text-3xl font-semibold">Dashboard metrics</h1><p className="mt-2 max-w-2xl text-sm text-slate-600">Set the figures and activity history shown in each seller’s dashboard.</p></div>
           {!sellerId&&<label className="text-xs text-slate-700">Seller
-            <select value={selectedSellerId} disabled={isSaving} onChange={(event) => setSelectedSellerId(event.target.value)} className="mt-2 block h-11 min-w-64 border border-slate-300 bg-white px-3 text-sm text-slate-950">
+            <UiverseSelect value={selectedSellerId} disabled={isSaving} onChange={(event) => setSelectedSellerId(event.target.value)} className="mt-2 block h-11 min-w-64 border border-slate-300 bg-white px-3 text-sm text-slate-950">
               <option value="">Select seller</option>{sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.storeName || seller.fullName} · #{seller.publicId} · {seller.email}</option>)}
-            </select>
+            </UiverseSelect>
           </label>}
         </div>
 

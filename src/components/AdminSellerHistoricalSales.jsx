@@ -1,3 +1,4 @@
+import UiverseSelect from './UiverseSelect.jsx'
 import {useEffect,useRef,useState} from 'react'
 import {apiRequest} from '../lib/api.js'
 import {formatMoney,parseAmountCents} from '../lib/money.js'
@@ -88,10 +89,10 @@ export default function AdminSellerHistoricalSales(){
   {error&&<p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
   {!sellers&&!error&&<p role="status" className="mt-3 text-sm text-slate-600">Loading sellers…</p>}
   {sellers&&<label className="mt-4 block max-w-xl text-sm font-medium">Seller
-   <select value={selected} onChange={event=>setSelected(event.target.value)} className={field}>
+   <UiverseSelect value={selected} onChange={event=>setSelected(event.target.value)} className={field}>
     <option value="">Choose a seller</option>
     {sellers.map(seller=><option key={seller.id} value={seller.id}>{seller.storeName} · {seller.email}</option>)}
-   </select>
+   </UiverseSelect>
   </label>}
   {selected&&<SaleEntry key={selected} sellerId={selected}/>}
  </section>

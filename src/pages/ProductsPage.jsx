@@ -1,3 +1,4 @@
+import UiverseSelect from '../components/UiverseSelect.jsx'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -164,12 +165,12 @@ const ProductsPage = () => {
             <div className="flex items-center gap-3">
               <p className="text-xs text-[#777]">{visibleProducts.length} items</p>
               <label className="flex items-center gap-2 text-[10px] text-[#777] sm:text-xs">Sort
-                <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort products" className="border border-[#ddd] bg-white px-2 py-2 text-xs text-[#222]">
+                <UiverseSelect value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort products" className="border border-[#ddd] bg-white px-2 py-2 text-xs text-[#222]">
                   <option value="newest">Newest</option>
                   <option value="price-low">Price: low to high</option>
                   <option value="price-high">Price: high to low</option>
                   <option value="discount">Best discount</option>
-                </select>
+                </UiverseSelect>
               </label>
             </div>
           </div>

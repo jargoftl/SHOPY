@@ -1,0 +1,83 @@
+/* From Uiverse.io by 3bdel3ziz-T - https://uiverse.io/3bdel3ziz-T/gentle-vampirebat-46
+   MIT License, Copyright (c) 3bdel3ziz-T (3bdel3zizT) */
+.uiverse-select { position: relative; display: inline-block; max-width: 100%; min-width: 0; }
+.uiverse-select.w-full, .uiverse-select.block { display: block; }
+.uiverse-select > .uiverse-select-native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+.uiverse-select > .uiverse-select-trigger,
+.uiverse-select > .uiverse-select-options {
+  color: white !important;
+  background: #2a2f3b !important;
+  border: 0;
+  border-radius: 5px;
+  font-size: 15px;
+  line-height: 1.35;
+}
+.uiverse-select > .uiverse-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  width: 100%;
+  min-height: 32px;
+  height: 100%;
+  padding: 5px;
+  cursor: pointer;
+  text-align: left;
+}
+.uiverse-select-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uiverse-select-arrow {
+  flex: 0 0 25px;
+  height: 10px;
+  fill: white;
+  transform: rotate(-90deg);
+  transition: transform 300ms;
+}
+.uiverse-select-trigger[aria-expanded="true"] .uiverse-select-arrow { transform: rotate(0deg); }
+.uiverse-select .uiverse-select-trigger:disabled { opacity: .6; cursor: default; }
+.uiverse-select > .uiverse-select-options {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 5px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-shadow: 0 8px 20px #0003;
+  transform: translateY(-10px);
+  opacity: 0;
+  transition: opacity 300ms, transform 300ms, display 300ms allow-discrete, overlay 300ms allow-discrete;
+}
+.uiverse-select > .uiverse-select-options:popover-open { transform: translateY(0); opacity: 1; }
+@starting-style {
+  .uiverse-select > .uiverse-select-options:popover-open { transform: translateY(-10px); opacity: 0; }
+}
+.uiverse-select .uiverse-select-options button {
+  width: 100%;
+  padding: 5px;
+  border-radius: 5px;
+  color: white;
+  background: #2a2f3b;
+  font-size: 15px;
+  text-align: left;
+  transition: background-color 300ms;
+}
+.uiverse-select .uiverse-select-options button:is(:hover,:focus-visible) { background: #323741; }
+.uiverse-select .uiverse-select-options button:disabled { opacity: .5; }
+.uiverse-select-group { padding: 7px 5px 3px; color: #c5cbd6; font-size: 11px; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  .uiverse-select > .uiverse-select-options, .uiverse-select .uiverse-select-arrow, .uiverse-select .uiverse-select-options button { transition: none; }
+}
+.uiverse-select.uiverse-select {
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}

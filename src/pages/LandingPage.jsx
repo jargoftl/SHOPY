@@ -1,3 +1,4 @@
+import UiverseSelect from '../components/UiverseSelect.jsx'
 import StoreStats from '../components/StoreStats.jsx'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import StoreAccountMenu from '../components/StoreAccountMenu.jsx'
@@ -392,13 +393,13 @@ const LandingPage = () => {
             <StoreAccountMenu />
             <label className="hidden items-center gap-1.5 sm:flex" aria-label="Choose language">
               <Languages size={17} strokeWidth={1.6} />
-              <select
+              <UiverseSelect
                 value={language}
                 onChange={(event) => setLanguage(event.target.value)}
                 className="max-w-[112px] cursor-pointer appearance-none bg-transparent py-2 pr-1 text-xs outline-none"
               >
                 {languages.map((item) => <option key={item.code} value={item.code}>{item.flag} {item.name}</option>)}
-              </select>
+              </UiverseSelect>
             </label>
             <Link to="/cart" aria-label={`${text.bag}, ${itemCount} items`} className="relative grid size-10 place-items-center">
               <ShoppingCart size={20} strokeWidth={1.6} />
@@ -476,9 +477,9 @@ const LandingPage = () => {
           </nav>
           <div className="mt-7 flex items-center gap-2 border-t border-[#e7e7e7] pt-5">
             <Languages size={18} />
-            <select value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="Choose language" className="w-full bg-transparent py-2 text-sm outline-none">
+            <UiverseSelect value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="Choose language" className="w-full bg-transparent py-2 text-sm outline-none">
               {languages.map((item) => <option key={item.code} value={item.code}>{item.flag} {item.name}</option>)}
-            </select>
+            </UiverseSelect>
           </div>
         </div>
       )}

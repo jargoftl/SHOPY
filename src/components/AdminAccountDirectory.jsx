@@ -1,3 +1,4 @@
+import UiverseSelect from './UiverseSelect.jsx'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUpRight, FolderOpen, Search, Store, Users } from 'lucide-react'
@@ -20,8 +21,8 @@ const AdminAccountDirectory = ({ users, sellers }) => {
     </div>
     <div className="mt-6 flex flex-col gap-3 sm:flex-row">
       <label className="relative flex-1"><span className="sr-only">Search accounts</span><Search size={17} className="absolute left-3 top-3.5 text-[#777777]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, email, ID or store" className="h-11 w-full rounded-lg border border-[#111111] bg-[#111111] pl-10 pr-3 text-sm text-white outline-none focus:border-[#cccccc]" /></label>
-      <label><span className="sr-only">Filter account type</span><select value={role} onChange={(event) => setRole(event.target.value)} className="h-11 w-full rounded-lg border border-[#111111] bg-[#111111] px-3 text-sm sm:w-48"><option value="all">All accounts</option><option value="customer">BUYERS</option><option value="seller">SELLERS</option><option value="admin">Admins</option></select></label>
-      <label><span className="sr-only">Account status filter</span><select aria-label="Account status filter" value={status} onChange={e=>setStatus(e.target.value)} className="h-11 w-full rounded-lg border px-3 text-sm"><option value="active">Active accounts</option><option value="deleted">Deleted accounts</option></select></label>
+      <label><span className="sr-only">Filter account type</span><UiverseSelect value={role} onChange={(event) => setRole(event.target.value)} className="h-11 w-full rounded-lg border border-[#111111] bg-[#111111] px-3 text-sm sm:w-48"><option value="all">All accounts</option><option value="customer">BUYERS</option><option value="seller">SELLERS</option><option value="admin">Admins</option></UiverseSelect></label>
+      <label><span className="sr-only">Account status filter</span><UiverseSelect aria-label="Account status filter" value={status} onChange={e=>setStatus(e.target.value)} className="h-11 w-full rounded-lg border px-3 text-sm"><option value="active">Active accounts</option><option value="deleted">Deleted accounts</option></UiverseSelect></label>
     </div>
     {matching.length ? ['customer', 'seller', 'admin'].map((group) => {
       const members = matching.filter((user) => user.role === group)

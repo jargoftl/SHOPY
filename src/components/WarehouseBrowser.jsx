@@ -1,3 +1,4 @@
+import UiverseSelect from './UiverseSelect.jsx'
 import WarehouseBulkModal from './WarehouseBulkModal.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -68,8 +69,8 @@ export default function WarehouseBrowser({ dark = false, showInventoryCounts = f
   const muted = dark ? 'text-[#a3a3a3]' : 'text-[#555555]'
   return <div className="warehouse-browser mt-6">
     <div className={`grid gap-3 rounded-xl border p-4 sm:grid-cols-3 ${panel}`}>
-      <label className="text-xs font-medium">Browse category<select aria-label="Browse warehouse category" value={parent} onChange={(event) => browse(event.target.value)} className={`mt-2 block min-h-11 w-full rounded-lg border px-3 text-sm ${panel}`}><option value="">All categories</option>{groups.map((name) => <option key={name}>{name}</option>)}</select></label>
-      <label className="text-xs font-medium">Browse subcategory<select aria-label="Browse warehouse subcategory" disabled={!parent || !children.length} value={category.includes(' / ') ? category : ''} onChange={(event) => browse(event.target.value || parent)} className={`mt-2 block min-h-11 w-full rounded-lg border px-3 text-sm disabled:opacity-50 ${panel}`}><option value="">All in this category</option>{children.map((entry) => <option key={entry.category} value={entry.category}>{entry.category.slice(parent.length + 3)}{showInventoryCounts && ` (${entry.count})`}</option>)}</select></label>
+      <label className="text-xs font-medium">Browse category<UiverseSelect aria-label="Browse warehouse category" value={parent} onChange={(event) => browse(event.target.value)} className={`mt-2 block min-h-11 w-full rounded-lg border px-3 text-sm ${panel}`}><option value="">All categories</option>{groups.map((name) => <option key={name}>{name}</option>)}</UiverseSelect></label>
+      <label className="text-xs font-medium">Browse subcategory<UiverseSelect aria-label="Browse warehouse subcategory" disabled={!parent || !children.length} value={category.includes(' / ') ? category : ''} onChange={(event) => browse(event.target.value || parent)} className={`mt-2 block min-h-11 w-full rounded-lg border px-3 text-sm disabled:opacity-50 ${panel}`}><option value="">All in this category</option>{children.map((entry) => <option key={entry.category} value={entry.category}>{entry.category.slice(parent.length + 3)}{showInventoryCounts && ` (${entry.count})`}</option>)}</UiverseSelect></label>
       <label className="text-xs font-medium">Search warehouse<span className={`mt-2 flex min-h-11 items-center gap-2 rounded-lg border px-3 ${panel}`}><Search size={16} /><input aria-label="Search warehouse products" value={search} onChange={(event) => setSearch(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="Product name or category" /></span></label>
     </div>
     <nav aria-label="Warehouse category path" className={`mt-4 flex flex-wrap items-center gap-2 text-xs ${muted}`}><button onClick={() => browse('')} className="underline">All products</button>{category && <><ChevronRight size={12} /><span>{category}</span></>}</nav>

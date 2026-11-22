@@ -1,3 +1,4 @@
+import UiverseSelect from '../components/UiverseSelect.jsx'
 import '../styles/seller-overview.css'
 import { formatOrderReference } from '../lib/orderReference.js'
 import {useSellerLanguage} from '../context/SellerLanguageContext.jsx'
@@ -103,9 +104,9 @@ export default function SellerDashboardPage(){
      {[['visits','Visits'],['sales','Sales']].map(([key,label])=><button key={key} type="button" aria-pressed={heatMetric===key} onClick={()=>setHeatMetric(key)}
       className="seller-heatmap-tab">{t(label)}</button>)}
     </div>
-    <select aria-label={t("Heatmap year")} value={year} onChange={event=>{setHeatYear(Number(event.target.value));setHeatDay('')}} className="seller-overview-select">
+    <UiverseSelect aria-label={t("Heatmap year")} value={year} onChange={event=>{setHeatYear(Number(event.target.value));setHeatDay('')}} className="seller-overview-select">
      {heatYears.map(value=><option key={value}>{value}</option>)}
-    </select>
+    </UiverseSelect>
    </div>
   </div>
   <div className="seller-heatmap-scroll" tabIndex={0} aria-label={t("Monthly heatmap grid")}>

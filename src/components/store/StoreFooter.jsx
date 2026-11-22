@@ -1,3 +1,4 @@
+import UiverseSelect from '../UiverseSelect.jsx'
 import { ArrowRight, Languages, MessageCircle, ShoppingBag } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import SiteName from '../SiteName.jsx'
@@ -47,9 +48,9 @@ const StoreFooter = ({ language, setLanguage, languages, text }) => (
           <label className="flex items-center gap-2">
             <Languages size={16} aria-hidden="true" />
             <span className="sr-only">Choose language</span>
-            <select value={language} onChange={(event) => setLanguage(event.target.value)} className="max-w-40 bg-[#111111] py-1 text-xs text-[#f7f7f7] outline-offset-2">
+            <UiverseSelect value={language} onChange={(event) => setLanguage(event.target.value)} className="max-w-40 bg-[#111111] py-1 text-xs text-[#f7f7f7] outline-offset-2">
               {languages.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
-            </select>
+            </UiverseSelect>
           </label>
         </div>
       </div>

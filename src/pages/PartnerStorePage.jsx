@@ -1,3 +1,4 @@
+import UiverseSelect from '../components/UiverseSelect.jsx'
 import StoreStats from '../components/StoreStats.jsx'
 import StoreDates from '../components/StoreDates.jsx'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
@@ -173,9 +174,9 @@ const PartnerStorePage = () => {
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               {activeTab === 'top' && <p className="text-xs text-[#555555]">{visibleProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'} · top rated</p>}
               {activeTab === 'all' && <label className="flex items-center gap-2 text-xs text-[#666]">Sort
-                <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort store products" className="border border-[#ddd] bg-white px-2 py-2 text-xs text-[#222]">
+                <UiverseSelect value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort store products" className="border border-[#ddd] bg-white px-2 py-2 text-xs text-[#222]">
                   <option value="newest">Newest</option><option value="rating">Top rated</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option>
-                </select>
+                </UiverseSelect>
               </label>}
             </div>
             {visibleProducts.length ? (

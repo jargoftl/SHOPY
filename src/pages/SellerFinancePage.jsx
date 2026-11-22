@@ -1,3 +1,4 @@
+import UiverseSelect from '../components/UiverseSelect.jsx'
 import {ArrowDown, ArrowUp, Circle, Copy, TrendingUp, Wallet, QrCode, X} from 'lucide-react'
 import {transactionActor} from '../lib/transactionLabels.js'
 import {formatTimestamp,timestampMillis} from '../lib/storeDates.js'
@@ -178,12 +179,12 @@ function PaymentHistory({requests}){
    <div className="flex flex-wrap gap-2" role="group" aria-label="Payment history">
     {[['deposit','Deposits'],['withdrawal','Withdrawals']].map(([value,label])=><button key={value} type="button" aria-pressed={kind===value} onClick={()=>setKind(value)} className={`rounded-full px-4 py-2 text-sm font-semibold ${kind===value?'bg-blue-700 text-white':'bg-slate-100 text-slate-700'}`}>{label}</button>)}
    </div>
-   <select aria-label="Filter payment history" value={filter} onChange={event=>setFilter(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+   <UiverseSelect aria-label="Filter payment history" value={filter} onChange={event=>setFilter(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
     <option value="confirmed">Completed</option>
     <option value="pending">Pending</option>
     <option value="rejected">Rejected</option>
     <option value="all">All transactions</option>
-   </select>
+   </UiverseSelect>
   </div>
   <ul className="mt-3 divide-y divide-slate-200">
    {shown.map(request=>{
@@ -304,9 +305,9 @@ export default function SellerFinancePage({view='wallet'}){
  </>}
  {view==='record'&&<section className="mt-6 max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-label="Wallet transactions">
   <div className="flex justify-end border-b border-slate-100 px-4 py-3">
-   <select aria-label="Filter transactions" value={historyFilter} onChange={event=>setHistoryFilter(event.target.value)}>
+   <UiverseSelect aria-label="Filter transactions" value={historyFilter} onChange={event=>setHistoryFilter(event.target.value)}>
     <option value="all">All transactions</option><option value="credit">Credits</option><option value="debit">Debits</option>
-   </select>
+   </UiverseSelect>
   </div>
   {records.length ? <ul className="divide-y divide-slate-100">
    {records.map(record=><li key={record.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-4 sm:px-5">
@@ -320,5 +321,5 @@ export default function SellerFinancePage({view='wallet'}){
   </ul> : <p className="px-4 py-8 text-center text-sm text-slate-600">{data?'No transactions in this view.':error?'Transactions are unavailable.':'Loading transactions…'}</p>}
  </section>}
  {kind==='deposit'&&<DepositDialog key={depositId??'new-deposit'} wallets={depositWallets} request={activeDeposit} requestId={depositId} pendingDeposits={pendingDeposits} onSelectDeposit={setDepositId} hasPin={data?.hasTransactionPin} onSetPin={()=>setPinSettingsOpen(true)} onClose={closePayment} onUploaded={refresh}/>}
- {kind==='withdrawal'&&<div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-5" role="dialog" aria-modal="true" aria-label="Withdraw funds"><form onSubmit={submit} className={`${panel} w-full max-w-lg`}><h2 className="font-serif text-3xl capitalize">Withdraw funds</h2><p className="mt-3 text-xs leading-6 text-[#555555]">Enter the coin, network, and wallet address where you want the admin to send your withdrawal.</p><label className="mt-4 block text-sm">Amount (USD)<input className={input} type="number" name="amount" min="0.01" max="1000000" step="0.01" required/></label><label className="mt-4 block text-sm">Coin<select name="coin" className={input} value={withdrawalCoin} onChange={event=>setWithdrawalCoin(event.target.value)}>{coins.map(c=><option key={c}>{c}</option>)}</select></label><label className="mt-4 block text-sm">Receiving network<input key={withdrawalCoin} name="network" list="withdrawal-networks" required maxLength={100} className={input}/></label><datalist id="withdrawal-networks">{[...new Set([...coinNetworks[withdrawalCoin],...depositWallets.filter(wallet=>wallet.coin===withdrawalCoin).map(wallet=>wallet.network)])].map(network=><option key={network} value={network}/>)}</datalist><label className="mt-4 block text-sm">Your receiving wallet address<textarea name="address" required maxLength={500} rows={2} spellCheck={false} autoCapitalize="none" placeholder="Paste wallet address" className={`${input} resize-y break-all font-mono`}/></label><label className="mt-4 block text-sm">Four-digit transaction PIN<PasswordInput name="transactionPin"  inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" required className={input}/></label><p className="mt-2 text-xs"><button type="button" onClick={()=>{setKind('');setPinSettingsOpen(true)}} className="underline">Set or reset your PIN in wallet security settings</button></p>{error&&<p className="mt-3 text-sm text-red-700">{error}</p>}<div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={closePayment} className="px-4 text-sm">Cancel</button><button disabled={busy} className={button}>{busy?'Submitting…':'Submit request'}</button></div></form></div>}</SellerWorkspace>
+ {kind==='withdrawal'&&<div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-5" role="dialog" aria-modal="true" aria-label="Withdraw funds"><form onSubmit={submit} className={`${panel} w-full max-w-lg`}><h2 className="font-serif text-3xl capitalize">Withdraw funds</h2><p className="mt-3 text-xs leading-6 text-[#555555]">Enter the coin, network, and wallet address where you want the admin to send your withdrawal.</p><label className="mt-4 block text-sm">Amount (USD)<input className={input} type="number" name="amount" min="0.01" max="1000000" step="0.01" required/></label><label className="mt-4 block text-sm">Coin<UiverseSelect name="coin" className={input} value={withdrawalCoin} onChange={event=>setWithdrawalCoin(event.target.value)}>{coins.map(c=><option key={c}>{c}</option>)}</UiverseSelect></label><label className="mt-4 block text-sm">Receiving network<input key={withdrawalCoin} name="network" list="withdrawal-networks" required maxLength={100} className={input}/></label><datalist id="withdrawal-networks">{[...new Set([...coinNetworks[withdrawalCoin],...depositWallets.filter(wallet=>wallet.coin===withdrawalCoin).map(wallet=>wallet.network)])].map(network=><option key={network} value={network}/>)}</datalist><label className="mt-4 block text-sm">Your receiving wallet address<textarea name="address" required maxLength={500} rows={2} spellCheck={false} autoCapitalize="none" placeholder="Paste wallet address" className={`${input} resize-y break-all font-mono`}/></label><label className="mt-4 block text-sm">Four-digit transaction PIN<PasswordInput name="transactionPin"  inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" required className={input}/></label><p className="mt-2 text-xs"><button type="button" onClick={()=>{setKind('');setPinSettingsOpen(true)}} className="underline">Set or reset your PIN in wallet security settings</button></p>{error&&<p className="mt-3 text-sm text-red-700">{error}</p>}<div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={closePayment} className="px-4 text-sm">Cancel</button><button disabled={busy} className={button}>{busy?'Submitting…':'Submit request'}</button></div></form></div>}</SellerWorkspace>
 }
