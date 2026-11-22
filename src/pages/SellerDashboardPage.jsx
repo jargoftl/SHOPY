@@ -104,26 +104,26 @@ export default function SellerDashboardPage(){
   <div className="flex flex-wrap items-start justify-between gap-3">
    <div><h2>{t("Store activity heatmap")}</h2><p className="mt-1 text-xs text-slate-600">{t(days===1?"China time":"UTC")}</p></div>
    <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("Heatmap period")}>
-    {[[1,'Today'],[7,'Last 7 days'],[30,'Last 30 days']].map(([n,label])=><button key={n} type="button" aria-pressed={days===n} onClick={()=>{setDays(n);setHeatDay('')}} className={`min-h-9 rounded-lg px-2.5 text-xs font-semibold ${days===n?'bg-blue-700 text-white':'bg-slate-100 text-slate-700'}`}>{t(label)}</button>)}
+    {[[1,'Today'],[7,'Last 7 days'],[30,'Last 30 days']].map(([n,label])=><button key={n} type="button" aria-pressed={days===n} onClick={()=>{setDays(n);setHeatDay('')}} className={`min-h-9 rounded-lg px-2.5 text-xs font-semibold ${days===n?'bg-orange-700 text-white':'bg-slate-100 text-slate-700'}`}>{t(label)}</button>)}
    </div>
   </div>
   <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto]">
    <div className="min-w-0 space-y-3">
-    {[['sales','Sales',maxSales,'rgba(37,99,235,'],['visits','Visits',maxVisits,'rgba(13,148,136,']].map(([key,label,max,color])=><div key={key} className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2">
+    {[['sales','Sales',maxSales,'rgba(234,88,12,'],['visits','Visits',maxVisits,'rgba(180,83,9,']].map(([key,label,max,color])=><div key={key} className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-2">
      <p className="text-xs font-semibold text-slate-700">{t(label)}</p>
      <div className={`grid gap-1 ${days===30?'grid-cols-10':days===7?'grid-cols-7':'grid-cols-1'}`}>
       {series.map(row=>{
        const value=key==='sales'?money(row.sales):number(row.visits)
        const description=`${row.day} · ${t(label)} ${value}`
        return <button key={row.day} type="button" aria-label={description} title={description} onClick={()=>setHeatDay(row.day)} aria-pressed={activeHeatDay?.day===row.day}
-        className="min-h-6 rounded border border-slate-200 aria-pressed:ring-2 aria-pressed:ring-slate-800 focus-visible:outline-2 focus-visible:outline-blue-700"
-        style={{backgroundColor:row[key]>0?`${color}${0.18+0.82*row[key]/max})`:'#f1f5f9'}}/>
+        className="min-h-6 rounded border border-slate-200 aria-pressed:ring-2 aria-pressed:ring-slate-800 focus-visible:outline-2 focus-visible:outline-orange-700"
+        style={{backgroundColor:row[key]>0?`${color}${0.18+0.82*row[key]/max})`:'#fff7ed'}}/>
       })}
      </div>
     </div>)}
     {activeHeatDay&&<p aria-live="polite" className="text-xs text-slate-600">{activeHeatDay.day} · {t('Sales')} {money(activeHeatDay.sales)} · {t('Visits')} {number(activeHeatDay.visits)}</p>}
    </div>
-   <div className="rounded-xl bg-indigo-50 px-4 py-3 text-indigo-950">
+   <div className="rounded-xl bg-orange-50 px-4 py-3 text-orange-950">
     <p className="text-xs font-semibold">{t("Store Followers")}</p>
     <p className="mt-1 text-xl font-bold tabular-nums">{number(data?.overview.followers)}</p>
    </div>
