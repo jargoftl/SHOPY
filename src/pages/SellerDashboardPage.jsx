@@ -105,7 +105,6 @@ export default function SellerDashboardPage(){
  <div className="seller-overview-statistics">
   {groups.map(([heading,figures])=><section key={heading} className="portal-card min-w-0">
    <h2>{t(heading)}</h2>
-   {heading==='Today’s Statistics'&&<p className="mt-1 text-xs text-slate-600">{t("Resets at midnight China time")}</p>}
    <dl className="seller-overview-stat-values">
     {figures.map(([label,value])=><div key={label} className="min-w-0">
      <dt className="text-xs text-slate-600">{t(label)}</dt>
