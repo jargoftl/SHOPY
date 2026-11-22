@@ -6,7 +6,7 @@ import HistoricalSalesHistory from './HistoricalSalesHistory.jsx'
 const path='/api/admin/seller-sales-history'
 const field='mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm'
 
-function SaleEntry({sellerId}){
+export function SaleEntry({sellerId}){
  const [quantity,setQuantity]=useState('1')
  const [price,setPrice]=useState('')
  const [busy,setBusy]=useState(false)

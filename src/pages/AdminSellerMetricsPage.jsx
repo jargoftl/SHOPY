@@ -29,7 +29,7 @@ const emptyForm = Object.fromEntries(metricFields.map(({ key }) => [key, '']))
 const formatTrack = (values) => Array.isArray(values) ? values.join(', ') : ''
 const parseTrack = (value) => value.split(',').map((item) => item.trim()).filter(Boolean).map(Number)
 
-const AdminSellerMetricsPage = () => {
+const AdminSellerMetricsPage = ({sellerId} = {}) => {
   const navigate = useNavigate()
   const location = useLocation()
   const [admin, setAdmin] = useState(null)
@@ -64,8 +64,8 @@ const AdminSellerMetricsPage = () => {
         setAdmin(user)
         setSellers(sellerData.sellers)
         setProducts(productData.products)
-        const requestedId = new URLSearchParams(location.search).get('seller')
-        setSelectedSellerId(String(sellerData.sellers.find((seller) => String(seller.id) === requestedId)?.id || sellerData.sellers[0]?.id || ''))
+        const requestedId = sellerId ? String(sellerId) : new URLSearchParams(location.search).get('seller')
+        setSelectedSellerId(String(sellerData.sellers.find((seller) => String(seller.id) === requestedId)?.id || (!sellerId ? sellerData.sellers[0]?.id : '') || ''))
         setMessage('')
         setIsLoading(false)
       })
@@ -79,7 +79,7 @@ const AdminSellerMetricsPage = () => {
         setIsLoading(false)
       })
     return () => { isCurrent = false }
-  }, [navigate, location.search])
+  }, [navigate, location.search, sellerId])
 
   useEffect(() => {
     if (!selectedSellerId) return undefined
@@ -174,22 +174,22 @@ const AdminSellerMetricsPage = () => {
   if (!admin) return <main className="mx-auto max-w-xl px-5 py-20 text-center"><h1 className="text-2xl font-semibold">Admin access required</h1><p className="mt-3 text-sm text-[#666]">{message}</p><Link to="/login" className="mt-5 inline-block underline">Admin login</Link></main>
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
-      <header className="border-b border-slate-300 bg-white">
+    <div className={sellerId?"rounded-xl bg-slate-50 text-slate-950":"min-h-screen bg-slate-50 text-slate-950"}>
+      {!sellerId&&<header className="border-b border-slate-300 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 md:px-10">
           <div><Link to="/admin" className="text-2xl font-black tracking-[-0.07em]"><SiteName logo /></Link><p className="mt-1 text-xs text-slate-600">Admin seller controls</p></div>
           <nav className="flex items-center gap-4 text-xs"><Link to="/admin" className="underline underline-offset-4">Admin dashboard</Link><Link to="/seller/register" className="underline underline-offset-4">Create seller</Link><button type="button" onClick={logOut} className="border border-slate-300 px-3 py-2">Log out</button></nav>
         </div>
-      </header>
+      </header>}
 
       <main className="mx-auto max-w-6xl space-y-6 px-5 py-8 md:px-10 md:py-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Seller accounts</p><h1 className="mt-2 text-3xl font-semibold">Dashboard metrics</h1><p className="mt-2 max-w-2xl text-sm text-slate-600">Set the figures and activity history shown in each seller’s dashboard.</p></div>
-          <label className="text-xs text-slate-700">Seller
+          {!sellerId&&<label className="text-xs text-slate-700">Seller
             <select value={selectedSellerId} disabled={isSaving} onChange={(event) => setSelectedSellerId(event.target.value)} className="mt-2 block h-11 min-w-64 border border-slate-300 bg-white px-3 text-sm text-slate-950">
               <option value="">Select seller</option>{sellers.map((seller) => <option key={seller.id} value={seller.id}>{seller.storeName || seller.fullName} · #{seller.publicId} · {seller.email}</option>)}
             </select>
-          </label>
+          </label>}
         </div>
 
         {message && <p role="status" className="border border-slate-300 bg-white px-4 py-3 text-sm">{message}</p>}

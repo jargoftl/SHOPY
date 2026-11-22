@@ -524,6 +524,7 @@ ALTER TABLE seller_wallet_requests ADD COLUMN IF NOT EXISTS transaction_ref TEXT
 ALTER TABLE seller_wallet_requests ADD COLUMN IF NOT EXISTS resolved_at TEXT;
 ALTER TABLE seller_wallet_requests ADD COLUMN IF NOT EXISTS archived_at TEXT;
 ALTER TABLE seller_wallet_requests ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(id);
+ALTER TABLE seller_fund_records ADD COLUMN IF NOT EXISTS effective_at TIMESTAMPTZ;
 ALTER TABLE seller_fund_records ADD COLUMN IF NOT EXISTS transaction_ref TEXT NOT NULL DEFAULT shop.new_wallet_transaction_number();
 CREATE INDEX IF NOT EXISTS seller_fund_history ON seller_fund_records(seller_id,id DESC);
 CREATE TABLE IF NOT EXISTS seller_sale_releases (

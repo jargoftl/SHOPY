@@ -49,14 +49,14 @@ export default function SellerDashboardPage(){
  const number=value=>value==null?'—':Number(value).toLocaleString()
  const dollars=value=>value==null?'—':money(Math.round(value*100))
  const totalSales=metrics.totalSalesAmount??(data&&(data.overview.salesCents+(data.historicalSales?.salesCents||0))/100)
- const todaySales=dailyMetrics.todaySales??(todayData?(todayData.salesCents??0)/100:null)
+ const todaySales=dailyMetrics.todaySales??(todayData?((todayData.salesCents??0)+(data.historicalSales?.todaySalesCents??0))/100:null)
  const profit=(override,sales,fundingCents,rate)=>override!=null
   ? dollars(override)
   : sales==null||fundingCents==null?'—':money(Math.round((Math.round(sales*100)+Number(fundingCents))*rate/100))
  const totals=[
   ['Total Products',number(metrics.totalProducts??data?.overview.products),'bg-[#ff8099] text-slate-950'],
   ['Total Sales Amount',dollars(totalSales),'bg-[#72c1f8] text-slate-950'],
-  ['Total Orders',number(metrics.totalOrders??data?.overview.paidOrders),'bg-[#758df5] text-slate-950'],
+  ['Total Orders',number(metrics.totalOrders??(data?data.overview.paidOrders+(data.historicalSales?.orders??0):null)),'bg-[#758df5] text-slate-950'],
   ['Total Profit',profit(metrics.totalProfit,totalSales,data?.funding?.total_cents,20),'bg-[#58d2c9] text-slate-950'],
  ]
  const bestSellers=metrics.topProducts?.length
@@ -71,6 +71,7 @@ export default function SellerDashboardPage(){
    ['Overall Rating',number(metrics.overallRating??(data?.overallRating==null?null:Number(data.overallRating).toFixed(2)))],
    ['Seller Credit Score',number(creditScore??metrics.sellerCreditScore??(data?5:null))],
    ['Store Followers',number(data?.overview.followers)],
+   ['Total items sold',number(data?(data.overview.unitsSold??0)+(data.historicalSales?.units??0):null)],
   ]],
   ['Visitor Statistics',[
    ['Today’s Visitors',number(dailyMetrics.todayVisitors??todayData?.visits)],
@@ -79,7 +80,7 @@ export default function SellerDashboardPage(){
    ['Last 30 days',number(metrics.visitorsLast30Days??(data?visits(30):null))],
   ]],
   ['Today’s Statistics',[
-   ['Today’s Orders',number(dailyMetrics.todayOrders??todayData?.orders)],
+   ['Today’s Orders',number(dailyMetrics.todayOrders??(todayData?todayData.orders+(data.historicalSales?.todayOrders??0):null))],
    ['Today’s Sales',dollars(todaySales)],
    ['Estimated Profit',profit(dailyMetrics.estimatedProfit,todaySales,data?.funding?.today_cents,15)],
   ]],

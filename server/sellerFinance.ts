@@ -60,7 +60,7 @@ type Wallet = { balance_cents: number, reserved_cents: number }
 type WalletRequest = { id: number, public_id: string, seller_id: number, kind: string, status: string, amount_cents: number, coin: string, network: string, address: string, usd_rate: string, coin_amount: string, request_key: string }
 
 // Called only within the caller's serialized database transaction.
-export async function postSellerFunds(db: Database, seller: number, kind: string, reference: string, delta: number, reserve: number, actor: number, note='') {
+export async function postSellerFunds(db: Database, seller: number, kind: string, reference: string, delta: number, reserve: number, actor: number, note='', effectiveAt:string|null=null) {
  if (await db.prepare('SELECT id FROM seller_fund_records WHERE kind=? AND reference=?').get(kind,reference)) return
  await db.prepare('INSERT INTO seller_wallets(seller_id) VALUES(?) ON CONFLICT DO NOTHING').run(seller)
  const before=await db.prepare('SELECT * FROM seller_wallets WHERE seller_id=?').get(seller) as Wallet
@@ -68,7 +68,7 @@ export async function postSellerFunds(db: Database, seller: number, kind: string
  if (!Number.isSafeInteger(balance)||!Number.isSafeInteger(reserved)||reserved<0) fail('Invalid wallet movement.')
  if (reserve>0 && before.balance_cents-before.reserved_cents<reserve) fail('Insufficient available funds.')
  await db.prepare('UPDATE seller_wallets SET balance_cents=?,reserved_cents=? WHERE seller_id=?').run(balance,reserved,seller)
- await db.prepare('INSERT INTO seller_fund_records(seller_id,kind,reference,delta_cents,before_cents,after_cents,reserved_before,reserved_after,actor_id,note) VALUES(?,?,?,?,?,?,?,?,?,?)').run(seller,kind,reference,delta,before.balance_cents,balance,before.reserved_cents,reserved,actor,note)
+ await db.prepare('INSERT INTO seller_fund_records(seller_id,kind,reference,delta_cents,before_cents,after_cents,reserved_before,reserved_after,actor_id,note,effective_at) VALUES(?,?,?,?,?,?,?,?,?,?,?::timestamptz)').run(seller,kind,reference,delta,before.balance_cents,balance,before.reserved_cents,reserved,actor,note,effectiveAt)
 }
 export async function reverseSellerRelease(db: Database, order: number, seller: number, actor: number) {
  const release=await db.prepare("SELECT amount_cents,withdrawal_request_id FROM seller_sale_releases WHERE order_id=? AND seller_id=? AND status='released'").get(order,seller) as {amount_cents:number,withdrawal_request_id:number|null}|undefined
@@ -134,25 +134,27 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  const overview=await db.prepare(`SELECT (SELECT COUNT(*)::integer FROM products WHERE seller_id=?) AS products,
  COALESCE((SELECT follower_count FROM seller_profiles WHERE user_id=?),0) AS followers,
  COALESCE((SELECT visitor_count FROM seller_profiles WHERE user_id=?),0) AS visits,
+ (SELECT COALESCE(SUM(i.quantity),0)::bigint FROM purchase_items i JOIN purchase_orders o ON o.id=i.order_id WHERE i.seller_id=? AND o.status='paid') AS unitsSold,
  (SELECT COUNT(DISTINCT o.id)::integer FROM purchase_orders o JOIN purchase_items i ON i.order_id=o.id WHERE i.seller_id=? AND o.status='paid') AS paidOrders,
  (SELECT COALESCE(SUM(i.price_cents*i.quantity),0)::bigint FROM purchase_items i JOIN purchase_orders o ON o.id=i.order_id WHERE i.seller_id=? AND o.status='paid') AS salesCents,
- (SELECT COALESCE(SUM(amount_cents),0)::bigint FROM seller_sale_releases WHERE seller_id=? AND status='released') AS releasedCents`).get(seller,seller,seller,seller,seller,seller)
+ (SELECT COALESCE(SUM(amount_cents),0)::bigint FROM seller_sale_releases WHERE seller_id=? AND status='released') AS releasedCents`).get(seller,seller,seller,seller,seller,seller,seller)
  const chinaDay=new Date(Date.now()+8*60*60*1000).toISOString().slice(0,10)
+ const historicalSales=await historicalSalesSummary(db,seller,chinaDay)
  const chinaToday=await db.prepare(`SELECT COUNT(DISTINCT o.id)::integer AS orders,
   COALESCE(SUM(i.price_cents*i.quantity) FILTER (WHERE o.status='paid'),0)::bigint AS salesCents,
   COALESCE((SELECT visits FROM store_china_daily_visits WHERE seller_id=? AND day=?),0)::bigint AS visits
   FROM purchase_orders o JOIN purchase_items i ON i.order_id=o.id
   WHERE i.seller_id=? AND (o.created_at::timestamptz AT TIME ZONE 'Asia/Shanghai')::date=?::date`).get(seller,chinaDay,seller,chinaDay)
  const funding=await db.prepare(`SELECT COALESCE(SUM(f.delta_cents),0)::bigint AS total_cents,
-  COALESCE(SUM(f.delta_cents) FILTER (WHERE (COALESCE(q.resolved_at,f.created_at)::timestamptz AT TIME ZONE 'Asia/Shanghai')::date=?::date),0)::bigint AS today_cents
+  COALESCE(SUM(f.delta_cents) FILTER (WHERE (COALESCE(f.effective_at,q.resolved_at::timestamptz,f.created_at::timestamptz) AT TIME ZONE 'Asia/Shanghai')::date=?::date),0)::bigint AS today_cents
   FROM seller_fund_records f LEFT JOIN seller_wallet_requests q
    ON f.kind='deposit' AND q.seller_id=f.seller_id AND q.id::text=f.reference
-  WHERE f.seller_id=? AND f.kind IN ('deposit','admin_funding') AND f.delta_cents>0`)
+  WHERE f.seller_id=? AND f.kind IN ('deposit','admin_funding','historical_credit') AND f.delta_cents>0`)
   .get(chinaDay,seller)
  const dashboard=await db.prepare('SELECT metrics_json FROM seller_dashboard_metrics WHERE user_id=?').get(seller) as {metrics_json:string}|undefined
  const rating=await db.prepare(`SELECT reviews.average_rating AS rating FROM seller_profiles ${publicStoreReviewsSql} WHERE seller_profiles.user_id=?`).get(seller) as {rating:number|null}|undefined
  const display=await db.prepare('SELECT values_json,updated_at FROM seller_stat_adjustments WHERE seller_id=?').get(seller) as {values_json:string,updated_at:string}|undefined
- return {chinaDay,chinaToday,funding,dashboardMetrics:dashboard?JSON.parse(dashboard.metrics_json):{},overallRating:rating?.rating??null,dates:await storeDates(db,seller),historicalSales:await historicalSalesSummary(db,seller),recentHistoricalSales:await historicalSaleRows(db,seller,3),today:new Date().toISOString().slice(0,10),overview,daily,orders,displayStats:display?JSON.parse(display.values_json):{},displayStatsUpdatedAt:display?.updated_at||null,activity:await db.prepare('SELECT * FROM seller_store_activity WHERE seller_id=? ORDER BY id DESC LIMIT 100').all(seller),visits:await db.prepare('SELECT day,visits FROM store_daily_visits WHERE seller_id=? ORDER BY day DESC').all(seller),
+ return {chinaDay,chinaToday,funding,dashboardMetrics:dashboard?JSON.parse(dashboard.metrics_json):{},overallRating:rating?.rating??null,dates:await storeDates(db,seller),historicalSales,recentHistoricalSales:await historicalSaleRows(db,seller,3),today:new Date().toISOString().slice(0,10),overview,daily,orders,displayStats:display?JSON.parse(display.values_json):{},displayStatsUpdatedAt:display?.updated_at||null,activity:await db.prepare('SELECT * FROM seller_store_activity WHERE seller_id=? ORDER BY id DESC LIMIT 100').all(seller),visits:await db.prepare('SELECT day,visits FROM store_daily_visits WHERE seller_id=? ORDER BY day DESC').all(seller),
  products:await db.prepare(`SELECT i.product_id AS id,MAX(i.name) AS name,MAX(i.image_url) AS imageUrl,SUM(CASE WHEN o.status='paid' THEN i.quantity ELSE 0 END)::integer AS units,
  SUM(CASE WHEN o.status='paid' THEN i.price_cents*i.quantity ELSE 0 END)::bigint AS salesCents FROM purchase_items i JOIN purchase_orders o ON o.id=i.order_id WHERE i.seller_id=? AND o.status='paid' GROUP BY i.product_id ORDER BY "salesCents" DESC LIMIT 10`).all(seller)}
  }
@@ -182,7 +184,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  app.get('/api/seller/finance',auth,role('seller','admin'),protectedRoute(async(req,res)=>{
  const wallet=await db.prepare('SELECT balance_cents AS balanceCents,reserved_cents AS reservedCents FROM seller_wallets WHERE seller_id=?').get(req.user!.id)||{balanceCents:0,reservedCents:0}
  const revenue=await db.prepare("SELECT COALESCE(SUM(amount_cents),0)::bigint AS cents FROM seller_sale_releases WHERE seller_id=? AND status='released'").get(req.user!.id) as {cents:number}
- res.set('Cache-Control','no-store').json({wallet,accumulatedRevenueCents:revenue.cents,depositWallets:(await configuredWallets()).map(({coin,network})=>({coin,network})),sales:(await sales(req.user!.id)).map(userFinanceEntry),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:(await requests(req.user!.id)).map(userFinanceEntry),records:(await db.prepare("SELECT f.*,COALESCE(q.transaction_ref,f.transaction_ref) AS displayReference,q.resolved_at AS resolvedAt,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN seller_wallet_requests q ON f.kind IN ('deposit','withdrawal') AND q.seller_id=f.seller_id AND q.id::text=f.reference LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? AND q.archived_at IS NULL ORDER BY COALESCE(q.resolved_at,f.created_at)::timestamptz DESC,f.id DESC LIMIT 1000").all(req.user!.id)).map(userFinanceEntry)})
+ res.set('Cache-Control','no-store').json({wallet,accumulatedRevenueCents:revenue.cents,depositWallets:(await configuredWallets()).map(({coin,network})=>({coin,network})),sales:(await sales(req.user!.id)).map(userFinanceEntry),hasTransactionPin:Boolean(await db.prepare('SELECT user_id FROM transaction_security WHERE user_id=?').get(req.user!.id)),requests:(await requests(req.user!.id)).map(userFinanceEntry),records:(await db.prepare("SELECT f.*,COALESCE(q.transaction_ref,f.transaction_ref) AS displayReference,q.resolved_at AS resolvedAt,u.full_name AS actorName,COALESCE(r.confirmed_role,u.role) AS actorRole FROM seller_fund_records f LEFT JOIN seller_wallet_requests q ON f.kind IN ('deposit','withdrawal') AND q.seller_id=f.seller_id AND q.id::text=f.reference LEFT JOIN users u ON u.id=f.actor_id LEFT JOIN seller_sale_releases r ON f.kind='sale_release' AND f.reference=r.order_id || ':' || r.seller_id WHERE f.seller_id=? AND q.archived_at IS NULL ORDER BY COALESCE(f.effective_at,q.resolved_at::timestamptz,f.created_at::timestamptz) DESC,f.id DESC LIMIT 1000").all(req.user!.id)).map(userFinanceEntry)})
  }))
  app.post('/api/seller/finance/requests',auth,role('seller'),rateLimit({windowMs:15*60*1000,limit:30,standardHeaders:'draft-8',legacyHeaders:false,message:{error:'Too many wallet attempts. Please try again later.'}}),protectedRoute(async(req,res)=>{
  const {kind,coin,amountCents,requestKey}=req.body||{}

@@ -6,10 +6,13 @@ const pageSize=25
 const inputText=(value:unknown)=>typeof value==='string'?value.trim():''
 const recordFields='id,sold_on::text AS soldOn,item_name AS itemName,item_type AS itemType,quantity,unit_price_cents AS unitPriceCents,order_reference AS orderReference,(quantity*unit_price_cents) AS totalCents'
 
-export async function historicalSalesSummary(db:Database,seller:number){
+export async function historicalSalesSummary(db:Database,seller:number,today?:string){
  return db.prepare(`SELECT COUNT(*) AS count,COALESCE(SUM(quantity),0)::bigint AS units,
-  COALESCE(SUM(quantity*unit_price_cents),0)::bigint AS salesCents
-  FROM seller_historical_sales WHERE seller_id=?`).get(seller) as Promise<{count:number,units:number,salesCents:number}>
+  COUNT(DISTINCT COALESCE(NULLIF(order_reference,''),'row:'||id::text))::integer AS orders,
+  COALESCE(SUM(quantity*unit_price_cents),0)::bigint AS salesCents,
+  COUNT(DISTINCT COALESCE(NULLIF(order_reference,''),'row:'||id::text)) FILTER (WHERE sold_on=?::date)::integer AS todayOrders,
+  COALESCE(SUM(quantity*unit_price_cents) FILTER (WHERE sold_on=?::date),0)::bigint AS todaySalesCents
+  FROM seller_historical_sales WHERE seller_id=?`).get(today??null,today??null,seller) as Promise<{count:number,units:number,salesCents:number,orders:number,todayOrders:number,todaySalesCents:number}>
 }
 
 export function historicalSaleRows(db:Database,seller:number,limit=pageSize,offset=0){
@@ -49,7 +52,7 @@ export function registerHistoricalSales(app:Express,db:Database,auth:RequestHand
   if(!Number.isSafeInteger(seller)||seller<1)return res.status(404).json({error:'Seller not found.'})
   const {soldOn,quantity,unitPriceCents,requestKey}=req.body||{}
   const itemName=inputText(req.body?.itemName),itemType=inputText(req.body?.itemType),orderReference=inputText(req.body?.orderReference)
-  const today=new Date(Date.now()+3600000).toISOString().slice(0,10)
+  const today=new Date(Date.now()+28800000).toISOString().slice(0,10)
   if(!validEstablishedDate(soldOn)||soldOn>today||!itemName||itemName.length>200||!itemType||itemType.length>100||orderReference.length>100||
    !Number.isSafeInteger(quantity)||quantity<1||quantity>1000000||!Number.isSafeInteger(unitPriceCents)||unitPriceCents<0||
    quantity*unitPriceCents>100000000||typeof requestKey!=='string'||!/^[-a-f0-9]{36}$/i.test(requestKey)){

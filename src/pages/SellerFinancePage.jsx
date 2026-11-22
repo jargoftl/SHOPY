@@ -155,7 +155,7 @@ function DepositDialog({wallets,request,requestId,pendingDeposits,onSelectDeposi
 }
 
 const paymentHistoryTime=request=>request.resolved_at||(['confirmed','rejected'].includes(request.status)?request.updated_at:request.created_at)
-const ledgerHistoryTime=record=>record.resolvedAt||record.created_at
+const ledgerHistoryTime=record=>record.effective_at||record.resolvedAt||record.created_at
 const compareHistory=(getTime)=>(first,second)=>{
  const a=timestampMillis(getTime(first)),b=timestampMillis(getTime(second))
  if(a===b)return second.id-first.id
@@ -267,7 +267,14 @@ export default function SellerFinancePage({view='wallet'}){
   <div className="mt-4 overflow-hidden rounded-2xl bg-blue-950">
    <img src="/seller-wallet-banner.webp" alt="" width="1500" height="500" className="h-28 w-full object-cover object-center sm:h-40"/>
   </div>
-  <PaymentHistory requests={data?.requests||[]}/>
+  <PaymentHistory requests={[
+   ...(data?.requests||[]),
+   ...(data?.records||[]).filter(record=>['historical_credit','historical_withdrawal'].includes(record.kind)).map(record=>({
+    id:`ledger-${record.id}`,kind:record.kind==='historical_credit'?'deposit':'withdrawal',
+    status:'confirmed',amount_cents:Math.abs(record.delta_cents),transaction_ref:record.displayReference||record.transaction_ref,
+    resolved_at:ledgerHistoryTime(record),
+   })),
+  ]}/>
  <Link className="mt-5 inline-block text-sm text-blue-700 underline" to="/seller/fund-record">View transaction history</Link><SaleConfirmations sales={data?.sales||[]} onConfirmed={refresh}/><section className={`${panel} mt-6`}><h2 className="font-semibold">Confirmed sale history</h2>{data?.sales.filter(s=>s.releaseStatus).slice(0,20).map(s=><div key={s.orderId} className="mt-4 flex flex-wrap justify-between gap-3 border-t pt-4 text-sm"><div><strong>Order #{s.orderNumber}</strong><p className="mt-1 text-xs text-gray-500">Confirmed by {transactionActor(s.confirmedRole)} · {s.confirmedAt}</p></div><span>{money(s.amountCents)} · {s.releaseStatus}</span></div>)}{data&&!data.sales.some(s=>s.releaseStatus)&&<p className="mt-4 text-sm text-gray-500">Confirmed sales and their credited amounts will appear here.</p>}</section><button type="button" className="mt-6 min-h-11 text-sm font-semibold underline" onClick={()=>setPinSettingsOpen(true)}>Set or reset transaction PIN</button><TransactionPinModal open={Boolean(pinSettingsOpen)} onClose={()=>setPinSettingsOpen(false)} onSaved={async()=>{setError('');await refresh()}}/></>}
  {view==='statement'&&<>
   <div className="mt-6 flex flex-wrap gap-2" role="group" aria-label="Statement period">
