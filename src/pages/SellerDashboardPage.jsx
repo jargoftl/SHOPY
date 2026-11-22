@@ -1,3 +1,4 @@
+import '../styles/seller-overview.css'
 import { formatOrderReference } from '../lib/orderReference.js'
 import {useSellerLanguage} from '../context/SellerLanguageContext.jsx'
 import {useEffect,useMemo,useState} from 'react'
@@ -54,10 +55,10 @@ export default function SellerDashboardPage(){
   ? dollars(override)
   : sales==null||fundingCents==null?'—':money(Math.round((Math.round(sales*100)+Number(fundingCents))*rate/100))
  const totals=[
-  ['Total Products',number(metrics.totalProducts??data?.overview.products),'bg-[#ff8099] text-slate-950'],
-  ['Total Sales Amount',dollars(totalSales),'bg-[#72c1f8] text-slate-950'],
-  ['Total Orders',number(metrics.totalOrders??(data?data.overview.paidOrders+(data.historicalSales?.orders??0):null)),'bg-[#758df5] text-slate-950'],
-  ['Total Profit',profit(metrics.totalProfit,totalSales,data?.funding?.total_cents,20),'bg-[#58d2c9] text-slate-950'],
+  ['Total Products',number(metrics.totalProducts??data?.overview.products),''],
+  ['Total Sales Amount',dollars(totalSales),'seller-overview-hero'],
+  ['Total Orders',number(metrics.totalOrders??(data?data.overview.paidOrders+(data.historicalSales?.orders??0):null)),''],
+  ['Total Profit',profit(metrics.totalProfit,totalSales,data?.funding?.total_cents,20),''],
  ]
  const bestSellers=metrics.topProducts?.length
   ? metrics.topProducts.flatMap(({productId,salesVolume})=>{
@@ -85,20 +86,27 @@ export default function SellerDashboardPage(){
    ['Estimated Profit',profit(dailyMetrics.estimatedProfit,todaySales,data?.funding?.today_cents,15)],
   ]],
  ]
- return <SellerWorkspace user={user}><h1 className="portal-title">{t("Store overview")}</h1>{error&&<p role="alert" className="portal-error">{error}</p>}
- <section className="portal-card" aria-label={t('Dashboard totals')}>
-  <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-   {totals.map(([label,value,color])=><div key={label} className={`min-w-0 rounded-xl p-3 sm:p-5 ${color}`}>
+ return <SellerWorkspace user={user} overview>
+ <div className="seller-overview-heading">
+  <h1 className="portal-title">{t("Store overview")}</h1>
+  <div className="seller-overview-actions">
+   <Link to="/seller/orders"><Package size={16} aria-hidden="true"/>{t("Shop orders")}</Link>
+   <Link to="/seller/wallet">{t("My wallet")}<ArrowUpRight size={16} aria-hidden="true"/></Link>
+  </div>
+ </div>{error&&<p role="alert" className="portal-error">{error}</p>}
+ <section className="seller-overview-totals" aria-label={t('Dashboard totals')}>
+  <dl className="seller-overview-summary">
+   {totals.map(([label,value,color])=><div key={label} className={`seller-overview-metric ${color}`}>
     <dt className="text-xs font-medium sm:text-sm">{t(label)}</dt>
-    <dd className="mt-2 break-words text-lg font-semibold tabular-nums sm:text-2xl">{value}</dd>
+    <dd className="seller-overview-value tabular-nums">{value}</dd>
    </div>)}
   </dl>
  </section>
- <div className="grid gap-4 xl:grid-cols-3">
+ <div className="seller-overview-statistics">
   {groups.map(([heading,figures])=><section key={heading} className="portal-card min-w-0">
    <h2>{t(heading)}</h2>
    {heading==='Today’s Statistics'&&<p className="mt-1 text-xs text-slate-600">{t("Resets at midnight China time")}</p>}
-   <dl className="mt-4 grid grid-cols-3 gap-2">
+   <dl className="seller-overview-stat-values">
     {figures.map(([label,value])=><div key={label} className="min-w-0">
      <dt className="text-xs text-slate-600">{t(label)}</dt>
      <dd className="mt-1 break-words text-sm font-semibold tabular-nums text-slate-900 sm:text-base">{value}</dd>
@@ -106,7 +114,7 @@ export default function SellerDashboardPage(){
    </dl>
   </section>)}
  </div>
- <section className="portal-card" aria-label={t("Store activity heatmap")}>
+ <section className="portal-card seller-overview-heatmap" aria-label={t("Store activity heatmap")}>
   <div className="flex flex-wrap items-center justify-between gap-3">
    <h2>{t("Store activity heatmap")}</h2>
    <div className="flex flex-wrap items-center gap-2">
