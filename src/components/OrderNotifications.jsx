@@ -4,7 +4,18 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Bell, X } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 
-const isSellerOrder = item => item.type === 'purchase' && item.link?.startsWith('/seller/orders')
+import { timestampMillis } from '../lib/storeDates.js'
+
+const orderPopupWindow = 5 * 60 * 1000
+function paidOrderNumber(item, role) {
+  if (item.type !== 'purchase' || !item.link?.startsWith('/')) return null
+  const link = new URL(item.link, window.location.origin)
+  const sellerPayment = role === 'seller' && link.pathname === '/seller/orders' &&
+    (item.body === 'Paid' || /^Order #\d+ payment confirmed$/.test(item.title))
+  const adminPayment = role === 'admin' && link.pathname === '/admin' && link.hash === '#purchase-orders' &&
+    item.title.startsWith('Paid · Order #')
+  return sellerPayment || adminPayment ? link.searchParams.get('order') : null
+}
 
 function readShownOrders(key) {
   try {
@@ -43,23 +54,33 @@ export default function OrderNotifications() {
         if (!active||scope!==tabScope()) return
         setUnread(data.unreadCount)
         setError('')
-        const shownKey = `seller-order-popups:${account.id}`
-        const shownOrders = account.role === 'seller' ? readShownOrders(shownKey) : new Set()
-        const fresh = data.notifications.filter((item) => {
-          if (isSellerOrder(item) && shownOrders.has(item.id)) return false
-          if (item.isRead || seen.current.has(item.id)) return false
-          if (item.type === 'reward') return true
-          return item.type === 'purchase' && (item.link?.startsWith('/purchase/') || item.link === '/orders' || (account.role === 'seller' && item.link?.startsWith('/seller/orders')) || (account.role === 'admin' && item.link?.startsWith('/admin') && item.link.endsWith('#purchase-orders')))
-        })
-        if (fresh.length) {
-          const item = fresh[0]
+        if (document.hidden) return
+        const shownKey = `paid-order-popups:${account.role}:${account.id}`
+        const shownOrders = readShownOrders(shownKey)
+        const legacy = account.role === 'seller' ? readShownOrders(`seller-order-popups:${account.id}`) : new Set()
+        for (const item of data.notifications) {
+          if (!legacy.has(item.id)) continue
+          const orderNumber = paidOrderNumber(item, account.role)
+          if (orderNumber) shownOrders.add(orderNumber)
+        }
+        const sellerPage = location.pathname === '/seller' || location.pathname.startsWith('/seller/')
+        for (const item of data.notifications) {
+          if (item.isRead || seen.current.has(item.id)) continue
+          const orderNumber = paidOrderNumber(item, account.role)
+          if (item.type === 'purchase' && (account.role === 'seller' || account.role === 'admin')) {
+            const created = timestampMillis(item.createdAt)
+            if (!orderNumber || (account.role === 'seller' && !sellerPage) ||
+                !Number.isFinite(created) || Date.now() - created > orderPopupWindow ||
+                shownOrders.has(orderNumber) || seen.current.has(`order:${orderNumber}`)) continue
+            shownOrders.add(orderNumber)
+            seen.current.add(`order:${orderNumber}`)
+            try { localStorage.setItem(shownKey, JSON.stringify([...shownOrders].slice(-200))) } catch { /* Use in-memory tracking. */ }
+          } else if (item.type !== 'reward' &&
+              !(item.type === 'purchase' && (item.link?.startsWith('/purchase/') || item.link === '/orders'))) continue
           seen.current.add(item.id)
-          if (account.role === 'seller' && isSellerOrder(item)) {
-            shownOrders.add(item.id)
-            try { localStorage.setItem(shownKey, JSON.stringify([...shownOrders].slice(-200))) } catch { /* In-memory tracking still applies. */ }
-          }
-          const body = isSellerOrder(item) && item.body.startsWith('Paid from the buyer’s account balance.') ? 'Paid' : item.body
-          setToast({ title: item.title, body, link: item.link, linkLabel: item.type === 'reward' ? 'View balance' : 'View order' })
+          const title = orderNumber ? `Paid · Order #${orderNumber}` : item.title
+          setToast({ title, body: orderNumber ? '' : item.body, link: item.link, linkLabel: item.type === 'reward' ? 'View balance' : 'View order' })
+          break
         }
       } catch (err) {
         if (!active||scope!==tabScope()) return
@@ -74,9 +95,10 @@ export default function OrderNotifications() {
     refresh()
     const timer = window.setInterval(refresh, 15000)
     window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
     const changed=()=>{currentUser.current=null;seen.current.clear();setUser(null);setToast(null);setError('');refresh()}
     window.addEventListener('account-session-changed',changed)
-    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh);window.removeEventListener('account-session-changed',changed) }
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh);document.removeEventListener('visibilitychange', refresh);window.removeEventListener('account-session-changed',changed) }
   }, [location.pathname, navigate])
 
   useEffect(() => {
