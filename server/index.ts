@@ -2273,7 +2273,14 @@ app.put('/api/admin/sellers/:id/dashboard-metrics', requireAuth, requireRole('ad
   if (['salesTrack', 'visitsTrack'].some(key => Array.isArray(metrics[key]) && metrics[key].length)) {
     metrics.chartEndDate = new Date().toISOString().slice(0, 10)
   }
-  const totalStoreVisits = req.body.totalStoreVisits
+  let totalStoreVisits = req.body.totalStoreVisits
+  if (req.body.calculateTotalStoreVisits === true) {
+    const counts = [metrics.todayVisitors, metrics.visitorsLast7Days, metrics.visitorsLast30Days]
+    if (counts.some(count => typeof count !== 'number')) {
+      return res.status(400).json({ error: 'Enter all three visitor counts to calculate the total.' })
+    }
+    totalStoreVisits = (counts as number[]).reduce((sum, count) => sum + count, 0)
+  }
   if (totalStoreVisits !== undefined && (!Number.isSafeInteger(totalStoreVisits) || totalStoreVisits < 0 || totalStoreVisits > 1000000000)) {
     return res.status(400).json({ error: 'Enter a whole number of store visits from 0 to 1 billion.' })
   }

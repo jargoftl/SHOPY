@@ -37,7 +37,7 @@ const AdminSellerMetricsPage = () => {
   const [products, setProducts] = useState([])
   const [selectedSellerId, setSelectedSellerId] = useState('')
   const [totalVisits, setTotalVisits] = useState(null)
-  const [totalVisitsEdit, setTotalVisitsEdit] = useState('')
+  const [visitorCountsEdited, setVisitorCountsEdited] = useState(false)
   const [chinaDay, setChinaDay] = useState('')
   const [form, setForm] = useState(emptyForm)
   const [loadedMetricsSellerId, setLoadedMetricsSellerId] = useState('')
@@ -91,7 +91,7 @@ const AdminSellerMetricsPage = () => {
         setLoadedMetricsSellerId(selectedSellerId)
         setChinaDay(metricData.chinaDay || '')
         setTotalVisits(metricData.totalStoreVisits ?? null)
-        setTotalVisitsEdit('')
+        setVisitorCountsEdited(false)
         setForm(Object.fromEntries(metricFields.map(({ key }) => [key, metrics[key] ?? ''])))
         setSalesTrack(formatTrack(metrics.salesTrack))
         setVisitsTrack(formatTrack(metrics.visitsTrack))
@@ -130,6 +130,11 @@ const AdminSellerMetricsPage = () => {
     }
   }
 
+  const calculatedVisits = visitorKeys.every(key => form[key] !== '' && Number.isSafeInteger(Number(form[key])) && Number(form[key]) >= 0)
+    ? visitorKeys.reduce((sum,key)=>sum+Number(form[key]),0)
+    : null
+  const visitsToSave = visitorCountsEdited ? calculatedVisits : null
+
   const saveMetrics = async (event) => {
     event.preventDefault()
     if (!selectedSellerId || loadedMetricsSellerId !== selectedSellerId) return
@@ -148,9 +153,10 @@ const AdminSellerMetricsPage = () => {
     try {
       await apiRequest(`/api/admin/sellers/${selectedSellerId}/dashboard-metrics`, {
         method: 'PUT',
-        body: JSON.stringify({ metrics, chinaDay, preserveCreditScore: true, ...(totalVisitsEdit!==''?{totalStoreVisits:Number(totalVisitsEdit)}:{}) }),
+        body: JSON.stringify({ metrics, chinaDay, preserveCreditScore: true, calculateTotalStoreVisits: visitsToSave !== null }),
       })
-      if(totalVisitsEdit!==''){setTotalVisits(Number(totalVisitsEdit));setTotalVisitsEdit('')}
+      if(visitsToSave!==null)setTotalVisits(visitsToSave)
+      setVisitorCountsEdited(false)
       setMessage(`Dashboard values saved for ${selectedSeller?.storeName || selectedSeller?.fullName}.`)
     } catch (error) {
       setMessage(error.message)
@@ -223,13 +229,13 @@ const AdminSellerMetricsPage = () => {
           </section>
           <section id="visitor-statistics" className="scroll-mt-4 rounded-xl border border-slate-300 bg-white p-5 sm:p-7">
             <h2 className="text-lg font-semibold">Visitor statistics</h2>
-            <p className="mt-1 text-sm text-slate-600">Today’s visitor edit resets at midnight China time. Blank period fields use recorded counts.</p>
+            <p className="mt-1 text-sm text-slate-600">Fill in all three counts to calculate the total. Today’s visitor edit resets at midnight China time.</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {metricFields.filter(({key})=>visitorKeys.includes(key)).map(({key,label})=><label key={key} className="block text-sm font-medium">{label}
-                <input type="number" min="0" max="1000000000000" step="1" value={form[key]} onChange={event=>setForm(current=>({...current,[key]:event.target.value}))} placeholder="Use recorded count" className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3"/>
+                <input type="number" min="0" max="1000000000000" step="1" value={form[key]} onChange={event=>{setVisitorCountsEdited(true);setForm(current=>({...current,[key]:event.target.value}))}} placeholder="Use recorded count" className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3"/>
               </label>)}
               <label className="block text-sm font-medium">Total store visits
-                <input type="number" min="0" max="1000000000" step="1" value={totalVisitsEdit} onChange={event=>setTotalVisitsEdit(event.target.value)} placeholder={totalVisits==null?'No store profile':String(totalVisits)} disabled={totalVisits==null} className="mt-1 h-11 w-full rounded-lg border border-slate-300 px-3"/>
+                <output aria-live="polite" className="mt-1 flex h-11 items-center rounded-lg border border-blue-100 bg-blue-50 px-3 font-semibold tabular-nums">{(visitsToSave??totalVisits)?.toLocaleString()??'—'}</output>
               </label>
             </div>
             <button disabled={isSaving} type="submit" className="mt-4 min-h-11 rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white disabled:opacity-50">{isSaving?'Saving…':'Save dashboard values'}</button>
