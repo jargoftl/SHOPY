@@ -2,6 +2,7 @@ import {tabScope} from '../lib/tabSession.js'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Bell, X } from 'lucide-react'
+import { formatMoney } from '../lib/money.js'
 import { apiRequest } from '../lib/api.js'
 
 import { timestampMillis } from '../lib/storeDates.js'
@@ -26,6 +27,43 @@ function readShownOrders(key) {
   }
 }
 
+function SellerOrderPreview({orderNumber,link,onClose}){
+  const dialog=useRef(null)
+  const [order,setOrder]=useState(null)
+  const [loading,setLoading]=useState(true)
+  useEffect(()=>{
+    const node=dialog.current
+    node.showModal()
+    return()=>node.close()
+  },[])
+  useEffect(()=>{
+    let active=true
+    apiRequest('/api/seller/purchases',{background:true})
+      .then(({orders})=>{if(active)setOrder(orders?.find(item=>String(item.orderNumber)===orderNumber))})
+      .catch(()=>{})
+      .finally(()=>{if(active)setLoading(false)})
+    return()=>{active=false}
+  },[orderNumber])
+  return <dialog ref={dialog} aria-labelledby="seller-order-preview-title"
+    onCancel={event=>{event.preventDefault();onClose()}} className="seller-order-preview">
+    <header>
+      <div><h2 id="seller-order-preview-title">New paid order</h2><p>Order #{orderNumber}</p></div>
+      <button type="button" onClick={onClose} aria-label="Dismiss order preview"><X size={20} aria-hidden="true"/></button>
+    </header>
+    {loading?<p role="status">Loading items…</p>:order?<ul>
+      {order.items.map(item=><li key={item.id}>
+        {item.imageUrl&&<img src={item.imageUrl} alt=""/>}
+        <span>{item.name}<small>{[item.color,item.size].filter(Boolean).join(' · ')}</small></span>
+        <strong>{item.quantity} × {formatMoney(item.priceCents)}</strong>
+      </li>)}
+    </ul>:<p>Open the order to see its items.</p>}
+    <footer>
+      {order&&<span>Total <strong>{formatMoney(order.subtotalCents)}</strong></span>}
+      <Link to={link} onClick={onClose}>Review order</Link>
+    </footer>
+  </dialog>
+}
+
 export default function OrderNotifications() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -36,6 +74,8 @@ export default function OrderNotifications() {
   const seen = useRef(new Set())
   const currentUser = useRef(null)
   const routeToast = useRef(null)
+  const previewOpen = useRef(false)
+  previewOpen.current = Boolean(toast?.orderPreview)
 
   useEffect(() => {
     let active = true
@@ -54,7 +94,7 @@ export default function OrderNotifications() {
         if (!active||scope!==tabScope()) return
         setUnread(data.unreadCount)
         setError('')
-        if (document.hidden) return
+        if (document.hidden || previewOpen.current) return
         const shownKey = `paid-order-popups:${account.role}:${account.id}`
         const shownOrders = readShownOrders(shownKey)
         const legacy = account.role === 'seller' ? readShownOrders(`seller-order-popups:${account.id}`) : new Set()
@@ -79,7 +119,7 @@ export default function OrderNotifications() {
               !(item.type === 'purchase' && (item.link?.startsWith('/purchase/') || item.link === '/orders'))) continue
           seen.current.add(item.id)
           const title = orderNumber ? `Paid · Order #${orderNumber}` : item.title
-          setToast({ title, body: orderNumber ? '' : item.body, link: item.link, linkLabel: item.type === 'reward' ? 'View balance' : 'View order' })
+          setToast({ title, orderPreview: account.role==='seller'?orderNumber:null, body: orderNumber ? '' : item.body, link: item.link, linkLabel: item.type === 'reward' ? 'View balance' : 'View order' })
           break
         }
       } catch (err) {
@@ -111,7 +151,7 @@ export default function OrderNotifications() {
   }, [location.state])
 
   useEffect(() => {
-    if (!toast) return
+    if (!toast || toast.orderPreview) return
     const timer = window.setTimeout(() => setToast(null), 8000)
     return () => window.clearTimeout(timer)
   }, [toast])
@@ -120,7 +160,8 @@ export default function OrderNotifications() {
   if (!showBell && !toast && !error) return null
   return <div data-preserve-theme className="fixed right-4 top-20 z-[70] flex max-w-[calc(100vw-2rem)] flex-col items-end gap-2">
     {showBell && <Link to="/messages?view=notifications" aria-label={`Notifications, ${unread} unread`} className="relative grid size-11 place-items-center rounded-full border border-[#e5e5e5] bg-white text-[#111111] shadow-md"><Bell size={20} />{unread > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-[#d84250] px-1.5 py-0.5 text-xs font-bold text-white">{unread > 99 ? '99+' : unread}</span>}</Link>}
-    {toast && <div role="status" className="w-80 max-w-full rounded-xl border border-[#cccccc] bg-white p-4 text-[#111111] shadow-lg"><div className="flex items-start gap-3"><div className="flex-1">{toast.body ? <>
+    {toast?.orderPreview&&<SellerOrderPreview key={toast.orderPreview} orderNumber={toast.orderPreview} link={toast.link} onClose={()=>setToast(null)}/>}
+    {toast && !toast.orderPreview && <div role="status" className="w-80 max-w-full rounded-xl border border-[#cccccc] bg-white p-4 text-[#111111] shadow-lg"><div className="flex items-start gap-3"><div className="flex-1">{toast.body ? <>
       <p className="font-semibold">{toast.title}</p>
       <p className="mt-1 text-sm">{toast.body}</p>
       <Link to={toast.link} onClick={() => setToast(null)} className="mt-2 inline-block text-sm underline">{toast.linkLabel || 'View order'}</Link>

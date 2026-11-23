@@ -421,7 +421,8 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
   const available=Math.max(0,(wallet?.balance_cents??0)-(wallet?.reserved_cents??0))
   if(available<eligible.amount){
    const shortfall=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((eligible.amount-available)/100)
-   fail(`Insufficient available wallet balance. Deposit at least ${shortfall} and wait for it to be credited before accepting this order.`)
+   const reason=available===0?'Your wallet is currently empty.':'Your available wallet balance is too low.'
+   fail(`${reason} Deposit at least ${shortfall} and wait for it to be credited before accepting this order.`)
   }
  }
  if(destination==='crypto'&&eligible.amount>100000000)fail('This sale exceeds the per-withdrawal limit. Credit it to your SHOPY wallet to withdraw in smaller amounts.')

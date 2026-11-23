@@ -96,6 +96,25 @@ const SellerOrdersPage = () => {
   const [selected,setSelected]=useState(null)
   const [confirmError,setConfirmError]=useState('')
   const [pinOpen,setPinOpen]=useState(false)
+  const [wallet,setWallet]=useState(null)
+  const orderFromLink=useRef(null)
+  const linkedOrder=params.get('order')
+  useEffect(()=>{
+    if(!linkedOrder||orderFromLink.current===linkedOrder||dialog.current.open)return
+    const order=orders.find(entry=>String(entry.orderNumber)===linkedOrder)
+    if(!order)return
+    orderFromLink.current=linkedOrder
+    setSelected({id:order.id,mode:canPurchase(order)?'purchase':'view'})
+    dialog.current.showModal()
+  },[linkedOrder,orders])
+  useEffect(()=>{
+    if(!selected)return
+    let active=true
+    apiRequest('/api/seller/finance',{background:true,cache:'no-store'})
+      .then(data=>{if(active)setWallet(data.wallet)})
+      .catch(()=>{})
+    return()=>{active=false}
+  },[selected?.id,reload])
   function openOrder(order,mode){
     setSelected({id:order.id,mode})
     setConfirmError('')
@@ -187,18 +206,20 @@ const SellerOrdersPage = () => {
      })}
      {!visible.length&&<li className="rounded-xl border bg-white p-6 text-center text-sm text-slate-600 xl:col-span-2">No matching orders.</li>}
     </ul>}
-    <dialog ref={dialog} onClose={()=>{setSelected(null);setConfirmError('')}} aria-labelledby="shop-order-title" className="m-auto max-h-[90dvh] w-[min(94vw,720px)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-slate-900/60">
+    <dialog ref={dialog} onClose={()=>{setSelected(null);setConfirmError('');setWallet(null)}} aria-labelledby="shop-order-title" className="m-auto max-h-[90dvh] w-[min(94vw,720px)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl backdrop:bg-slate-900/60">
      {selected&&(()=>{
       const order=orders.find(entry=>entry.id===selected.id)
       if(!order)return null
       const shipment=order.sellers[0]
+      const available=wallet?Math.max(0,wallet.balanceCents-wallet.reservedCents):null
+      const shortfall=available===null?0:Math.max(0,order.subtotalCents-available)
       const cost=Math.round(order.subtotalCents*100/115)
       return <>
        <header className="mb-4 flex items-start justify-between gap-3">
         <div><h2 id="shop-order-title" className="text-xl font-semibold">{selected.mode==='purchase'?'Purchase confirmation':selected.mode==='contact'?'Edit contact':'Order details'}</h2><p className="text-sm text-slate-600">{formatOrderReference(order)}</p></div>
         <button type="button" onClick={()=>dialog.current.close()} className="rounded border px-3 py-1">Close</button>
        </header>
-       <dl className="mb-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-3">
+       {selected.mode!=='purchase'&&<dl className="mb-4 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-3">
         {[
          ['Consignee',(order.sellerContact?.name??order.buyerName)||'—'], ['Email',order.sellerContact?.email||order.maskedEmail||'—'],
          ['Phone',order.sellerContact?.phone||'—'], ['Address',order.sellerContact?.address||'—'], ['Order time',formatTimestamp(order.createdAt)],
@@ -206,26 +227,33 @@ const SellerOrdersPage = () => {
          ['Logistics status',logisticsBadge(shipment)],['Purchase time',shipment?.confirmedAt?formatTimestamp(shipment.confirmedAt):'—'],
          ['Sales amount',formatMoney(order.subtotalCents)],['Estimated purchase cost',formatMoney(cost)],['Estimated profit',formatMoney(order.subtotalCents-cost)],
         ].map(([label,value])=><div key={label}><dt className="text-xs text-slate-600">{label}</dt><dd className="font-semibold">{value}</dd></div>)}
-       </dl>
+       </dl>}
        {selected.mode==='contact'
         ? <OrderContactForm key={order.id} order={order} onCancel={()=>setSelected({id:order.id,mode:'view'})} onSaved={contact=>{
          setOrders(current=>current.map(entry=>entry.id===order.id?{...entry,sellerContact:contact}:entry))
          setSelected({id:order.id,mode:'view'})
          progressToast('Order contact saved.')
         }}/>
-        : <button type="button" onClick={()=>setSelected({id:order.id,mode:'contact'})} className="mb-4 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium">Edit contact</button>}
+        : selected.mode!=='purchase'&&<button type="button" onClick={()=>setSelected({id:order.id,mode:'contact'})} className="mb-4 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium">Edit contact</button>}
        <h3 className="font-semibold">Order items</h3>
        <ul className="mb-4 divide-y text-sm">{order.items.map(item=><li key={item.id} className="flex items-center gap-3 py-3">
         {item.imageUrl&&<img src={item.imageUrl} alt="" className="size-12 rounded object-cover"/>}
         <div className="min-w-0 flex-1"><p className="break-words font-medium">{item.name}</p><p className="text-xs text-slate-600">{[item.color,item.size].filter(Boolean).join(' · ')}</p></div>
         <span>{item.quantity} × {formatMoney(item.priceCents)}</span>
        </li>)}</ul>
-       {selected.mode!=='contact'&&canPurchase(order)&&<form onSubmit={event=>confirmPurchase(event,order)} className="grid gap-2 border-t pt-4">
-        <label className="text-sm font-medium">Transaction PIN<PasswordInput name="transactionPin" required inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" className="mt-1 w-full rounded-lg border p-2"/></label>
-        <button type="button" onClick={()=>setPinOpen(true)} className="justify-self-start text-sm text-blue-700 underline">Create or reset transaction PIN</button>
-        <p className="text-xs text-slate-600">Confirm the paid sale to credit the proceeds to your website wallet.</p>
-        <button disabled={busy} className="inline-flex min-h-10 items-center gap-2 justify-self-start rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Check size={17} aria-hidden="true"/>{busy?'Confirming…':'Confirm purchase'}</button>
-       </form>}
+       {selected.mode!=='contact'&&canPurchase(order)&&(shortfall>0?
+        <section className="seller-order-funding" role="status">
+         <strong>{available===0?'Your wallet is currently empty.':'Your available wallet balance is too low.'}</strong>
+         <p>Fund your wallet with {formatMoney(shortfall)} to accept this order once the deposit is credited.</p>
+         <Link to="/seller/wallet?action=deposit">Fund wallet</Link>
+        </section>:
+        <form onSubmit={event=>confirmPurchase(event,order)} className="seller-order-pin">
+         <label className="text-sm font-semibold">Four-digit transaction PIN
+          <PasswordInput name="transactionPin" required inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" className="seller-order-pin-input"/>
+         </label>
+         <button type="button" onClick={()=>setPinOpen(true)} className="seller-order-pin-link">Set or reset PIN</button>
+         <button disabled={busy} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"><Check size={17} aria-hidden="true"/>{busy?'Confirming…':'Confirm purchase'}</button>
+        </form>)}
        {selected.mode==='view'&&<section className="mt-4 min-w-0"><h2 className="mb-3 text-sm font-semibold">Dispatch & tracking</h2>{shipment&&<><OrderStatusBadge status={shipment.status} label={fulfillmentLabel(shipment.status)}/><details className="portal-shipment-details"><summary>Shipment details & updates</summary><div className="mt-3"><DeliveryProgress compact status={shipment.status}/></div><div className="mt-4 grid min-w-0 gap-3 rounded-xl bg-gray-50 p-4 sm:grid-cols-2"><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Tracking number</p><p className="mt-1 break-all font-mono text-sm font-semibold">{shipment.trackingNumber||'Not assigned yet'}</p></div><div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-gray-500">Carrier</p><div className="mt-1 flex flex-wrap items-center gap-2 text-sm">{(!shipment.carrier||/^arrive(?: logistics)?$/i.test(shipment.carrier.trim()))&&<img src="/arrive-logistics.webp" alt="" className="h-6 w-24 object-contain object-left"/>}<span className="break-words">{shipment.carrier||'Arrive Logistics'}</span></div></div>{shipment.carrierTrackingNumber&&<p className="break-all text-xs text-gray-500 sm:col-span-2">Carrier reference: {shipment.carrierTrackingNumber}</p>}</div><label className="mt-4 block text-xs font-medium">Update fulfillment<UiverseSelect aria-label={`Logistics for order ${formatOrderReference(order)}`} disabled={busy||order.status!=='paid'} value={shipment.status} onChange={e=>update(order,e.target.value)} className="mt-2 block min-h-12 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm disabled:opacity-50">{fulfillmentOptions.map(([status,label])=><option key={status} value={status}>{label}</option>)}</UiverseSelect></label><DeliveryEmailStatus shipment={shipment} orderId={order.id}/><ShipmentHistory trackingNumber={shipment.trackingNumber} revision={reload}/></details></>}{order.status!=='paid'&&<p className="mt-3 text-xs text-gray-500">Payment not confirmed</p>}</section>}
        {confirmError&&<p role="alert" className="mt-2 text-sm text-red-700">{confirmError}</p>}
       </>

@@ -259,8 +259,8 @@ export default function SellerFinancePage({view='wallet'}){
  const title=view==='wallet'?'My wallet':view==='statement'?'Financial statement':'Transaction history'
  return <SellerWorkspace user={user}><p className="text-xs font-bold tracking-[.18em] text-[#555555]">{view==='wallet'?'MY WALLET':view==='statement'?'FINANCIAL STATEMENT':'TRANSACTION HISTORY'}</p><h1 className="mt-2 font-serif text-4xl">{title}</h1>{error&&<p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
  {view==='wallet'&&<>
-  <div className={`${panel} mt-7 flex flex-wrap items-center justify-between gap-5`}>
-   <dl className="grid min-w-0 flex-1 gap-5 sm:grid-cols-2">
+  <div className={`${panel} seller-wallet-summary mt-5`}>
+   <dl className="seller-wallet-figures">
     {[
      ['Balance',data?Math.max(0,data.wallet.balanceCents-data.wallet.reservedCents):null,Wallet,'bg-blue-100 text-blue-700'],
      ['Accumulated revenue',data?.accumulatedRevenueCents,TrendingUp,'bg-orange-100 text-orange-800'],
@@ -269,7 +269,7 @@ export default function SellerFinancePage({view='wallet'}){
      <div className="min-w-0"><dt className="text-sm text-slate-600">{label}</dt><dd className="break-words text-2xl font-semibold tabular-nums">{value==null?'—':money(value)}</dd></div>
     </div>)}
    </dl>
-   <div className="flex gap-2">{['deposit','withdrawal'].map(k=><button key={k} className={button} disabled={!data} onClick={()=>{if(k==='withdrawal'&&!data.hasTransactionPin){setPinSettingsOpen(true);setError('');return}setError('');setKind(k);setKey(crypto.randomUUID())}}>{k==='deposit'?'Deposit':'Withdraw'}</button>)}</div>
+   <div className="seller-wallet-actions">{['deposit','withdrawal'].map(k=><button key={k} className={button} disabled={!data} onClick={()=>{if(k==='withdrawal'&&!data.hasTransactionPin){setPinSettingsOpen(true);setError('');return}setError('');setKind(k);setKey(crypto.randomUUID())}}>{k==='deposit'?'Deposit':'Withdraw'}</button>)}</div>
   </div>
   <div className="mt-4 overflow-hidden rounded-2xl bg-blue-950">
    <img src="/seller-wallet-banner.webp" alt="" width="1500" height="500" className="h-28 w-full object-cover object-center sm:h-40"/>
