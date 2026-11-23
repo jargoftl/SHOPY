@@ -1,9 +1,14 @@
 .action-feedback-sheet {
   position: fixed;
-  inset: 0;
+  inset: auto 0 0;
   width: min(calc(100% - 24px), 390px);
   max-width: none;
-  margin: auto;
+  margin: 0 auto 12px;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+}
+.action-feedback-body {
   padding: 26px 20px;
   border: 1px solid #dce8e1;
   border-radius: 22px;
@@ -28,7 +33,8 @@
 .action-feedback-sheet button { min-height: 42px; margin-top: 15px; padding-inline: 22px; border-radius: 11px; background: #175c43; color: #fff; font-size: 14px; font-weight: 650; }
 @keyframes action-send { to { transform: translate(4px,-4px); } }
 @media (max-width: 640px) {
-  .action-feedback-sheet { inset: auto 0 0; margin: 0 auto; width: 100%; border-radius: 22px 22px 0 0; padding-bottom: max(22px,env(safe-area-inset-bottom)); }
+  .action-feedback-sheet { margin: 0 auto; width: 100%; }
+  .action-feedback-body { border-radius: 22px 22px 0 0; padding-bottom: max(22px,env(safe-area-inset-bottom)); }
 }
 @media (prefers-reduced-motion: reduce) {
   .action-feedback-icon.is-processing svg { animation: none; }
