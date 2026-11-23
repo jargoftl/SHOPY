@@ -148,3 +148,45 @@ html:has(.admin-nav-drawer[open]) { overflow: hidden; }
   color: #fff;
 }
 .admin-dashboard :is(button, a).bg-black:hover { background-color: var(--admin-deep); }
+
+.admin-account-header, .admin-account-main { max-width: 1300px; margin-inline: auto; }
+.admin-account-header {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  padding: 12px 16px;
+  border: 1px solid var(--admin-line);
+  border-radius: 14px;
+  background: #fff;
+  font-size: 13px;
+  color: var(--admin-muted);
+}
+.admin-account-header a { display: inline-flex; align-items: center; gap: 7px; color: var(--admin-green); font-weight: 650; }
+.admin-account-main { padding-block: 14px 60px; }
+.admin-account-card {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 15px;
+  padding: clamp(14px, 3vw, 24px);
+  border: 1px solid var(--admin-line);
+  border-radius: 17px;
+  background: white;
+}
+.admin-account-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.admin-account-avatar { display: grid; place-items: center; flex: none; width: 56px; height: 56px; overflow: hidden; border-radius: 12px; background: var(--admin-soft); color: var(--admin-green); }
+.admin-account-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.admin-account-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; color: var(--admin-muted); font-size: 12px; overflow-wrap: anywhere; }
+.admin-account-meta span:first-child { padding: 2px 7px; border-radius: 6px; background: var(--admin-soft); color: var(--admin-green); text-transform: capitalize; }
+.admin-account-identity h1 { font-size: clamp(23px, 4vw, 33px); font-weight: 700; overflow-wrap: anywhere; }
+.admin-account-contact { grid-column: 1 / -1; display: grid; gap: 8px; grid-template-columns: repeat(3,minmax(0,1fr)); }
+.admin-account-contact > div { min-width: 0; padding: 9px 11px; border-radius: 9px; background: #f3f6f3; }
+.admin-account-contact dt { display: flex; align-items: center; gap: 6px; color: var(--admin-muted); font-size: 12px; }
+.admin-account-contact dd { margin-top: 3px; color: var(--admin-ink); overflow-wrap: anywhere; font-size: 14px; }
+.admin-account-message { grid-column: 2; grid-row: 1; align-self: start; display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 40px; padding: 0 13px; border-radius: 9px; background: var(--admin-green); color: #fff; font-size: 13px; font-weight: 650; }
+.admin-account-message:hover { background: var(--admin-deep); }
+@media (max-width: 580px) {
+  .admin-account-card, .admin-account-contact { grid-template-columns: minmax(0,1fr); }
+  .admin-account-message { grid-column: 1; grid-row: auto; }
+}

@@ -1,3 +1,5 @@
+import '../styles/admin-dashboard.css'
+import { formatTimestamp } from '../lib/storeDates.js'
 import UiverseSelect from '../components/UiverseSelect.jsx'
 import AdminSellerFunding from '../components/AdminSellerFunding.jsx'
 import AdminHistoricalWalletEntry from '../components/AdminHistoricalWalletEntry.jsx'
@@ -16,7 +18,7 @@ import { formatMoney, parseAmountCents } from '../lib/money.js'
 import SellerVerificationReview from '../components/SellerVerificationReview.jsx'
 import AdminBuyers from '../components/AdminBuyers.jsx'
 import AmountInput from '../components/AmountInput.jsx'
-import { FolderOpen, Mail, MessageSquare, ShieldCheck, UserRound } from 'lucide-react'
+import { ArrowLeft, CalendarDays, FolderOpen, Mail, MessageSquare, Phone, UserRound } from 'lucide-react'
 
 const panel = 'rounded-xl border border-[#111111] bg-[#111111] p-5 sm:p-6'
 
@@ -69,13 +71,33 @@ const AdminUserDetailsPage = () => {
   if (!data) return <main className="mx-auto max-w-xl px-5 py-20">{error?<p role="alert">{error}</p>:<ContentPlaceholder/>}<Link to={error ? '/login' : '/admin'} className="mt-4 inline-block underline">{error ? 'Go to login' : 'Admin dashboard'}</Link></main>
   const { user, seller, visits, addresses, requests, events, balanceHistory, balanceResets, rewards, rewardHistory, balancePurchases, products, cancellationRequests, favorites, follows, accountHistory } = data
   const confirmedDeposits = requests.filter((request) => request.kind === 'deposit' && request.status === 'confirmed').reduce((sum, request) => sum + request.amountCents, 0)
-  return <div className="admin-workspace min-h-screen bg-[#111111] text-[#f7f7f7]">{rewardToast && <div role="status" className="fixed right-4 top-4 z-[80] flex max-w-[calc(100vw-2rem)] items-center gap-4 rounded border border-[#777777] bg-white px-4 py-3 text-sm font-semibold text-[#111111] shadow-lg">{rewardToast}<button type="button" onClick={() => setRewardToast('')} aria-label="Dismiss notification" className="text-lg leading-none">×</button></div>}<header className="border-b border-[#111111] bg-[#111111]"><div className="mx-auto flex max-w-[1300px] justify-between px-5 py-5"><Link to="/admin" className="font-semibold underline">← Admin dashboard</Link><span className="text-sm text-[#777777]">Account details</span></div></header>
-    <main className="mx-auto max-w-[1300px] space-y-6 px-5 py-9">
-      <div className="rounded-2xl border border-[#111111] bg-[#111111] p-6 sm:p-8"><div className="flex flex-wrap items-start gap-5">
-        <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-2xl bg-[#111111] text-[#cccccc]">{seller?.logoUrl ? <img src={seller.logoUrl} alt="" className="size-full object-cover" /> : <UserRound size={28} />}</div>
-        <div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-widest text-[#cccccc]">Account folder · {user.role === 'customer' ? seller ? 'Seller applicant' : 'Buyer' : user.role} · #{user.publicId || '—'}</p><h1 className="mt-2 break-words text-3xl font-semibold">{user.fullName}</h1><p className="mt-2 flex items-center gap-2 break-all text-sm text-[#a3a3a3]"><Mail size={15} className="shrink-0" />{user.email}</p><p className="mt-1 text-sm text-[#a3a3a3]">{user.phone || 'No phone provided'} · Joined {user.createdAt} UTC</p><p className="mt-3 flex items-center gap-2 text-xs text-[#777777]"><ShieldCheck size={15} />Passwords and authentication secrets are never displayed.</p></div>
-        {user.role !== 'admin' && <Link to={`/messages?user=${user.id}`} className="inline-flex items-center gap-2 rounded-full bg-[#cccccc] px-4 py-2 text-sm font-semibold text-[#111111]"><MessageSquare size={16} /> Message</Link>}
-      </div></div>
+  return <div className="admin-workspace admin-dashboard admin-account-page min-h-screen">{rewardToast && <div role="status" className="fixed right-4 top-4 z-[80] flex max-w-[calc(100vw-2rem)] items-center gap-4 rounded border border-[#777777] bg-white px-4 py-3 text-sm font-semibold text-[#111111] shadow-lg">{rewardToast}<button type="button" onClick={() => setRewardToast('')} aria-label="Dismiss notification" className="text-lg leading-none">×</button></div>}<header className="admin-account-header">
+      <Link to="/admin"><ArrowLeft size={17} aria-hidden="true"/>Admin dashboard</Link>
+      <span>Account details</span>
+    </header>
+    <main className="admin-account-main space-y-6">
+      <section className="admin-account-card" aria-labelledby="admin-account-name">
+        <div className="admin-account-identity">
+          <div className="admin-account-avatar">
+            {seller?.logoUrl ? <img src={seller.logoUrl} alt=""/> : <UserRound size={26} aria-hidden="true"/>}
+          </div>
+          <div className="min-w-0">
+            <div className="admin-account-meta">
+              <span>{user.role==='customer'?(seller?'Seller applicant':'Buyer'):user.role}</span>
+              <span>#{user.publicId || '—'}</span>
+            </div>
+            <h1 id="admin-account-name">{user.fullName}</h1>
+          </div>
+        </div>
+        <dl className="admin-account-contact">
+          <div><dt><Mail size={15} aria-hidden="true"/>Email</dt><dd>{user.email}</dd></div>
+          <div><dt><Phone size={15} aria-hidden="true"/>Phone</dt><dd>{user.phone || 'No phone provided'}</dd></div>
+          <div><dt><CalendarDays size={15} aria-hidden="true"/>Joined</dt><dd>{formatTimestamp(user.createdAt)}</dd></div>
+        </dl>
+        {user.role!=='admin'&&<Link to={`/messages?user=${user.id}`} className="admin-account-message">
+          <MessageSquare size={16} aria-hidden="true"/> Message
+        </Link>}
+      </section>
       {error && <p role="alert" className="border border-red-500 p-3 text-sm">{error}</p>}
       {!user.deletedAt&&<SellerVerificationReview userId={user.id} onReviewed={refreshDetails} />}
       <nav aria-label="Account sections" className="flex flex-wrap gap-2 text-xs">{[['#account-details', 'Account details'], ...(user.role==='seller'&&!user.deletedAt?[['#seller-tools','Seller tools']]:[]), ['#activity', 'Activity'], ...(user.role === 'customer' ? [['#buyer-controls', 'Balance & requests'], ['#orders', 'Orders']] : []), ...(user.role === 'seller' ? [['#seller-products', 'Store & products']] : [])].map(([href, label]) => <a key={href} href={href} className="rounded-full border border-[#111111] bg-[#111111] px-4 py-2 hover:border-[#cccccc]">{label}</a>)}</nav>
