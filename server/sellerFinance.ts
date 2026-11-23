@@ -98,6 +98,7 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  const params=[seller??account,kind,before].filter(value=>value!==undefined)
  const rows=await db.prepare(`SELECT r.*,u.public_id AS sellerPublicId,${seller===undefined?'u.full_name AS sellerName,u.email AS sellerEmail,':''}COALESCE(p.store_name,u.full_name) AS storeName,
  (SELECT id FROM seller_wallet_receipts WHERE request_id=r.id) AS receiptId,
+ (SELECT content_type FROM seller_wallet_receipts WHERE request_id=r.id) AS receiptContentType,
  EXISTS(SELECT 1 FROM seller_sale_releases release JOIN purchase_refunds refund
  ON refund.order_id=release.order_id AND refund.seller_id=release.seller_id
  WHERE release.withdrawal_request_id=r.id AND refund.status<>'rejected') AS refundPending

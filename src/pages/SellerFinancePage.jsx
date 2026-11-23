@@ -1,5 +1,5 @@
 import UiverseSelect from '../components/UiverseSelect.jsx'
-import {ArrowDown, ArrowUp, ChevronRight, Circle, Copy, TrendingUp, Wallet, QrCode, X} from 'lucide-react'
+import {ArrowDown, ArrowUp, ChevronRight, Circle, Copy, TrendingUp, Wallet, X} from 'lucide-react'
 import {transactionActor} from '../lib/transactionLabels.js'
 import {formatTimestamp,timestampMillis} from '../lib/storeDates.js'
 import CryptoWalletIcon,{coinNetworks} from '../components/CryptoWalletIcon.jsx'
@@ -15,39 +15,28 @@ import SellerWorkspace,{money,panel,button,input} from '../components/SellerWork
 const coins=Object.keys(coinNetworks)
 function DepositInstructions({ request }) {
  const [copyStatus,setCopyStatus]=useState('')
- const [showQr,setShowQr]=useState(false)
  const qrUrl=request.qrUrl||(request.hasQr?sessionUrl(`/api/seller/finance/requests/${request.id}/qr`):null)
  async function copyAddress(){
   try {await navigator.clipboard.writeText(request.address);setCopyStatus('Address copied.')}
   catch {setCopyStatus('Could not copy. Select the address to copy it manually.')}
  }
- return <section className="mt-3 rounded-xl border border-blue-100 bg-[#f3f7ff] p-3 text-sm">
-  <div className="flex flex-wrap items-center gap-2">
-   <span className="inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 font-bold text-blue-950"><CryptoWalletIcon coin={request.coin}/>{request.coin}</span>
-   <span className="text-xs text-slate-600">Network</span>
-   <span className="inline-flex items-center gap-1.5 rounded-md bg-white px-2 py-1 text-xs font-semibold text-blue-950"><CryptoWalletIcon network={request.network}/>{request.network}</span>
-  </div>
-  {request.coin_amount&&<p className="mt-2 font-semibold">Send {request.coin_amount} {request.coin}</p>}
-  <div className="mt-3 rounded-xl border border-blue-100 bg-white p-3">
-   <div className="flex items-center justify-between gap-2">
-    <p className="text-xs font-semibold text-slate-700">Receiving wallet address</p>
-    <button type="button" onClick={copyAddress} className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg bg-blue-50 px-3 text-xs font-semibold text-blue-800">
-     <Copy size={15} aria-hidden="true"/>Copy address
-    </button>
-   </div>
-   <code className="mt-2 block select-all break-all rounded-lg bg-slate-50 p-3 font-mono text-sm leading-relaxed text-slate-950">{request.address}</code>
-  </div>
-  <p role="status" className="text-xs text-blue-800">{copyStatus}</p>
-  {qrUrl&&<div className="mt-2">
-   <button type="button" aria-expanded={showQr} onClick={()=>setShowQr(visible=>!visible)} className="inline-flex min-h-9 items-center gap-1.5 text-xs font-semibold text-blue-700">
-    <QrCode size={17} aria-hidden="true"/>{showQr?'Hide QR code':'Show QR code'}
-   </button>
-   {showQr&&<div className="mt-1 flex items-center gap-3">
-    <img src={qrUrl} alt={`${request.coin} deposit QR code`} className="h-28 w-28 rounded bg-white object-contain"/>
-    <a href={qrUrl} download={`${request.coin}-deposit-qr`} className="text-xs underline">Save QR code</a>
-   </div>}
+ return <section className="seller-deposit-instructions" aria-label="Deposit details">
+  {qrUrl&&<div className="seller-deposit-qr">
+   <img src={qrUrl} alt={`${request.coin} deposit QR code`} width="132" height="132"/>
+   <a href={qrUrl} download={`${request.coin}-deposit-qr`}>Save QR image</a>
   </div>}
-  {request.amount_cents&&<p className="mt-2 text-xs">Expected wallet credit {money(request.amount_cents)} after verification.</p>}
+  <div className="seller-deposit-network">
+   <CryptoWalletIcon coin={request.coin}/><strong>{request.coin}</strong><span>{request.network}</span>
+  </div>
+  {request.coin_amount&&<p className="text-sm font-semibold">Send {request.coin_amount} {request.coin}</p>}
+  <div className="seller-deposit-address">
+   <div><strong>Receiving wallet address</strong>
+    <button type="button" onClick={copyAddress}><Copy size={15} aria-hidden="true"/>Copy address</button>
+   </div>
+   <code>{request.address}</code>
+   {copyStatus&&<p role="status">{copyStatus}</p>}
+  </div>
+  {request.amount_cents&&<p className="text-xs">Expected wallet credit {money(request.amount_cents)} after verification.</p>}
  </section>
 }
 function DepositAmount({wallet}){
@@ -144,12 +133,13 @@ function DepositDialog({wallets,request,requestId,pendingDeposits,onSelectDeposi
    {error&&<p role="alert" className="text-sm text-red-700">{error}</p>}
    {wallet&&<>
     <DepositInstructions request={wallet}/>
-    {hasPin?<SellerPaymentReceipt prepareRequest={prepareRequest} onBusyChange={setSubmitting} onUploaded={onUploaded}>
-     <DepositAmount wallet={wallet}/>
+    <SellerPaymentReceipt locked={!hasPin} prepareRequest={prepareRequest} onBusyChange={setSubmitting} onUploaded={onUploaded}>
+     {hasPin&&<><DepositAmount wallet={wallet}/>
      <label className="block text-xs font-medium">Transaction PIN
       <PasswordInput name="transactionPin" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} autoComplete="off" required className="mt-1 block w-full rounded border px-2 py-1.5 text-sm"/>
-     </label>
-    </SellerPaymentReceipt>:<button type="button" className="mt-3 text-sm text-blue-700 underline" onClick={onSetPin}>Set your transaction PIN before sending funds</button>}
+     </label></>}
+    </SellerPaymentReceipt>
+    {!hasPin&&<button type="button" className="seller-deposit-pin-button" onClick={onSetPin}>Set transaction PIN</button>}
    </>}
    {request?.status==='awaiting_receipt'&&<>
     <DepositInstructions request={request}/>
