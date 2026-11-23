@@ -1,14 +1,15 @@
+import {createPortal} from 'react-dom'
 import {useEffect,useState,useSyncExternalStore} from 'react'
 import {getPendingRequests,subscribePendingRequests} from '../lib/api.js'
 import SiteName from './SiteName.jsx'
 import '../styles/loading.css'
 
 export default function ContentPlaceholder({className='',floating=false}){
- return <div role="status" className={`site-loader ${floating?'site-loader-floating':'site-loader-inline'} ${className}`}>
+ return createPortal(<div role="status" className={`site-loader ${floating?'site-loader-floating':'site-loader-inline'} ${className}`}>
   <span className="site-loader-brand"><SiteName logo/></span>
   <span className="site-loader-track" aria-hidden="true"><span/></span>
   <span className="sr-only">Loading</span>
- </div>
+ </div>, document.body)
 }
 
 export function NetworkLoadingIndicator(){
