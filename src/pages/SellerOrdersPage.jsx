@@ -132,7 +132,6 @@ const SellerOrdersPage = () => {
       await apiRequest('/api/seller/finance/confirm-purchase',{method:'POST',body:JSON.stringify({orderId:order.id,amountCents:order.subtotalCents,transactionPin})})
       setSelected(current=>current?.id===order.id?{id:order.id,mode:'view'}:current)
       setReload(value=>value+1)
-      progressToast('Sale confirmed. Proceeds credited to your wallet.')
     }catch(err){setConfirmError(err.message)}
     finally{setBusy(false)}
   }

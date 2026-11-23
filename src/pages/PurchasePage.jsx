@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react'
+import {ActionFeedbackIcon} from '../components/ActionFeedback.jsx'
 import { formatOrderReference } from '../lib/orderReference.js'
 import ContentPlaceholder from '../components/ContentPlaceholder.jsx'
 import DeliveryProgress from '../components/DeliveryProgress.jsx'
@@ -89,7 +89,7 @@ const PurchasePage = () => {
       {order.status === 'awaiting_receipt' && <><p className="mt-4 text-sm">Transfer the exact amount of items you are buying, no tips. Thank you.</p><p className="mt-4 text-sm font-semibold">Send {order.coinAmount} {order.coin} · {order.network}</p><p className="mt-1 text-xs text-[#111111]">Final order total: {formatMoney(order.subtotalCents + order.shippingCents + order.taxCents)}</p>{order.usdRate && <p className="mt-1 text-xs text-[#111111]">support-set rate: 1 {order.coin} = ${order.usdRate} USD. This is not a live rate.</p>}<div className="mt-3 flex items-center gap-3 rounded border border-[#e5e5e5] bg-[#f7f7f7] p-3"><span className="min-w-0 flex-1 break-all font-mono text-sm">{order.walletAddress}</span><button type="button" onClick={copy} aria-label="Copy wallet address" className="grid size-10 place-items-center rounded border border-[#cccccc]"><IoCopyOutline size={20} /></button></div>{notice && <p role="status" className="mt-2 text-xs">{notice}</p>}<p className="mt-3 text-xs text-[#555555]">Check the coin and network carefully. Transfers are verified manually.</p><button type="button" onClick={() => setDialogOpen(false)} className="mt-5 bg-[#111111] px-4 py-2 text-sm text-white">Continue to receipt</button></>}
       {order.status === 'paid' && <>
         <div className="mt-4 flex flex-col items-center text-center">
-          <span className="grid size-14 place-items-center rounded-full bg-green-700 text-white"><Check size={30} strokeWidth={3} aria-hidden="true"/></span>
+          <ActionFeedbackIcon/>
           <p className="mt-3 text-sm text-slate-600">Thank you! Your order will begin processing.</p>
         </div>
         <dl className="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 text-sm">

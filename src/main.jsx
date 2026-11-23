@@ -8,6 +8,7 @@ import './styles/themes.css'
 import './styles/dropdowns.css'
 import App from './App.jsx'
 import { NetworkLoadingIndicator } from './components/ContentPlaceholder.jsx'
+import ActionFeedback from './components/ActionFeedback.jsx'
 import ProgressToast from './components/ProgressToast.jsx'
 import { SiteSettingsProvider } from './context/SiteSettingsContext.jsx'
 
@@ -15,6 +16,6 @@ applySiteTheme(readSiteTheme())
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <SiteSettingsProvider><SellerLanguageProvider><App /></SellerLanguageProvider><ProgressToast /><NetworkLoadingIndicator /></SiteSettingsProvider>
+    <SiteSettingsProvider><SellerLanguageProvider><App /></SellerLanguageProvider><ProgressToast /><ActionFeedback /><NetworkLoadingIndicator /></SiteSettingsProvider>
   </StrictMode>,
 )
