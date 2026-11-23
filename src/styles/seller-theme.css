@@ -462,3 +462,63 @@ html:has(.seller-withdraw-backdrop) { overflow: hidden; }
 .seller-order-preview li strong { text-align: right; }
 .seller-order-preview footer { margin-top: 12px; font-size: 13px; }
 .seller-order-preview footer a { padding: 9px 12px; border-radius: 8px; background: var(--seller-soft, #fff0df); color: var(--seller-accent, #a94b08); font-weight: 650; }
+
+.seller-portal .seller-deposit-dialog {
+  padding: 0;
+  max-height: min(85dvh, 720px);
+  border-radius: 19px;
+  box-shadow: 0 20px 70px #101b3040;
+}
+.seller-deposit-dialog::backdrop { background: #101b3066; }
+.seller-deposit-header {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--seller-line);
+  background: var(--seller-raised);
+}
+.seller-deposit-header h2 { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.seller-deposit-icon, .seller-deposit-header button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+}
+.seller-deposit-icon { background: var(--seller-soft); color: var(--seller-accent); }
+.seller-deposit-header button { color: var(--seller-muted); }
+.seller-deposit-header button:hover { background: var(--seller-surface); }
+.seller-deposit-body { display: grid; gap: 12px; padding: 14px 16px 18px; }
+.seller-deposit-switches { display: flex; flex-wrap: wrap; gap: 6px; }
+.seller-deposit-switches button {
+  min-height: 34px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--seller-soft);
+  color: var(--seller-accent);
+  font-size: 12px;
+  font-weight: 650;
+}
+.seller-deposit-section-title { margin-bottom: 7px; color: var(--seller-muted); font-size: 13px; font-weight: 650; }
+.seller-deposit-options { display: grid; gap: 7px; }
+.seller-deposit-option {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 7px 10px;
+  border: 1px solid var(--seller-line);
+  border-radius: 11px;
+  background: var(--seller-surface);
+  color: var(--seller-ink);
+  text-align: start;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.seller-deposit-option:is(:hover,:focus-visible) { background: var(--seller-soft); }
+.seller-deposit-option > svg:last-child { color: var(--seller-accent); }
+.seller-deposit-option small { display: block; color: var(--seller-muted); font-size: 11px; font-weight: 500; }

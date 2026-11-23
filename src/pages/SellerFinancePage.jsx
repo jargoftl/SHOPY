@@ -1,5 +1,5 @@
 import UiverseSelect from '../components/UiverseSelect.jsx'
-import {ArrowDown, ArrowUp, Circle, Copy, TrendingUp, Wallet, QrCode, X} from 'lucide-react'
+import {ArrowDown, ArrowUp, ChevronRight, Circle, Copy, TrendingUp, Wallet, QrCode, X} from 'lucide-react'
 import {transactionActor} from '../lib/transactionLabels.js'
 import {formatTimestamp,timestampMillis} from '../lib/storeDates.js'
 import CryptoWalletIcon,{coinNetworks} from '../components/CryptoWalletIcon.jsx'
@@ -104,11 +104,13 @@ function DepositDialog({wallets,request,requestId,pendingDeposits,onSelectDeposi
   kind:'deposit',requestKey,coin:wallet.coin,paymentNetwork:wallet.network,walletVersion:wallet.version,
   amountCents:Math.round(Number(fields.get('amount'))*100),transactionPin:fields.get('transactionPin')
  })})
- return <dialog ref={dialog} aria-labelledby="deposit-dialog-title" onCancel={event=>{event.preventDefault();if(!submitting)onClose()}} className={`${panel} seller-funds-dialog m-auto max-h-[calc(100dvh-1.5rem)] w-[calc(100%-1.5rem)] max-w-md overflow-y-auto !p-4 backdrop:bg-black/40`}>
-   <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-2">
-    <h2 ref={heading} tabIndex={-1} id="deposit-dialog-title" className="text-lg font-bold text-slate-900">{coin?`${coin} deposit`:'Deposit funds'}</h2>
-    <button type="button" onClick={onClose} disabled={submitting} aria-label="Close deposit" className="grid min-h-9 min-w-9 place-items-center rounded-full hover:bg-slate-100"><X size={20} aria-hidden="true"/></button>
-   </div>
+ return <dialog ref={dialog} aria-labelledby="deposit-dialog-title" onCancel={event=>{event.preventDefault();if(!submitting)onClose()}} className={`${panel} seller-funds-dialog seller-deposit-dialog m-auto max-h-[calc(100dvh-1.5rem)] w-[calc(100%-1.5rem)] max-w-md overflow-y-auto backdrop:bg-black/40`}>
+   <header className="seller-deposit-header">
+    <span className="seller-deposit-icon" aria-hidden="true"><ArrowDown size={21}/></span>
+    <h2 ref={heading} tabIndex={-1} id="deposit-dialog-title">{coin?`${coin} deposit`:'Deposit funds'}</h2>
+    <button type="button" onClick={onClose} disabled={submitting} aria-label="Close deposit"><X size={19} aria-hidden="true"/></button>
+   </header>
+   <div className="seller-deposit-body">
    {!requestId&&pendingDeposits.length>0&&<details className="mt-3 rounded-lg border border-slate-200 p-2.5 text-sm">
     <summary className="cursor-pointer font-medium">Attach proof to an existing deposit</summary>
     <div className="mt-2 grid gap-1.5">
@@ -118,21 +120,23 @@ function DepositDialog({wallets,request,requestId,pendingDeposits,onSelectDeposi
      </button>)}
     </div>
    </details>}
-   {!coin&&!requestId&&<div className="mt-2 grid gap-2">
+   {!coin&&!requestId&&<div className="seller-deposit-options" aria-label="Available coins">
     {availableCoins.length?availableCoins.map(type=>{
      const options=wallets.filter(wallet=>wallet.coin===type)
-     return <button type="button" key={type} onClick={()=>choose(type,options.length===1?options[0].network:'')} className="seller-funds-option flex min-h-12 items-center gap-3 rounded-lg border px-3 text-left text-sm">
-      <CryptoWalletIcon coin={type}/><strong>{type}</strong><span className="ml-auto text-xs text-slate-600">{options.length===1?options[0].network:`${options.length} networks`}</span>
+     return <button type="button" key={type} onClick={()=>choose(type,options.length===1?options[0].network:'')} className="seller-deposit-option">
+      <CryptoWalletIcon coin={type}/><span><strong>{type}</strong><small>{options.length===1?options[0].network:`${options.length} networks`}</small></span><ChevronRight size={16} aria-hidden="true"/>
      </button>
     }):<p className="text-sm text-gray-600">No deposit wallets are available yet.</p>}
    </div>}
-   {coin&&<button type="button" disabled={submitting} onClick={()=>choose('','')} className="mb-1 min-h-8 text-xs text-blue-700 underline">Choose another coin</button>}
-   {wallet&&networks.length>1&&<button type="button" disabled={submitting} onClick={()=>choose(coin,'')} className="ml-3 min-h-8 text-xs text-blue-700 underline">Change network</button>}
-   {coin&&!network&&networks.length>1&&<section className="mb-2">
-    <h3 className="mb-1 text-xs font-semibold text-slate-600">Choose a {coin} network</h3>
-    <div className="grid gap-1.5">
-     {networks.map(option=><button key={option.network} type="button" disabled={submitting} onClick={()=>choose(coin,option.network)} className="seller-funds-option flex min-h-11 items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-sm">
-      <CryptoWalletIcon network={option.network}/>{option.network}
+   {coin&&<div className="seller-deposit-switches">
+    <button type="button" disabled={submitting} onClick={()=>choose('','')}>Choose another coin</button>
+    {wallet&&networks.length>1&&<button type="button" disabled={submitting} onClick={()=>choose(coin,'')}>Change network</button>}
+   </div>}
+   {coin&&!network&&networks.length>1&&<section aria-labelledby="deposit-network-title">
+    <h3 id="deposit-network-title" className="seller-deposit-section-title">Choose a {coin} network</h3>
+    <div className="seller-deposit-options">
+     {networks.map(option=><button key={option.network} type="button" disabled={submitting} onClick={()=>choose(coin,option.network)} className="seller-deposit-option">
+      <CryptoWalletIcon network={option.network}/><span>{option.network}</span><ChevronRight size={16} aria-hidden="true"/>
      </button>)}
     </div>
    </section>}
@@ -152,6 +156,7 @@ function DepositDialog({wallets,request,requestId,pendingDeposits,onSelectDeposi
     <SellerPaymentReceipt requestId={request.id} onBusyChange={setSubmitting} onUploaded={onUploaded}/>
    </>}
    {request&&request.status!=='awaiting_receipt'&&<p role="status" className="mt-2 text-sm">{request.status==='awaiting_review'?'Payment proof submitted for review.':`Deposit ${request.status.replaceAll('_',' ')}.`}</p>}
+ </div>
  </dialog>
 }
 
