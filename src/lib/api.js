@@ -1,8 +1,28 @@
 import {tabScope,newScope,setTabScope} from './tabSession.js'
-// Retain the background option for callers; requests never block the whole page.
-export const trackedFetch = (path, options = {}) => fetch(path, {...options,headers:{'X-Session-Scope':tabScope(),...options.headers}})
+const requestListeners = new Set()
+let pendingRequests = 0
+export const getPendingRequests = () => pendingRequests
+export function subscribePendingRequests(listener) {
+  requestListeners.add(listener)
+  return () => requestListeners.delete(listener)
+}
+function updatePendingRequests(delta) {
+  pendingRequests += delta
+  for (const listener of requestListeners) listener()
+}
+async function trackRequest(operation, background) {
+  if (background) return operation()
+  updatePendingRequests(1)
+  try { return await operation() }
+  finally { updatePendingRequests(-1) }
+}
+export const trackedFetch = (path, {background, ...options} = {}) => trackRequest(
+  () => fetch(path, {...options,headers:{'X-Session-Scope':tabScope(),...options.headers}}), background,
+)
+const performRequest = (path, {background, ...options} = {}) =>
+  trackRequest(() => fetchData(path, options), background)
 
-const performRequest = async (path, { background: _background, ...options } = {}) => {
+const fetchData = async (path, options) => {
   const freshScope=options.method==='POST'&&['/api/auth/login','/api/auth/register','/api/auth/register-seller'].includes(path)?newScope():null
   const headers = {
     'X-Session-Scope':freshScope||tabScope(),

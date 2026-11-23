@@ -7,6 +7,7 @@ import './styles/mobile-usability.css'
 import './styles/themes.css'
 import './styles/dropdowns.css'
 import App from './App.jsx'
+import { NetworkLoadingIndicator } from './components/ContentPlaceholder.jsx'
 import ProgressToast from './components/ProgressToast.jsx'
 import { SiteSettingsProvider } from './context/SiteSettingsContext.jsx'
 
@@ -14,6 +15,6 @@ applySiteTheme(readSiteTheme())
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <SiteSettingsProvider><SellerLanguageProvider><App /></SellerLanguageProvider><ProgressToast /></SiteSettingsProvider>
+    <SiteSettingsProvider><SellerLanguageProvider><App /></SellerLanguageProvider><ProgressToast /><NetworkLoadingIndicator /></SiteSettingsProvider>
   </StrictMode>,
 )
