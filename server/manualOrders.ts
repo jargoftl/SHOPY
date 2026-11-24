@@ -167,6 +167,8 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       rate = saved?.usd_rate || await initialUsdRate(coin).catch(() => '')
       if (!validRate(rate)) return res.status(503).json({error:'The USD rate for this coin is temporarily unavailable. Try saving this wallet again shortly.'})
     }
+    const removeQr = req.body?.removeQr === true
+    if (removeQr && req.body?.qr !== undefined) return res.status(400).json({error:'Choose either a replacement QR image or removal.'})
     let qrPath: string | null = null
     let qrType: string | null = null
     if (req.body?.qr !== undefined) {
@@ -189,12 +191,12 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       INSERT INTO ${table} (coin,network,address,usd_rate,qr_image,qr_content_type)
       VALUES (?,?,?,?,?,?)
       ON CONFLICT(${conflictKey}) DO UPDATE SET network=excluded.network,address=excluded.address,usd_rate=${explicitRate ? 'excluded.usd_rate' : `COALESCE(NULLIF(${table}.usd_rate, ''), excluded.usd_rate)`},
-        qr_image=CASE WHEN excluded.qr_image IS NULL AND lower(${table}.network)=lower(excluded.network) AND ${table}.address=excluded.address
+        qr_image=CASE WHEN NOT ?::boolean AND excluded.qr_image IS NULL AND lower(${table}.network)=lower(excluded.network) AND ${table}.address=excluded.address
           THEN ${table}.qr_image ELSE excluded.qr_image END,
-        qr_content_type=CASE WHEN excluded.qr_image IS NULL AND lower(${table}.network)=lower(excluded.network) AND ${table}.address=excluded.address
+        qr_content_type=CASE WHEN NOT ?::boolean AND excluded.qr_image IS NULL AND lower(${table}.network)=lower(excluded.network) AND ${table}.address=excluded.address
           THEN ${table}.qr_content_type ELSE excluded.qr_content_type END
       RETURNING coin,network,address,usd_rate AS usdRate,qr_image IS NOT NULL AS hasQr
-    `).get(coin, network, address, rate, qrPath, qrType)
+    `).get(coin, network, address, rate, qrPath, qrType, removeQr, removeQr)
     })()
     if (!wallet) return res.status(409).json({error:'A wallet for this coin and network already exists. Edit the saved wallet instead.'})
     return res.json({ ok: true, wallet })

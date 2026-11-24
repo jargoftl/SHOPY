@@ -84,15 +84,14 @@ export default function CoinWalletSettings() {
     const file = form.get('qr')
     form.delete('qr')
     const body = Object.fromEntries(form)
+    body.removeQr = form.has('removeQr')
     setError('')
     setNotice('')
     setBusy(true)
     try {
-      if (file.size) body.qr = await readScreenshot(file)
+      if (file?.size && body.removeQr) throw new Error('Choose either a replacement image or removal.')
+      if (file?.size) body.qr = await readScreenshot(file)
       const current = savedForCoin.find(wallet => wallet.network.toLowerCase() === body.network.trim().toLowerCase())
-      if (!body.qr && (!current?.hasQr || body.address.trim() !== current.address)) {
-        throw new Error('Upload the QR screenshot for this network and receiving address.')
-      }
       const savePrimary = buyerCoins.has(coin) && (!primary || current === primary)
       body.sellerNetwork = !savePrimary
       const { wallet: saved } = await apiRequest(`${walletApi}/${coin}`, { method: 'PUT', body: JSON.stringify(body) })
@@ -112,7 +111,17 @@ export default function CoinWalletSettings() {
   }
 
   return <section className="rounded-2xl border border-slate-200 bg-white p-5">
-    <p className="text-sm text-gray-600">Choose a coin and network, then add the receiving address and QR code.</p>
+    <h2 className="text-lg font-semibold">Receiving wallets</h2>
+    <p className="mt-1 text-sm text-gray-600">Edit a saved wallet or choose a coin and network to add one.</p>
+    {wallets&&wallets.length+extraWallets.length>0&&<div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="Saved wallets">
+      {[...wallets,...extraWallets].map(saved=><button key={`${saved.coin}:${saved.network}`} type="button" disabled={busy}
+        aria-pressed={coin===saved.coin&&wallet===saved&&!custom}
+        onClick={()=>{setCoin(saved.coin);chooseNetwork(saved.network)}}
+        className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-left text-sm hover:bg-emerald-50 aria-pressed:border-emerald-700">
+        <CryptoWalletIcon coin={saved.coin}/><span className="min-w-0 flex-1 break-words"><strong>{saved.coin}</strong> · {saved.network}</span>
+        <span className="shrink-0 text-xs text-slate-600">{saved.hasQr?'QR saved':'No QR'}</span>
+      </button>)}
+    </div>}
     {wallets && <fieldset disabled={busy} className="mt-4 grid gap-4">
       <div role="group" aria-label="Coin" className="flex flex-wrap gap-2">
         {coins.map(type => <button key={type} type="button" aria-pressed={coin === type} onClick={() => {
@@ -145,10 +154,14 @@ export default function CoinWalletSettings() {
           <input className={inputClass} name="address" defaultValue={wallet?.address ?? ''} required maxLength={500}/>
         </label>
         <div className="sm:col-span-2">
-          <label className="text-sm font-medium"><span className="flex items-center gap-2"><QrCode size={17} aria-hidden="true"/>QR code screenshot (PNG or JPEG, up to 2 MB)</span>
-            <input className={inputClass} name="qr" type="file" accept="image/png,image/jpeg" required={!wallet?.hasQr} />
+          <label className="text-sm font-medium"><span className="flex items-center gap-2"><QrCode size={17} aria-hidden="true"/>QR image (PNG or JPEG, up to 2 MB)</span>
+            <input className={inputClass} name="qr" type="file" accept="image/png,image/jpeg" />
           </label>
-          {wallet?.hasQr && <WalletQr coin={coin} network={isPrimary?undefined:wallet.network} />}
+          {wallet?.hasQr && <>
+            <WalletQr coin={coin} network={isPrimary?undefined:wallet.network} />
+            <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" name="removeQr"/> Remove saved QR image</label>
+          </>}
+          <p className="mt-2 text-xs text-slate-600">If you change the address, upload its matching QR image. Saving a different address without an image clears the old QR.</p>
         </div>
         <button className="w-fit bg-black px-5 py-3 text-sm text-white disabled:opacity-50" type="submit">
           {busy ? 'Saving…' : 'Save wallet'}

@@ -1,3 +1,4 @@
+import CoinWalletSettings from '../components/CoinWalletSettings.jsx'
 import '../styles/admin-dashboard.css'
 import AdminSellerHistoricalSales from '../components/AdminSellerHistoricalSales.jsx'
 import SiteName from '../components/SiteName.jsx'
@@ -21,7 +22,7 @@ import AdminWarehouse from '../components/AdminWarehouse.jsx'
 import AdminMarketing from '../components/AdminMarketing.jsx'
 import AdminDisplayStats from '../components/AdminDisplayStats.jsx'
 import RefundList from '../components/RefundList.jsx'
-const tabs=[['overview','Overview',LayoutDashboard],['accounts','People & stores',Users],['applications','Seller approval',ClipboardCheck],['orders','Orders & tracking',ShoppingBag],['payment-type','Payment Type',Wallet],['seller-funding','Seller funding',Wallet],['seller-sales-history','Adding Seller Sales History',History],['buyer-wallet','Buyer funding',Wallet],['warehouse','Warehouse',Warehouse],['marketing','Marketing requests',Megaphone],['referrals','Referrals & rewards',Users],['statistics','Display statistics',ChartNoAxesCombined],['activity','Login activity',History],['settings','Site settings',Settings],['admin-access','Manage admins',ShieldCheck],['account-recovery','Account recovery',ShieldCheck]]
+const tabs=[['overview','Overview',LayoutDashboard],['accounts','People & stores',Users],['applications','Seller approval',ClipboardCheck],['orders','Orders & tracking',ShoppingBag],['payment-type','Payment Type',Wallet],['wallet-addresses','Edit wallet address',Wallet],['seller-funding','Seller funding',Wallet],['seller-sales-history','Adding Seller Sales History',History],['buyer-wallet','Buyer funding',Wallet],['warehouse','Warehouse',Warehouse],['marketing','Marketing requests',Megaphone],['referrals','Referrals & rewards',Users],['statistics','Display statistics',ChartNoAxesCombined],['activity','Login activity',History],['settings','Site settings',Settings],['admin-access','Manage admins',ShieldCheck],['account-recovery','Account recovery',ShieldCheck]]
 const toolLinks=[
  ['Edit store followers and visit stats','/admin/seller-metrics#store-records','increase followers follower count store visitor views traffic people visited last viewed opening date rating items sold'],
  ['Edit today’s orders','/admin/seller-metrics#today-orders','increase decrease order count number today daily seller'],
@@ -45,7 +46,7 @@ const toolLinks=[
  ['Seller credit score','/admin#seller-funding','increase credit score 100 seller points'],
  ['Review seller deposits','/admin#payment-type-deposits','approve deposit receipt proof payment'],
  ['Review seller withdrawals','/admin#payment-type-withdrawals','approve reject withdrawal crypto transfer'],
- ['Configure receiving wallets','/admin#payment-type','coin network address qr payment'],
+ ['Edit wallet address','/admin#wallet-addresses','coin network address qr payment'],
  ['Review refunds','/admin#refunds','refund order request'],
 ]
 
@@ -141,6 +142,7 @@ export default function AdminPage(){
  {tab==='applications'&&<AdminSellerApplications/>}
  {tab==='orders'&&<><AdminPurchases selectedNumber={params.get('order')} autoOpen/><details className="mt-6 border bg-white p-5"><summary className="cursor-pointer font-semibold">Refund reviews</summary><div className="mt-4"><RefundList admin/></div></details></>}
  {tab==='seller-sales-history'&&<AdminSellerHistoricalSales/>}
+ {tab==='wallet-addresses'&&<CoinWalletSettings/>}
  {tab==='payment-type'&&<AdminPaymentType section={paymentSection(location.hash)}/>}
  {tab==='buyer-wallet'&&<><AdminSellerFunding kind="buyer"/><button type="button" onClick={()=>setBuyerRequestsOpen(v=>!v)} className="my-6 min-h-11 rounded-lg border bg-white px-4 py-3 text-sm font-semibold">{buyerRequestsOpen?'Hide coin requests':'Review coin deposit / withdrawal requests'}</button>{buyerRequestsOpen&&<AdminBuyers/>}</>}
  {tab==='warehouse'&&<AdminWarehouse/>}
