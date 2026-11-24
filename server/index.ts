@@ -161,6 +161,19 @@ const database = new Database()
 await new ObjectStorage().verifyBucket()
 await database.initialize()
 
+// One-time reset of the live receiving-wallet directory. Payment requests keep
+// their own instructions and QR references, so their records are left intact.
+if (process.env.RENDER_EXTERNAL_HOSTNAME === 'shopy-1-5b49.onrender.com') {
+  await database.transaction(async () => {
+    const reset = await database.prepare(
+      'INSERT INTO schema_migrations(name) VALUES(?) ON CONFLICT DO NOTHING'
+    ).run('2026-11-24-clear-receiving-wallet-directory')
+    if (!reset.changes) return
+    await database.prepare('DELETE FROM payment_wallets').run()
+    await database.prepare('DELETE FROM seller_payment_networks').run()
+  })()
+}
+
 const starterProducts: Array<[string, string, number, string, string]> = [
   ['Gabrielle Shoulder Bag', 'Bags', 89, 'A structured everyday shoulder bag.', 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=900&q=85'],
   ['Mira Everyday Tote', 'Bags', 76, 'A roomy carryall for daily essentials.', 'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=900&q=85'],
