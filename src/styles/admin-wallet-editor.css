@@ -1,0 +1,25 @@
+.admin-wallet-editor { padding: clamp(12px, 2.5vw, 22px); border: 1px solid var(--admin-line,#dce7df); border-radius: 16px; background: white; }
+.admin-wallet-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+.admin-wallet-heading h2 { font-size: 18px; font-weight: 700; }
+.admin-wallet-heading p { font-size: 13px; color: #52685d; }
+.admin-wallet-heading button, .admin-wallet-save { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 6px 12px; border-radius: 9px; background: #176347; color: white; font-size: 13px; font-weight: 650; }
+.admin-wallet-heading button:disabled, .admin-wallet-save:disabled { opacity: .5; }
+.admin-wallet-layout { display: grid; gap: 14px; margin-top: 14px; align-items: start; }
+.admin-wallet-list { display: grid; gap: 4px; max-height: 310px; overflow: auto; padding: 4px; }
+.admin-wallet-list button { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 7px 8px; border: 1px solid transparent; border-radius: 9px; text-align: left; font-size: 13px; }
+.admin-wallet-list button > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.admin-wallet-list button small { display: block; color: #52685d; font-size: 12px; }
+.admin-wallet-list button:hover, .admin-wallet-list button[aria-pressed="true"] { border-color: #cee2d6; background: #e9f4ed; }
+.admin-wallet-qr-state { flex: none; border-radius: 20px; padding: 3px 6px; background: #f0f5f1; color: #37624c; font-size: 10px; }
+.admin-wallet-form { min-width: 0; padding: 14px; border: 1px solid #dce7df; border-radius: 12px; background: #f6f9f6; }
+.admin-wallet-form h3 { margin-bottom: 10px; font-size: 15px; font-weight: 700; }
+.admin-wallet-form input:not([type="checkbox"]) { background: white; }
+.admin-wallet-form .uiverse-select > :is(.uiverse-select-trigger,.uiverse-select-options) { background: white !important; color: #14251e !important; border: 1px solid #cddfd4; border-radius: 9px; font-size: 13px; }
+.admin-wallet-form .uiverse-select-trigger { min-height: 40px; padding-inline: 10px; }
+.admin-wallet-form .uiverse-select-arrow { fill: #176347; }
+.admin-wallet-form .uiverse-select-options button { background: white; color: #14251e; font-size: 13px; }
+.admin-wallet-form .uiverse-select-options button:is(:hover,:focus-visible) { background: #e6f2eb; }
+.admin-wallet-save { justify-self: start; }
+@media (min-width: 800px) {
+  .admin-wallet-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
+}

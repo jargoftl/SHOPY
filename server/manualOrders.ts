@@ -154,6 +154,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     const explicitRate = req.body?.usdRate !== undefined
     let rate = text(req.body?.usdRate, 30)
     const additional = req.body?.sellerNetwork === true
+    const originalNetwork = text(req.body?.originalNetwork, 100)
     if (!(additional?sellerPaymentCoins:coins).includes(coin) || !network || !address || /[\r\n]/.test(network + address) || (explicitRate&&!validRate(rate))) return res.status(400).json({ error: 'Enter a supported coin, network and wallet address. Any supplied rate must be positive with up to 8 decimals.' })
     if (!explicitRate) {
       const savedRates = await db.prepare(`
@@ -186,6 +187,19 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       const otherTable = additional ? 'payment_wallets' : 'seller_payment_networks'
       const duplicate = await db.prepare(`SELECT coin FROM ${otherTable} WHERE coin=? AND lower(network)=lower(?)`).get(coin, network)
       if (duplicate) return null
+      if(originalNetwork){
+        const previous=await db.prepare(`SELECT network FROM ${table} WHERE coin=? AND lower(network)=lower(?)`).get(coin,originalNetwork)
+        if(!previous)return null
+        if(additional&&originalNetwork.toLowerCase()!==network.toLowerCase()){
+          const occupied=await db.prepare('SELECT coin FROM seller_payment_networks WHERE coin=? AND lower(network)=lower(?)').get(coin,network)
+          if(occupied)return null
+          return db.prepare(`
+            UPDATE seller_payment_networks SET network=?,address=?,usd_rate=CASE WHEN ?::boolean THEN ? ELSE COALESCE(NULLIF(usd_rate,''),?) END,qr_image=?,qr_content_type=?
+            WHERE coin=? AND lower(network)=lower(?)
+            RETURNING coin,network,address,usd_rate AS usdRate,qr_image IS NOT NULL AS hasQr
+          `).get(network,address,explicitRate,rate,rate,qrPath,qrType,coin,originalNetwork)
+        }
+      }
       const conflictKey = additional ? 'coin, (lower(network))' : 'coin'
       return db.prepare(`
       INSERT INTO ${table} (coin,network,address,usd_rate,qr_image,qr_content_type)
@@ -198,7 +212,7 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       RETURNING coin,network,address,usd_rate AS usdRate,qr_image IS NOT NULL AS hasQr
     `).get(coin, network, address, rate, qrPath, qrType, removeQr, removeQr)
     })()
-    if (!wallet) return res.status(409).json({error:'A wallet for this coin and network already exists. Edit the saved wallet instead.'})
+    if (!wallet) return res.status(409).json({error:'This wallet changed or the chosen network already has an address. Refresh the wallet editor and try again.'})
     return res.json({ ok: true, wallet })
   })
   app.get('/api/payment-coins', async (_req, res) => {

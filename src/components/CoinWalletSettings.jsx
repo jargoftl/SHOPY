@@ -1,3 +1,5 @@
+import UiverseSelect from './UiverseSelect.jsx'
+import '../styles/admin-wallet-editor.css'
 import { Plus, QrCode, Wallet } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { apiRequest, trackedFetch } from '../lib/api.js'
@@ -54,7 +56,7 @@ export default function CoinWalletSettings() {
   const [coin, setCoin] = useState('USDT')
   const [extraWallets, setExtraWallets] = useState([])
   const [network, setNetwork] = useState('')
-  const [custom, setCustom] = useState(false)
+  const [editing, setEditing] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -64,18 +66,17 @@ export default function CoinWalletSettings() {
   }, [])
 
   const primary = wallets?.find(wallet => wallet.coin === coin)
-  const additional = extraWallets.filter(wallet => wallet.coin === coin)
-  const savedForCoin = [...(primary ? [primary] : []), ...additional]
-  const networks = [...new Map([...coinNetworks[coin], ...savedForCoin.map(wallet => wallet.network)]
-    .map(name => [name.toLowerCase(), name])).values()]
-  const wallet = savedForCoin.find(wallet => wallet.network.toLowerCase() === network.toLowerCase())
-  const isPrimary = buyerCoins.has(coin) && (!primary || wallet === primary)
+  const savedForCoin = [...(primary ? [primary] : []), ...extraWallets.filter(wallet => wallet.coin === coin)]
+  const networks = [...new Set([...coinNetworks[coin], ...(editing ? [editing.network] : [])])]
+  const isOccupied = name => savedForCoin.some(wallet => wallet !== editing && wallet.network.toLowerCase() === name.toLowerCase())
 
-  function chooseNetwork(name) {
-    setCustom(false)
-    setNetwork(name)
+  function openWallet(wallet = null) {
+    setEditing(wallet)
+    if (wallet) setCoin(wallet.coin)
+    setNetwork(wallet?.network ?? '')
     setError('')
     setNotice('')
+    setRevision(value => value + 1)
   }
 
   async function save(event) {
@@ -91,16 +92,17 @@ export default function CoinWalletSettings() {
     try {
       if (file?.size && body.removeQr) throw new Error('Choose either a replacement image or removal.')
       if (file?.size) body.qr = await readScreenshot(file)
-      const current = savedForCoin.find(wallet => wallet.network.toLowerCase() === body.network.trim().toLowerCase())
-      const savePrimary = buyerCoins.has(coin) && (!primary || current === primary)
+      if(!network||isOccupied(network))throw new Error('Choose an available network.')
+      const savePrimary = editing ? editing === primary : buyerCoins.has(coin) && !primary
+      if(editing)body.originalNetwork=editing.network
       body.sellerNetwork = !savePrimary
       const { wallet: saved } = await apiRequest(`${walletApi}/${coin}`, { method: 'PUT', body: JSON.stringify(body) })
       if (savePrimary) setWallets(previous => [...previous.filter(wallet => wallet.coin !== coin), saved])
       else {
-        setExtraWallets(previous => [...previous.filter(wallet => wallet.coin !== coin || wallet.network.toLowerCase() !== saved.network.toLowerCase()), saved])
+        setExtraWallets(previous => [...previous.filter(wallet => wallet.coin !== coin || wallet.network.toLowerCase() !== (editing?.network??saved.network).toLowerCase()), saved])
       }
       setNetwork(saved.network)
-      setCustom(false)
+      setEditing(saved)
       setRevision(value => value + 1)
       setNotice(`${coin} on ${saved.network} saved.`)
     } catch (error) {
@@ -110,66 +112,55 @@ export default function CoinWalletSettings() {
     }
   }
 
-  return <section className="rounded-2xl border border-slate-200 bg-white p-5">
-    <h2 className="text-lg font-semibold">Receiving wallets</h2>
-    <p className="mt-1 text-sm text-gray-600">Edit a saved wallet or choose a coin and network to add one.</p>
-    {wallets&&wallets.length+extraWallets.length>0&&<div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="Saved wallets">
-      {[...wallets,...extraWallets].map(saved=><button key={`${saved.coin}:${saved.network}`} type="button" disabled={busy}
-        aria-pressed={coin===saved.coin&&wallet===saved&&!custom}
-        onClick={()=>{setCoin(saved.coin);chooseNetwork(saved.network)}}
-        className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-left text-sm hover:bg-emerald-50 aria-pressed:border-emerald-700">
-        <CryptoWalletIcon coin={saved.coin}/><span className="min-w-0 flex-1 break-words"><strong>{saved.coin}</strong> · {saved.network}</span>
-        <span className="shrink-0 text-xs text-slate-600">{saved.hasQr?'QR saved':'No QR'}</span>
-      </button>)}
-    </div>}
-    {wallets && <fieldset disabled={busy} className="mt-4 grid gap-4">
-      <div role="group" aria-label="Coin" className="flex flex-wrap gap-2">
-        {coins.map(type => <button key={type} type="button" aria-pressed={coin === type} onClick={() => {
-          if (coin === type) return
-          setCoin(type)
-          chooseNetwork('')
-        }} className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm font-semibold ${coin === type ? 'border-blue-500 bg-blue-50 text-blue-950' : 'border-slate-200 hover:bg-slate-50'}`}>
-          <CryptoWalletIcon coin={type}/>{type}
+  return <section className="admin-wallet-editor">
+    <header className="admin-wallet-heading">
+      <div><h2>Receiving wallets</h2><p>Manage the address and QR image for each network.</p></div>
+      <button type="button" disabled={busy||!wallets} onClick={()=>openWallet()}><Plus size={17} aria-hidden="true"/> Add wallet</button>
+    </header>
+    {wallets&&<div className="admin-wallet-layout">
+      <div className="admin-wallet-list" aria-label="Saved wallets">
+        {[...wallets,...extraWallets].map(saved=><button key={`${saved.coin}:${saved.network}`} type="button" disabled={busy}
+          aria-pressed={editing===saved} onClick={()=>openWallet(saved)}>
+          <CryptoWalletIcon coin={saved.coin}/><span><strong>{saved.coin}</strong><small>{saved.network}</small></span>
+          <span className="admin-wallet-qr-state">{saved.hasQr?'QR saved':'No QR'}</span>
         </button>)}
+        {!wallets.length&&!extraWallets.length&&<p className="text-sm">No wallets saved yet.</p>}
       </div>
-      <div role="group" aria-label={`${coin} networks`} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {networks.map(name => {
-          const saved = savedForCoin.find(wallet => wallet.network.toLowerCase() === name.toLowerCase())
-          return <button key={name} type="button" aria-pressed={!custom && network === name} onClick={() => chooseNetwork(name)}
-            className={`flex min-h-12 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-sm ${!custom && network === name ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:bg-slate-50'}`}>
-            <CryptoWalletIcon network={name}/><span className="flex-1 font-medium">{name}</span>
-            {saved && <span className="text-xs text-slate-600">{saved === primary ? 'Primary' : 'Saved'}</span>}
-          </button>
-        })}
-        <button type="button" aria-pressed={custom} onClick={() => { chooseNetwork(''); setCustom(true) }}
-          className="flex min-h-12 items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-left text-sm text-blue-800 hover:bg-blue-50">
-          <Plus size={18} aria-hidden="true"/>Custom network
-        </button>
-      </div>
-      {(network || custom) && <form key={`${coin}:${network}:${custom}:${revision}`} className="grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2" onSubmit={save}>
-        {custom ? <label className="text-sm font-medium">Network name
-          <input className={inputClass} name="network" required maxLength={100}/>
-        </label> : <input type="hidden" name="network" value={network}/>}
-        <label className="text-sm font-medium"><span className="flex items-center gap-2"><Wallet size={17} aria-hidden="true"/>Receiving wallet address</span>
-          <input className={inputClass} name="address" defaultValue={wallet?.address ?? ''} required maxLength={500}/>
-        </label>
-        <div className="sm:col-span-2">
-          <label className="text-sm font-medium"><span className="flex items-center gap-2"><QrCode size={17} aria-hidden="true"/>QR image (PNG or JPEG, up to 2 MB)</span>
-            <input className={inputClass} name="qr" type="file" accept="image/png,image/jpeg" />
+      <form key={revision} className="admin-wallet-form" onSubmit={save}>
+        <h3>{editing?'Edit wallet':'Add wallet'}</h3>
+        <fieldset disabled={busy} className="grid gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm font-medium">Coin
+              <UiverseSelect className="mt-1 w-full" value={coin} disabled={Boolean(editing)||busy} onChange={event=>{setCoin(event.target.value);setNetwork('')}}>
+                {coins.map(type=><option key={type} value={type}>{type}</option>)}
+              </UiverseSelect>
+            </label>
+            <label className="text-sm font-medium">Network
+              <UiverseSelect className="mt-1 w-full" name="network" required value={network} onChange={event=>setNetwork(event.target.value)}>
+                <option value="" disabled>Choose network</option>
+                {networks.map(name=><option key={name} value={name} disabled={isOccupied(name)}>{name}{isOccupied(name)?' · Already saved':''}</option>)}
+              </UiverseSelect>
+            </label>
+          </div>
+          <label className="text-sm font-medium"><span className="flex items-center gap-2"><Wallet size={17} aria-hidden="true"/>Receiving wallet address</span>
+            <input className={inputClass} name="address" defaultValue={editing?.address ?? ''} required maxLength={500} spellCheck={false} autoComplete="off"/>
           </label>
-          {wallet?.hasQr && <>
-            <WalletQr coin={coin} network={isPrimary?undefined:wallet.network} />
-            <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" name="removeQr"/> Remove saved QR image</label>
-          </>}
-          <p className="mt-2 text-xs text-slate-600">If you change the address, upload its matching QR image. Saving a different address without an image clears the old QR.</p>
-        </div>
-        <button className="w-fit bg-black px-5 py-3 text-sm text-white disabled:opacity-50" type="submit">
-          {busy ? 'Saving…' : 'Save wallet'}
-        </button>
-      </form>}
-    </fieldset>}
-    {!wallets && !error && <p role="status" className="mt-4 text-sm">Loading wallets…</p>}
-    {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
-    {notice && <p role="status" className="mt-4 text-sm">{notice}</p>}
+          <div>
+            <label className="text-sm font-medium"><span className="flex items-center gap-2"><QrCode size={17} aria-hidden="true"/>QR image</span>
+              <input className={inputClass} name="qr" type="file" accept="image/png,image/jpeg"/>
+            </label>
+            {editing?.hasQr&&<>
+              <WalletQr coin={coin} network={editing===primary?undefined:editing.network}/>
+              <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" name="removeQr"/> Remove saved QR image</label>
+            </>}
+            <p className="mt-2 text-xs text-slate-600">PNG or JPEG, up to 2 MB. Changing the address or network clears the old QR unless you upload a replacement.</p>
+          </div>
+          <button className="admin-wallet-save" type="submit">{busy?'Saving…':'Save wallet'}</button>
+        </fieldset>
+      </form>
+    </div>}
+    {!wallets&&!error&&<p role="status" className="mt-4 text-sm">Loading wallets…</p>}
+    {error&&<p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+    {notice&&<p role="status" className="mt-4 text-sm">{notice}</p>}
   </section>
 }
