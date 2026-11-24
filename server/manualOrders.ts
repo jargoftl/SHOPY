@@ -155,6 +155,9 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
     let rate = text(req.body?.usdRate, 30)
     const additional = req.body?.sellerNetwork === true
     const originalNetwork = text(req.body?.originalNetwork, 100)
+    const originalCoin = req.body?.originalCoin===undefined?coin:text(req.body.originalCoin, 10)
+    const originalAdditional = req.body?.originalSellerNetwork===undefined?additional:req.body.originalSellerNetwork===true
+    if(originalNetwork&&!sellerPaymentCoins.includes(originalCoin))return res.status(400).json({error:'Invalid original wallet coin.'})
     if (!(additional?sellerPaymentCoins:coins).includes(coin) || !network || !address || /[\r\n]/.test(network + address) || (explicitRate&&!validRate(rate))) return res.status(400).json({ error: 'Enter a supported coin, network and wallet address. Any supplied rate must be positive with up to 8 decimals.' })
     if (!explicitRate) {
       const savedRates = await db.prepare(`
@@ -188,16 +191,23 @@ export async function registerManualOrders(app: Express, db: Database, auth: Req
       const duplicate = await db.prepare(`SELECT coin FROM ${otherTable} WHERE coin=? AND lower(network)=lower(?)`).get(coin, network)
       if (duplicate) return null
       if(originalNetwork){
-        const previous=await db.prepare(`SELECT network FROM ${table} WHERE coin=? AND lower(network)=lower(?)`).get(coin,originalNetwork)
+        const sourceTable = originalAdditional ? 'seller_payment_networks' : 'payment_wallets'
+        const previous=await db.prepare(`SELECT network FROM ${sourceTable} WHERE coin=? AND lower(network)=lower(?)`).get(originalCoin,originalNetwork)
         if(!previous)return null
-        if(additional&&originalNetwork.toLowerCase()!==network.toLowerCase()){
-          const occupied=await db.prepare('SELECT coin FROM seller_payment_networks WHERE coin=? AND lower(network)=lower(?)').get(coin,network)
-          if(occupied)return null
-          return db.prepare(`
-            UPDATE seller_payment_networks SET network=?,address=?,usd_rate=CASE WHEN ?::boolean THEN ? ELSE COALESCE(NULLIF(usd_rate,''),?) END,qr_image=?,qr_content_type=?
-            WHERE coin=? AND lower(network)=lower(?)
-            RETURNING coin,network,address,usd_rate AS usdRate,qr_image IS NOT NULL AS hasQr
-          `).get(network,address,explicitRate,rate,rate,qrPath,qrType,coin,originalNetwork)
+        const sameWallet=sourceTable===table&&originalCoin===coin&&originalNetwork.toLowerCase()===network.toLowerCase()
+        if(!sameWallet){
+          const occupied=await db.prepare(`SELECT coin FROM ${table} WHERE coin=? ${additional?'AND lower(network)=lower(?)':''}`)
+            .get(coin,...(additional?[network]:[]))
+          if(occupied&&!(sourceTable===table&&!additional&&originalCoin===coin))return null
+          if(sourceTable===table){
+            return db.prepare(`
+              UPDATE ${table} SET coin=?,network=?,address=?,
+                usd_rate=CASE WHEN ?::boolean THEN ? ELSE COALESCE(NULLIF(usd_rate,''),?) END,qr_image=?,qr_content_type=?
+              WHERE coin=? AND lower(network)=lower(?)
+              RETURNING coin,network,address,usd_rate AS usdRate,qr_image IS NOT NULL AS hasQr
+            `).get(coin,network,address,explicitRate||originalCoin!==coin,rate,rate,qrPath,qrType,originalCoin,originalNetwork)
+          }
+          await db.prepare(`DELETE FROM ${sourceTable} WHERE coin=? AND lower(network)=lower(?)`).run(originalCoin,originalNetwork)
         }
       }
       const conflictKey = additional ? 'coin, (lower(network))' : 'coin'

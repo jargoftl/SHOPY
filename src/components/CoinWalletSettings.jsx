@@ -66,7 +66,8 @@ export default function CoinWalletSettings() {
 
   const primary = wallets?.find(wallet => wallet.coin === coin)
   const savedForCoin = [...(primary ? [primary] : []), ...extraWallets.filter(wallet => wallet.coin === coin)]
-  const networks = [...new Set([...coinNetworks[coin], ...(editing ? [editing.network] : [])])]
+  const editingPrimary=Boolean(editing&&wallets?.includes(editing))
+  const networks = [...new Set([...coinNetworks[coin], ...(editing?.coin===coin ? [editing.network] : [])])]
   const isOccupied = name => savedForCoin.some(wallet => wallet !== editing && wallet.network.toLowerCase() === name.toLowerCase())
 
   function openWallet(wallet = null) {
@@ -92,14 +93,16 @@ export default function CoinWalletSettings() {
       if (file?.size && body.removeQr) throw new Error('Choose either a replacement image or removal.')
       if (file?.size) body.qr = await readScreenshot(file)
       if(!network||isOccupied(network))throw new Error('Choose an available network.')
-      const savePrimary = Boolean(editing && editing === primary)
-      if(editing)body.originalNetwork=editing.network
+      const savePrimary = editingPrimary && editing.coin===coin
+      if(editing){
+        body.originalNetwork=editing.network
+        body.originalCoin=editing.coin
+        body.originalSellerNetwork=!editingPrimary
+      }
       body.sellerNetwork = !savePrimary
       const { wallet: saved } = await apiRequest(`${walletApi}/${coin}`, { method: 'PUT', body: JSON.stringify(body) })
-      if (savePrimary) setWallets(previous => [...previous.filter(wallet => wallet.coin !== coin), saved])
-      else {
-        setExtraWallets(previous => [...previous.filter(wallet => wallet.coin !== coin || wallet.network.toLowerCase() !== (editing?.network??saved.network).toLowerCase()), saved])
-      }
+      if(editingPrimary||savePrimary)setWallets(previous=>[...previous.filter(wallet=>wallet!==editing),...(savePrimary?[saved]:[])])
+      if(!savePrimary)setExtraWallets(previous=>[...previous.filter(wallet=>wallet!==editing),saved])
       setNetwork(saved.network)
       setEditing(saved)
       setRevision(value => value + 1)
@@ -130,7 +133,7 @@ export default function CoinWalletSettings() {
         <fieldset disabled={busy} className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium">Coin
-              <UiverseSelect className="mt-1 w-full" value={coin} renderOption={option=><span className="admin-wallet-option"><CryptoWalletIcon coin={option.value}/>{option.label}</span>} disabled={Boolean(editing)||busy} onChange={event=>{setCoin(event.target.value);setNetwork('')}}>
+              <UiverseSelect className="mt-1 w-full" value={coin} renderOption={option=><span className="admin-wallet-option"><CryptoWalletIcon coin={option.value}/>{option.label}</span>} disabled={busy} onChange={event=>{setCoin(event.target.value);setNetwork('')}}>
                 {coins.map(type=><option key={type} value={type}>{type}</option>)}
               </UiverseSelect>
             </label>
@@ -149,10 +152,10 @@ export default function CoinWalletSettings() {
               <input className={inputClass} name="qr" type="file" accept="image/png,image/jpeg"/>
             </label>
             {editing?.hasQr&&<>
-              <WalletQr coin={coin} network={editing===primary?undefined:editing.network}/>
+              <WalletQr coin={editing.coin} network={editingPrimary?undefined:editing.network}/>
               <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" name="removeQr"/> Remove saved QR image</label>
             </>}
-            <p className="mt-2 text-xs text-slate-600">PNG or JPEG, up to 2 MB. Changing the address or network clears the old QR unless you upload a replacement.</p>
+            <p className="mt-2 text-xs text-slate-600">PNG or JPEG, up to 2 MB. Changing the coin, address, or network clears the old QR unless you upload a replacement.</p>
           </div>
           <button className="admin-wallet-save" type="submit">{busy?'Saving…':'Save wallet'}</button>
         </fieldset>
