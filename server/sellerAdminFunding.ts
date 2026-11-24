@@ -35,15 +35,23 @@ export function registerSellerAdminFunding(app:Express,db:Database,auth:RequestH
   return res.status(status).json({ok:true})
  })
  app.post('/api/admin/seller-funding',auth,role('admin'),async(req,res)=>{
-  const {sellerId,amountCents,requestKey,verified}=req.body||{},reason=(typeof req.body?.reason==='string'?req.body.reason.trim():'') || 'Administrator action'
-  if(!Number.isSafeInteger(sellerId)||sellerId<1||!Number.isSafeInteger(amountCents)||amountCents<1||amountCents>100000000||!reason||reason.length>1000||!/^[a-f0-9-]{36}$/i.test(requestKey||'')||verified!==true)return res.status(400).json({error:'Choose a seller, enter a positive amount up to $1,000,000 and authorize the funding credit.'})
+  const {sellerId,amountCents,requestKey,verified,operation='add'}=req.body||{},reason=(typeof req.body?.reason==='string'?req.body.reason.trim():'') || 'Administrator action'
+  if(!['add','reduce'].includes(operation)||!Number.isSafeInteger(sellerId)||sellerId<1||!Number.isSafeInteger(amountCents)||amountCents<1||amountCents>100000000||!reason||reason.length>1000||!/^[a-f0-9-]{36}$/i.test(requestKey||'')||verified!==true)return res.status(400).json({error:'Choose a seller, enter a positive amount up to $1,000,000 and authorize the wallet adjustment.'})
+  const delta=operation==='reduce'?-amountCents:amountCents
+  const formatted=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(amountCents/100)
   try{await db.transaction(async()=>{
    if(!await db.prepare("SELECT id FROM users WHERE id=? AND role='seller' AND suspended=0").get(sellerId))throw Object.assign(new Error('Seller not found.'),{status:404})
    const old=await db.prepare("SELECT seller_id,delta_cents,note,actor_id FROM seller_fund_records WHERE kind='admin_funding' AND reference=?").get(requestKey) as {seller_id:number,delta_cents:number,note:string,actor_id:number}|undefined
-   if(old){if(old.seller_id!==sellerId||old.delta_cents!==amountCents||old.note!==reason||old.actor_id!==req.user!.id)throw Object.assign(new Error('That request key has already been used for a different funding action.'),{status:409});return}
-   await postSellerFunds(db,sellerId,'admin_funding',requestKey,amountCents,0,req.user!.id,reason)
-   await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'wallet','Credited to wallet',?,'/seller/wallet')").run(sellerId,`$${(amountCents/100).toFixed(2)} credited to your wallet.`)
+   if(old){if(old.seller_id!==sellerId||old.delta_cents!==delta||old.note!==reason||old.actor_id!==req.user!.id)throw Object.assign(new Error('That request key has already been used for a different funding action.'),{status:409});return}
+   if(delta<0){
+    const wallet=await db.prepare('SELECT balance_cents,reserved_cents FROM seller_wallets WHERE seller_id=?').get(sellerId) as {balance_cents:number,reserved_cents:number}|undefined
+    const available=Math.max(0,(wallet?.balance_cents??0)-(wallet?.reserved_cents??0))
+    if(amountCents>available)throw Object.assign(new Error('The reduction exceeds the seller’s available wallet balance.'),{status:422})
+   }
+   await postSellerFunds(db,sellerId,'admin_funding',requestKey,delta,0,req.user!.id,reason)
+   await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) VALUES(?,'wallet',?,?,'/seller/wallet')")
+    .run(sellerId,delta<0?'Wallet balance reduced':'Credited to wallet',`${formatted} ${delta<0?'deducted from':'credited to'} your wallet.`)
   })()}catch(error){const e=error as Error&{status?:number};if(e.status)return res.status(e.status).json({error:e.message});throw error}
-  res.json({ok:true})
+  res.json({ok:true,operation})
  })
 }

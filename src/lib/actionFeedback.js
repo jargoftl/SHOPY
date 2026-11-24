@@ -1,5 +1,5 @@
 const actions = [
- ['POST', /^\/api\/admin\/(?:buyer|seller)-funding$/, 'Adding funds…', 'Funds added.'],
+ ['POST', /^\/api\/admin\/(?:buyer|seller)-funding$/, 'Updating balance…', 'Funds added.'],
  ['PATCH', /^\/api\/admin\/users\/\d+\/rewards$/, 'Updating balance…', 'Balance updated.'],
  ['POST', /^\/api\/admin\/sellers\/\d+\/wallet-records$/, 'Recording wallet transaction…', 'Wallet transaction recorded.'],
  ['PATCH', /^\/api\/admin\/seller-applications\/\d+\/review$/, 'Saving application decision…', 'Application decision saved.'],
@@ -38,7 +38,7 @@ export async function withActionFeedback(path, options, operation) {
   const succeeded=result?.ok!==false
   // A new seller deposit is followed by a separate receipt upload.
   const preparingDeposit=path==='/api/seller/finance/requests'&&result?.status==='awaiting_receipt'
-  let message=success
+  let message=result?.operation==='reduce'&&endpoint==='/api/admin/seller-funding'?'Seller wallet balance reduced.':success
   if(succeeded&&/^\/api\/admin\/seller-applications\/\d+\/review$/.test(endpoint)){
    const status=result?.application?.status
    if(status==='approved')message='Seller approved.'
