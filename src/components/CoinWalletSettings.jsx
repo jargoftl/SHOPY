@@ -6,7 +6,6 @@ import { apiRequest, trackedFetch } from '../lib/api.js'
 import CryptoWalletIcon, { coinNetworks } from './CryptoWalletIcon.jsx'
 
 const coins = Object.keys(coinNetworks)
-const buyerCoins = new Set(['BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'SOL', 'XRP', 'DOGE', 'LTC'])
 const walletApi = '/api/admin/payment-wallets'
 const inputClass = 'mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm'
 
@@ -93,7 +92,7 @@ export default function CoinWalletSettings() {
       if (file?.size && body.removeQr) throw new Error('Choose either a replacement image or removal.')
       if (file?.size) body.qr = await readScreenshot(file)
       if(!network||isOccupied(network))throw new Error('Choose an available network.')
-      const savePrimary = editing ? editing === primary : buyerCoins.has(coin) && !primary
+      const savePrimary = Boolean(editing && editing === primary)
       if(editing)body.originalNetwork=editing.network
       body.sellerNetwork = !savePrimary
       const { wallet: saved } = await apiRequest(`${walletApi}/${coin}`, { method: 'PUT', body: JSON.stringify(body) })

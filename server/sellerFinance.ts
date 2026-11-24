@@ -163,10 +163,10 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  app.get('/api/admin/sellers/:id/analytics',auth,role('admin'),protectedRoute(async(req,res)=>{res.json(await analytics(Number(req.params.id)))}))
  const configuredWallets = async () => {
  const rows = await db.prepare(`
-  SELECT coin,network,address,usd_rate,qr_image,qr_content_type,0 AS priority FROM payment_wallets
+  SELECT coin,network,address,usd_rate,qr_image,qr_content_type FROM payment_wallets
   UNION ALL
-  SELECT coin,network,address,usd_rate,qr_image,qr_content_type,1 AS priority FROM seller_payment_networks
-  ORDER BY priority,coin,network
+  SELECT coin,network,address,usd_rate,qr_image,qr_content_type FROM seller_payment_networks
+  ORDER BY coin,network
  `).all() as Array<{
   coin:string,network:string,address:string,usd_rate:string,qr_image:string|null,qr_content_type:string|null
  }>
@@ -175,7 +175,9 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
  const walletVersion=(wallet:Awaited<ReturnType<typeof configuredWallets>>[number])=>
   createHash('sha256').update(JSON.stringify([wallet.coin,wallet.network,wallet.address,wallet.usd_rate,wallet.qr_image,wallet.qr_content_type])).digest('hex')
  app.get('/api/seller/finance/deposit-wallets/:coin',auth,role('seller'),protectedRoute(async(req,res)=>{
-  const wallet=(await configuredWallets()).find(wallet=>wallet.coin===req.params.coin&&(req.query.network===undefined||wallet.network===req.query.network))
+  const choices=(await configuredWallets()).filter(wallet=>wallet.coin===req.params.coin)
+  if(req.query.network===undefined&&choices.length>1)return void res.status(400).json({error:'Choose a deposit network.'})
+  const wallet=req.query.network===undefined?choices[0]:choices.find(wallet=>wallet.network===req.query.network)
   if(!wallet)return void res.status(404).json({error:'This deposit wallet is unavailable.'})
   const qrUrl=wallet.qr_image&&wallet.qr_content_type
    ? `data:${wallet.qr_content_type};base64,${(await new ObjectStorage().get(wallet.qr_image)).toString('base64')}`
@@ -222,7 +224,9 @@ export function registerSellerFinance(app: Express, db: Database, auth: RequestH
   return {id:existing.id,status:existing.status}
  }
  if(kind==='deposit'){
-  const wallet=(await configuredWallets()).find(wallet=>wallet.coin===coin&&(req.body.paymentNetwork===undefined||wallet.network===req.body.paymentNetwork))
+  const choices=(await configuredWallets()).filter(wallet=>wallet.coin===coin)
+  if(req.body.paymentNetwork===undefined&&choices.length>1)fail('Choose a deposit network.')
+  const wallet=req.body.paymentNetwork===undefined?choices[0]:choices.find(wallet=>wallet.network===req.body.paymentNetwork)
   if(!wallet) fail('This deposit wallet is unavailable. Choose a configured wallet.')
   if(req.body.walletVersion!==undefined&&req.body.walletVersion!==walletVersion(wallet)){
    fail('The receiving wallet changed. If you already sent funds, contact support before sending again.')

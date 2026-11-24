@@ -58,8 +58,8 @@ function DepositAmount({wallet}){
 }
 
 function DepositDialog({wallets,request,requestId,pendingDeposits,onSelectDeposit,hasPin,onSetPin,onClose,onUploaded}){
- const [coin,setCoin]=useState(()=>!requestId&&wallets.some(wallet=>wallet.coin==='BTC')?'BTC':'')
- const [network,setNetwork]=useState(()=>!requestId&&wallets.filter(wallet=>wallet.coin==='BTC').length===1?wallets.find(wallet=>wallet.coin==='BTC').network:'')
+ const [coin,setCoin]=useState('')
+ const [network,setNetwork]=useState('')
  const networks=wallets.filter(wallet=>wallet.coin===coin)
  const availableCoins=[...new Set(wallets.map(wallet=>wallet.coin))]
  const [wallet,setWallet]=useState(null)
@@ -112,16 +112,16 @@ function DepositDialog({wallets,request,requestId,pendingDeposits,onSelectDeposi
    {!coin&&!requestId&&<div className="seller-deposit-options" aria-label="Available coins">
     {availableCoins.length?availableCoins.map(type=>{
      const options=wallets.filter(wallet=>wallet.coin===type)
-     return <button type="button" key={type} onClick={()=>choose(type,options.length===1?options[0].network:'')} className="seller-deposit-option">
+     return <button type="button" key={type} onClick={()=>choose(type,'')} className="seller-deposit-option">
       <CryptoWalletIcon coin={type}/><span><strong>{type}</strong><small>{options.length===1?options[0].network:`${options.length} networks`}</small></span><ChevronRight size={16} aria-hidden="true"/>
      </button>
     }):<p className="text-sm text-gray-600">No deposit wallets are available yet.</p>}
    </div>}
    {coin&&<div className="seller-deposit-switches">
     <button type="button" disabled={submitting} onClick={()=>choose('','')}>Choose another coin</button>
-    {wallet&&networks.length>1&&<button type="button" disabled={submitting} onClick={()=>choose(coin,'')}>Change network</button>}
+    {wallet&&networks.length>0&&<button type="button" disabled={submitting} onClick={()=>choose(coin,'')}>Change network</button>}
    </div>}
-   {coin&&!network&&networks.length>1&&<section aria-labelledby="deposit-network-title">
+   {coin&&!network&&networks.length>0&&<section aria-labelledby="deposit-network-title">
     <h3 id="deposit-network-title" className="seller-deposit-section-title">Choose a {coin} network</h3>
     <div className="seller-deposit-options">
      {networks.map(option=><button key={option.network} type="button" disabled={submitting} onClick={()=>choose(coin,option.network)} className="seller-deposit-option">
