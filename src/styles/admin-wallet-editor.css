@@ -23,3 +23,7 @@
 @media (min-width: 800px) {
   .admin-wallet-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); }
 }
+.admin-wallet-option { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.admin-wallet-option > span:last-child { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.admin-wallet-option > span[aria-hidden="true"] { width: 22px; height: 22px; }
+.admin-wallet-option > span[aria-hidden="true"] svg { width: 13px; height: 13px; }

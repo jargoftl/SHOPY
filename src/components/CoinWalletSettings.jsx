@@ -131,12 +131,12 @@ export default function CoinWalletSettings() {
         <fieldset disabled={busy} className="grid gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium">Coin
-              <UiverseSelect className="mt-1 w-full" value={coin} disabled={Boolean(editing)||busy} onChange={event=>{setCoin(event.target.value);setNetwork('')}}>
+              <UiverseSelect className="mt-1 w-full" value={coin} renderOption={option=><span className="admin-wallet-option"><CryptoWalletIcon coin={option.value}/>{option.label}</span>} disabled={Boolean(editing)||busy} onChange={event=>{setCoin(event.target.value);setNetwork('')}}>
                 {coins.map(type=><option key={type} value={type}>{type}</option>)}
               </UiverseSelect>
             </label>
             <label className="text-sm font-medium">Network
-              <UiverseSelect className="mt-1 w-full" name="network" required value={network} onChange={event=>setNetwork(event.target.value)}>
+              <UiverseSelect className="mt-1 w-full" name="network" required value={network} renderOption={option=><span className="admin-wallet-option">{option.value&&<CryptoWalletIcon network={option.value}/>}<span>{option.label}</span></span>} onChange={event=>setNetwork(event.target.value)}>
                 <option value="" disabled>Choose network</option>
                 {networks.map(name=><option key={name} value={name} disabled={isOccupied(name)}>{name}{isOccupied(name)?' · Already saved':''}</option>)}
               </UiverseSelect>
