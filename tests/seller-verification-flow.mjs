@@ -10,21 +10,19 @@ export async function testSellerVerification({req,check,cookie,seller,buyer,db,p
  r=await signup('review-applicant@example.test',{country:'United States',ssnLast4:'0001'});const userId=r.data.user?.id,applicant=r.cookie
  check('new applicant has no seller role before review',r.status===201&&r.data.user.role==='customer'&&r.data.user.sellerStatus==='pending',r.status)
  if(!userId)return
- const reference=(await db.query('SELECT ssn_last4 FROM shop.seller_applications WHERE user_id=$1',[userId])).rows[0];check('optional SSN stores only four digits',reference.ssn_last4==='0001')
- r=await req('/api/admin/seller-applications/'+userId,{},cookie);check('private admin review marks optional suffix as unverified',r.data.application.ssnLast4==='0001'&&r.data.application.ssnVerified===false)
- r=await signup('bad-ssn@example.test',{country:'United States',ssnLast4:'000000001'});check('full SSN is rejected in suffix field',r.status===400)
- r=await signup('foreign-ssn@example.test',{country:'Nigeria',ssnLast4:'0001'});check('SSN suffix is US-only',r.status===400)
+ const reference=(await db.query('SELECT ssn_last4 FROM shop.seller_applications WHERE user_id=$1',[userId])).rows[0];check('legacy signup SSN field is ignored',reference.ssn_last4===null)
+ r=await req('/api/admin/seller-applications/'+userId,{},cookie);check('private admin review shows no SSN reference for new applicants',r.data.application.ssnLast4===null)
  for(const path of ['/api/seller/products','/api/warehouse','/api/seller/store','/api/seller/marketing']){r=await req(path,{},applicant);check('pending seller denied '+path,r.status===403,r.status)}
  r=await req('/api/seller/products',{method:'POST',body:JSON.stringify({name:'Bypass',price:1,category:'Home',imageUrl:'https://example.test/image.jpg'})},applicant);check('pending seller cannot create product',r.status===403)
  r=await req('/api/stores/'+userId);check('pending seller store is not public',r.status===404)
  r=await req('/api/buyer/account',{method:'PATCH',body:JSON.stringify({fullName:'Changed during review',phone:'+15559999999'})},applicant);check('pending identity details cannot change outside revision review',r.status===409)
  r=await req('/api/admin/users/'+userId+'/role',{method:'PATCH',body:JSON.stringify({role:'seller'})},cookie);check('generic role change cannot bypass verification',r.status===409)
- r=await req('/api/admin/seller-applications',{},cookie);check('admin receives pending application with document count',r.status===200&&r.data.applications.some(a=>a.userId===userId&&a.status==='pending'&&a.documentCount===3))
+ r=await req('/api/admin/seller-applications',{},cookie);check('admin receives pending application with document count',r.status===200&&r.data.applications.some(a=>a.userId===userId&&a.status==='pending'&&a.documentCount===2))
  r=await req('/api/admin/seller-applications/'+userId,{},buyer);check('buyer cannot open admin verification profile',r.status===403)
  r=await req('/api/seller/application',{},applicant);const document=r.data.documents[0]
- check('applicant receives document IDs, not raw Storage paths',r.status===200&&r.data.documents.length===3&&!JSON.stringify(r.data).includes('object_path')&&!JSON.stringify(r.data).match(/verification\/[a-f0-9-]{36}\./))
+ check('applicant receives document IDs, not raw Storage paths',r.status===200&&r.data.documents.length===2&&!JSON.stringify(r.data).includes('object_path')&&!JSON.stringify(r.data).match(/verification\/[a-f0-9-]{36}\./))
  const stored=(await db.query('SELECT * FROM shop.seller_verification_documents WHERE user_id=$1',[userId])).rows
- check('verification photos are stored separately from product images',stored.length===3&&stored.every(d=>d.object_path.startsWith('verification/')))
+ check('verification photos are stored separately from product images',stored.length===2&&stored.every(d=>d.object_path.startsWith('verification/')))
  let image=await fetch(base+document.url,{headers:{Cookie:applicant}});check('applicant can view own private photo without caching',image.ok&&image.headers.get('cache-control').includes('no-store')&&Buffer.from(await image.arrayBuffer()).equals(png))
  image=await fetch(base+document.url);check('anonymous viewer cannot retrieve verification photo',image.status===401)
  r=await req(document.url,{},buyer);check('other buyer cannot retrieve verification photo',r.status===404)
@@ -33,7 +31,7 @@ export async function testSellerVerification({req,check,cookie,seller,buyer,db,p
  r=await req('/api/product-images/'+document.id);check('private verification photo is not a public product image',r.status===404)
  r=await review(userId,'approved',{reviewed:false});check('approval requires explicit document review',r.status===400)
  r=await req(`/api/admin/seller-applications/${userId}/documents`,{method:'DELETE'},cookie);check('pending application photos cannot be deleted before review',r.status===409)
- const missing=stored[0];await db.query('DELETE FROM shop.seller_verification_documents WHERE id=$1',[missing.id]);r=await review(userId,'approved');check('approval requires all three actual documents',r.status===400)
+ const missing=stored[0];await db.query('DELETE FROM shop.seller_verification_documents WHERE id=$1',[missing.id]);r=await review(userId,'approved');check('approval requires both ID documents',r.status===400)
  await db.query('INSERT INTO shop.seller_verification_documents(id,user_id,kind,content_type,object_path,created_at) VALUES ($1,$2,$3,$4,$5,$6)',[missing.id,missing.user_id,missing.kind,missing.content_type,missing.object_path,missing.created_at])
  r=await review(userId,'needs_changes',{note:'Please send a clearer back photo.'});check('admin can request corrections',r.status===200&&r.data.application.status==='needs_changes'&&r.data.user.role==='customer')
  r=await req('/api/seller/application/resubmit',{method:'POST',body:JSON.stringify({revision:1,phone:'+15559876543',verificationConsent:true,verificationPhotos:sellerForm.verificationPhotos})},applicant);check('applicant can submit revised private documents without optional SSN',r.status===200&&r.data.application.revision===2&&r.data.application.status==='pending'&&r.data.application.ssnLast4===null)

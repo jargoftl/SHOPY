@@ -7,7 +7,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check, ShieldCheck, Store, Sparkles, ClipboardCheck } from 'lucide-react'
 import '../../styles/seller-signup.css'
 import SellerAuthStory from '../../components/SellerAuthStory.jsx'
-import OptionalSellerSsn, { sellerSsnSuffix } from '../../components/OptionalSellerSsn.jsx'
 import VerificationPhotoFields from '../../components/VerificationPhotoFields.jsx'
 import { apiRequest } from '../../lib/api.js'
 
@@ -26,7 +25,6 @@ const SellerRegister = () => {
   const [existingAccount, setExistingAccount] = useState(null)
   const [codeSent, setCodeSent] = useState(false)
   const [referralCode,setReferralCode]=useState(readReferralCode)
-  const [optionalSsn, setOptionalSsn] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [hasStarted, setHasStarted] = useState(false)
   const headingRef = useRef(null)
@@ -36,7 +34,7 @@ const SellerRegister = () => {
     headingRef.current?.focus({ preventScroll: true })
     if (hasStarted) headingRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' })
   }, [step, hasStarted])
-  const [verificationPhotos, setVerificationPhotos] = useState({selfie:null,id_front:null,id_back:null})
+  const [verificationPhotos, setVerificationPhotos] = useState({id_front:null,id_back:null})
   const [verificationConsent, setVerificationConsent] = useState(false)
   const [isReadingVerification, setIsReadingVerification] = useState(false)
   const [message, setMessage] = useState('')
@@ -165,8 +163,7 @@ const SellerRegister = () => {
   const finishRegistration = async (event) => {
     event.preventDefault()
     if (isReadingVerification) return
-    if (form.country === 'United States' && optionalSsn && !sellerSsnSuffix(optionalSsn)) { setMessage('Enter nine SSN digits or leave the field blank.'); return }
-    if (!verificationConsent || Object.values(verificationPhotos).some(value=>!value)) { setMessage('Upload all three verification photos and agree to private review.'); return }
+    if (!verificationConsent || Object.values(verificationPhotos).some(value=>!value)) { setMessage('Upload both ID photos and agree to private review.'); return }
     if (!acceptedTerms) {
       setMessage('Please agree to the seller terms to continue.')
       return
@@ -177,7 +174,6 @@ const SellerRegister = () => {
     try {
       const policy = await apiRequest('/api/seller/application-policy').catch(()=>null)
       if (!policy?.requiresAdminApproval || !policy?.requiresIdentityPhotos) throw new Error('Seller verification is being updated. Please refresh this page and try again shortly.')
-      if (optionalSsn && !policy.fullSsn) throw new Error('SSN storage is not configured. Leave the SSN field blank to continue.')
       const { user } = await apiRequest(existingAccount ? '/api/seller/application' : '/api/auth/register-seller', {
         method: 'POST',
         body: JSON.stringify({
@@ -186,7 +182,6 @@ const SellerRegister = () => {
           email: form.email,
           phone: form.phone,
           verificationPhotos, verificationConsent,
-          ssn: form.country === 'United States' ? sellerSsnSuffix(optionalSsn) : null,
           password: form.password,
           storeName: form.storeName,
           storeDescription: form.storeDescription,
@@ -231,7 +226,7 @@ const SellerRegister = () => {
           {!hasStarted && <div className="signup-welcome">
             <div className="signup-welcome-note"><Sparkles size={20}/><span>A considered start for your business</span></div>
             <div className="signup-checklist">
-              {[[Store,'Make it yours','Create your account and tell us about your store.'],[ShieldCheck,'Verify your identity','Have your phone number, a selfie and the front and back of your government-issued ID ready.'],[ClipboardCheck,'Leave the review to us','Submit your application. Seller access opens after an support team approves it.']].map(([Icon,title,copy])=><div key={title}><span className="signup-check-icon"><Icon size={21} strokeWidth={1.6}/></span><section><h3>{title}</h3><p>{copy}</p></section></div>)}
+              {[[Store,'Make it yours','Create your account and tell us about your store.'],[ShieldCheck,'Verify your identity','Have your phone number, the front and back of your government-issued ID ready.'],[ClipboardCheck,'Leave the review to us','Submit your application. Seller access opens after an support team approves it.']].map(([Icon,title,copy])=><div key={title}><span className="signup-check-icon"><Icon size={21} strokeWidth={1.6}/></span><section><h3>{title}</h3><p>{copy}</p></section></div>)}
             </div>
             <label className="signup-agreement"><input type="checkbox" checked={acceptedTerms} onChange={event=>setAcceptedTerms(event.target.checked)}/><span>I agree to provide accurate information belonging to me and submit my application for support team review. I understand I can start selling only after approval.</span></label>
             <button type="button" className="signup-primary" disabled={!acceptedTerms} onClick={()=>{setHasStarted(true);setMessage('')}}>Agree & start my application <ArrowRight size={18}/></button>
@@ -324,7 +319,6 @@ const SellerRegister = () => {
             <label className="block text-sm font-medium">Phone
               <input name="phone" value={form.phone} onChange={updateForm} type="tel" autoComplete="tel" maxLength={30} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="+1 (202) 555-0123" />
             </label>
-          {form.country === 'United States' && <OptionalSellerSsn value={optionalSsn} onChange={setOptionalSsn}/>}
           <div className="signup-section-label"><ShieldCheck size={16}/> YOUR PRIVATE VERIFICATION</div>
           <VerificationPhotoFields photos={verificationPhotos} setPhotos={setVerificationPhotos} consent={verificationConsent} setConsent={setVerificationConsent} onError={setMessage} onBusyChange={setIsReadingVerification} />
 

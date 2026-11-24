@@ -135,7 +135,7 @@ try{
   r=await req(path.replace(/:sellerId/g,String(sellerId)).replace(/:[a-zA-Z]+/g,String(buyerId)),{},userCookie);check(label+' GET '+path,r.status<500,r);
  }
  // Seller signup is usable before email setup without claiming email ownership.
- const verificationPhotos=Object.fromEntries(['selfie','id_front','id_back'].map(kind=>[kind,{type:'image/png',data:png.toString('base64')} ]));
+ const verificationPhotos=Object.fromEntries(['id_front','id_back'].map(kind=>[kind,{type:'image/png',data:png.toString('base64')} ]));
  const sellerForm={transactionPin:'4826',confirmTransactionPin:'4826',loginPassword:'existing-password-123',verificationPhotos,verificationConsent:true,fullName:'New Seller',email:'new-seller@example.test',phone:'+15551234567',password:'new-seller-password-123',storeName:'New Shop',country:'Test',address:'Test',city:'Test',region:'Test',postalCode:'123'};
  r=await req('/api/auth/seller-verification-code',{method:'POST',body:JSON.stringify({email:sellerForm.email,fullName:sellerForm.fullName})});
  check('unconfigured email permits continuing signup',r.status===200&&r.data.verificationRequired===false&&!r.data.developmentCode,r);

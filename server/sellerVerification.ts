@@ -1,5 +1,5 @@
 import {setStoreEstablishedDate,storeDates,validEstablishedDate} from './storeDates.ts'
-import {prepareSellerSsn,decryptSellerSsn,ssnStorageConfigured} from './sellerSsn.ts'
+import {decryptSellerSsn,ssnStorageConfigured} from './sellerSsn.ts'
 import { randomUUID } from 'node:crypto'
 import express, { type Express, type RequestHandler } from 'express'
 import type { Database } from './database.ts'
@@ -7,8 +7,8 @@ import { ObjectStorage } from './storage.ts'
 import { isEmailConfigured, sendSellerApprovalEmail } from './email.ts'
 
 type Role = 'customer' | 'seller' | 'admin'
-const kinds = ['selfie','id_front','id_back'] as const
-type PhotoKind = typeof kinds[number]
+const kinds = ['id_front','id_back'] as const
+type PhotoKind = typeof kinds[number] | 'selfie'
 type Photo = { kind: PhotoKind, contentType: string, image: Buffer }
 export type StoredVerificationPhoto = { id: string, kind: PhotoKind, contentType: string, objectPath: string }
 type Application = { ssn_encrypted: string | null, ssn_last4: string | null, user_id: number, status: string, revision: number, consented_at: string, submitted_at: string, reviewed_at: string | null, reviewed_by: number | null, review_note: string }
@@ -20,16 +20,10 @@ export function verificationPhone(value: unknown) {
   const phone = value.replace(/[\s()-]/g, '')
   return /^\+?[1-9]\d{6,14}$/.test(phone) ? phone : null
 }
-// Never accept a full SSN in this workflow. The browser submits only the suffix.
-export function optionalSsnLast4(value: unknown, country: unknown): { value: string | null } | { error: string } {
-  if (value === undefined || value === null || value === '') return { value: null }
-  if (country !== 'United States' || typeof value !== 'string' || !/^[0-9]{4}$/.test(value)) return { error: 'The optional US SSN reference must contain only its last four digits.' }
-  return { value }
-}
 export function prepareVerificationPhotos(body: Record<string, unknown>): { photos: Photo[] } | { error: string } {
   if (body.verificationConsent !== true) return { error: 'Agree to private administrator review of your verification photos.' }
   const input = body.verificationPhotos
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return { error: 'Upload a selfie and the front and back of your government-issued ID.' }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return { error: 'Upload the front and back of your government-issued ID.' }
   const photos: Photo[] = []
   for (const kind of kinds) {
     const file = (input as Record<string, unknown>)[kind] as { type?: unknown, data?: unknown } | undefined
@@ -107,7 +101,7 @@ export async function registerSellerVerification(app: Express, db: Database, aut
     await db.prepare('INSERT INTO account_admin_history(user_id,admin_id,action,details) VALUES (?,?,?,?)').run(id,req.user!.id,'ssn_viewed','Administrator viewed seller SSN.')
     res.set('Cache-Control','private, no-store').json({ssn})
   }))
-  app.get('/api/seller/application-policy',(_req,res)=>res.set('Cache-Control','no-store').json({requiresAdminApproval:true,requiresIdentityPhotos:true,optionalSsnLast4:true,fullSsn:ssnStorageConfigured()}))
+  app.get('/api/seller/application-policy',(_req,res)=>res.set('Cache-Control','no-store').json({requiresAdminApproval:true,requiresIdentityPhotos:true,optionalSsnLast4:false,fullSsn:false}))
   app.get('/api/seller/application',auth,async(req,res)=>res.json(await serialize(req.user!.id)))
   app.get('/api/admin/seller-applications',auth,role('admin'),async(_req,res)=>{
     const applications = await db.prepare(`SELECT a.user_id AS userId,u.public_id AS publicId,a.status,a.revision,a.submitted_at AS submittedAt,u.full_name AS fullName,u.email,u.phone,p.store_name AS storeName,
@@ -140,7 +134,7 @@ export async function registerSellerVerification(app: Express, db: Database, aut
       if (applicant.role==='admin') throw new ReviewError(400,'Administrator accounts cannot be reviewed as seller applicants.')
       if(status==='approved') {
         const documents=await db.prepare('SELECT kind FROM seller_verification_documents WHERE user_id=?').all(id) as {kind:string}[]
-        if(req.body?.reviewed!==true||kinds.some(kind=>!documents.some(d=>d.kind===kind))||!verificationPhone(applicant.phone)||applicant.suspended)throw new ReviewError(400,'Review all three photos and the phone number before approval. Suspended or admin accounts cannot be approved here.')
+        if(req.body?.reviewed!==true||kinds.some(kind=>!documents.some(d=>d.kind===kind))||!verificationPhone(applicant.phone)||applicant.suspended)throw new ReviewError(400,'Review both ID photos and the phone number before approval. Suspended or admin accounts cannot be approved here.')
       }
       if(establishedOn!==undefined){
         const dates=await storeDates(db,id)
@@ -165,9 +159,6 @@ export async function registerSellerVerification(app: Express, db: Database, aut
     const phone=verificationPhone(req.body?.phone),prepared=prepareVerificationPhotos(req.body||{})
     if(!phone)return res.status(400).json({error:'Enter a valid phone number with country code.'})
     if('error' in prepared)return res.status(400).json({error:prepared.error})
-    const profile=await db.prepare('SELECT country FROM seller_profiles WHERE user_id=?').get(req.user!.id) as {country:string}|undefined
-    const ssn=req.body?.ssn!=null?prepareSellerSsn(req.body.ssn,profile?.country):optionalSsnLast4(req.body?.ssnLast4,profile?.country)
-    if ('error' in ssn) return res.status(400).json({error:ssn.error})
     const initial=await getApplication(req.user!.id)
     if(!initial||!['rejected','needs_changes'].includes(initial.status))return res.status(409).json({error:'This application is not awaiting a resubmission.'})
     const uploaded=await uploadVerificationPhotos(db,prepared.photos)
@@ -179,7 +170,7 @@ export async function registerSellerVerification(app: Express, db: Database, aut
         await queuePhotoCleanup(db,previous.map(photo=>({id:photo.id,kind:photo.kind,contentType:photo.content_type,objectPath:photo.object_path})))
         await db.prepare('DELETE FROM seller_verification_documents WHERE user_id=?').run(req.user!.id)
         await insertApplicationPhotos(db,req.user!.id,uploaded)
-        await db.prepare("UPDATE seller_applications SET status='pending',revision=revision+1,consented_at=?,submitted_at=?,ssn_last4=?,ssn_encrypted=?,reviewed_at=NULL,reviewed_by=NULL,review_note='' WHERE user_id=?").run(stamp(),stamp(),'last4' in ssn?ssn.last4:ssn.value,'encrypted' in ssn?ssn.encrypted:null,req.user!.id)
+        await db.prepare("UPDATE seller_applications SET status='pending',revision=revision+1,consented_at=?,submitted_at=?,reviewed_at=NULL,reviewed_by=NULL,review_note='' WHERE user_id=?").run(stamp(),stamp(),req.user!.id)
         await db.prepare("UPDATE users SET full_name=?,phone=?,seller_status='pending',role='customer' WHERE id=?").run(fullName,phone,req.user!.id)
         await db.prepare("UPDATE seller_profiles SET verification_status='pending' WHERE user_id=?").run(req.user!.id)
         await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) SELECT id,'seller_verification','Seller application resubmitted','Review the updated verification photos and phone number.',? FROM users WHERE role='admin'").run(`/admin/users/${req.user!.id}`)
