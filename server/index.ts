@@ -2343,12 +2343,14 @@ app.patch('/api/admin/sellers/:id/stats', requireAuth, requireRole('admin'), asy
   return res.json({ followerCount: followerCount + actualFollowers, adminFollowerCount: followerCount })
 })
 
-app.get('/api/admin/events', requireAuth, requireRole('admin'), async (_req, res) => {
+app.get('/api/admin/events', requireAuth, requireRole('admin'), async (req, res) => {
+  const adminSignIns = req.query.scope === 'admin-sign-ins'
   const events = (await getRows<AdminEventRow>(`
     SELECT auth_events.id, auth_events.event_type, auth_events.created_at, auth_events.ip_address, auth_events.location, auth_events.location_source,
       users.id AS user_id, users.public_id AS publicId, users.full_name, users.email
     FROM auth_events
     JOIN users ON users.id = auth_events.user_id
+    ${adminSignIns ? "WHERE auth_events.event_type = 'login' AND users.role = 'admin' AND users.deleted_at IS NULL" : ''}
     ORDER BY auth_events.id DESC
     LIMIT 100
   `)).map((event) => ({

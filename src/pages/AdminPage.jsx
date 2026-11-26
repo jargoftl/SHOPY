@@ -22,7 +22,7 @@ import AdminWarehouse from '../components/AdminWarehouse.jsx'
 import AdminMarketing from '../components/AdminMarketing.jsx'
 import AdminDisplayStats from '../components/AdminDisplayStats.jsx'
 import RefundList from '../components/RefundList.jsx'
-const tabs=[['overview','Overview',LayoutDashboard],['accounts','People & stores',Users],['applications','Seller approval',ClipboardCheck],['orders','Orders & tracking',ShoppingBag],['payment-type','Payment Type',Wallet],['wallet-addresses','Edit wallet address',Wallet],['seller-funding','Seller funding',Wallet],['seller-sales-history','Adding Seller Sales History',History],['buyer-wallet','Buyer funding',Wallet],['warehouse','Warehouse',Warehouse],['marketing','Marketing requests',Megaphone],['referrals','Referrals & rewards',Users],['statistics','Display statistics',ChartNoAxesCombined],['activity','Login activity',History],['settings','Site settings',Settings],['admin-access','Manage admins',ShieldCheck],['account-recovery','Account recovery',ShieldCheck]]
+const tabs=[['overview','Overview',LayoutDashboard],['accounts','People & stores',Users],['applications','Seller approval',ClipboardCheck],['orders','Orders & tracking',ShoppingBag],['payment-type','Payment Type',Wallet],['wallet-addresses','Edit wallet address',Wallet],['seller-funding','Seller funding',Wallet],['seller-sales-history','Adding Seller Sales History',History],['buyer-wallet','Buyer funding',Wallet],['warehouse','Warehouse',Warehouse],['marketing','Marketing requests',Megaphone],['referrals','Referrals & rewards',Users],['statistics','Display statistics',ChartNoAxesCombined],['admin-sign-ins','Admin sign-ins',Users],['activity','Login activity',History],['settings','Site settings',Settings],['admin-access','Manage admins',ShieldCheck],['account-recovery','Account recovery',ShieldCheck]]
 const toolLinks=[
  ['Edit store followers and visit stats','/admin/seller-metrics#store-records','increase followers follower count store visitor views traffic people visited last viewed opening date rating items sold'],
  ['Edit today’s orders','/admin/seller-metrics#today-orders','increase decrease order count number today daily seller'],
@@ -71,23 +71,25 @@ function activeTab(hash,order){if(order)return 'orders';if(paymentSection(hash))
 export default function AdminPage(){
  const menu=useRef(null)
  const location=useLocation(),navigate=useNavigate(),[params]=useSearchParams(),tab=activeTab(location.hash,params.get('order'))
+ const adminSignIns=tab==='admin-sign-ins'
+ const eventsPath=adminSignIns?'/api/admin/events?scope=admin-sign-ins':'/api/admin/events'
  const {siteName,saveSiteName}=useSiteSettings(),[admin,setAdmin]=useState(null),[data,setData]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[buyerRequestsOpen,setBuyerRequestsOpen]=useState(false)
- useEffect(()=>{let active=true;apiRequest('/api/admin/overview').then(d=>{if(active){setAdmin(d.user);setData({counts:d.counts,users:[],sellers:[],products:[],events:[],usersLoaded:false,eventsLoaded:false})}}).catch(e=>active&&setError(e.message));return()=>{active=false}},[])
+ useEffect(()=>{let active=true;apiRequest('/api/admin/overview').then(d=>{if(active){setAdmin(d.user);setData({counts:d.counts,users:[],sellers:[],products:[],events:[],usersLoaded:false,eventsScope:null})}}).catch(e=>active&&setError(e.message));return()=>{active=false}},[])
  useEffect(()=>{if(!admin||!data)return;let active=true
  if(['accounts','statistics'].includes(tab)&&!data.usersLoaded)Promise.all([apiRequest('/api/admin/users'),apiRequest('/api/admin/sellers')]).then(([u,s])=>{if(active)setData(d=>({...d,users:u.users,sellers:s.sellers,usersLoaded:true}))}).catch(e=>active&&setError(e.message))
  return()=>{active=false}
  },[tab,admin?.id,data?.usersLoaded])
 
  useEffect(()=>{
-  if(tab!=='activity'||!admin?.id)return
+  if((tab!=='activity'&&!adminSignIns)||!admin?.id)return
   let active=true
   let pending=false
   async function refresh(){
    if(document.hidden||pending)return
    pending=true
    try{
-    const {events}=await apiRequest('/api/admin/events',{cache:'no-store',background:true})
-    if(active)setData(previous=>({...previous,events,eventsLoaded:true}))
+    const {events}=await apiRequest(eventsPath,{cache:'no-store',background:true})
+    if(active)setData(previous=>({...previous,events,eventsScope:eventsPath}))
    }catch(error){if(active)setError(error.message)}
    finally{pending=false}
   }
@@ -101,7 +103,7 @@ export default function AdminPage(){
    window.removeEventListener('focus',refresh)
    document.removeEventListener('visibilitychange',refresh)
   }
- },[tab,admin?.id])
+ },[tab,admin?.id,adminSignIns,eventsPath])
 
  return <div className="admin-workspace admin-dashboard min-h-screen">
   <div className="admin-dashboard-frame">
@@ -112,7 +114,7 @@ export default function AdminPage(){
     </div>
     <div className="admin-dashboard-account">
      <SellerNotificationBell/>
-     {admin&&<span className="admin-dashboard-name">{admin.fullName}<small>#{admin.publicId}</small></span>}
+     {admin&&<span className="admin-dashboard-name">{admin.fullName}<small className="break-all">{admin.email}</small></span>}
      <Link to="/" className="admin-icon-button" aria-label="View website" title="View website"><ArrowUpRight size={18} aria-hidden="true"/></Link>
      <button type="button" className="admin-icon-button" aria-label="Log out of this tab" title="Log out of this tab" onClick={async()=>{await apiRequest('/api/auth/logout',{method:'POST'});navigate('/login')}}><LogOut size={17} aria-hidden="true"/></button>
     </div>
@@ -134,7 +136,7 @@ export default function AdminPage(){
      {admin&&<AdminToolSearch isSuperAdmin={admin.isSuperAdmin}/>}
     </div>
     {error&&<p role="alert" className="mt-5 border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}<Link className="ml-2 underline" to="/login?switch=1">Admin login</Link></p>}{notice&&<p role="status" className="mt-5 border bg-white p-4 text-sm">{notice}</p>}{!data&&!error&&<ContentPlaceholder/>}{admin&&data&&<div className="mt-7">
- {tab==='overview'&&<><Link to="/admin/seller-metrics" className="admin-primary-link">Manage seller credit scores</Link><div className="admin-metrics-grid">{[['Registered accounts',data.counts.accounts],['Store profiles',data.counts.stores],['Products',data.counts.products],['Seller applications pending',data.counts.pending]].map(([label,value])=><div key={label} className="admin-metric-card"><p>{label}</p><strong>{value.toLocaleString()}</strong></div>)}</div><h2 className="mt-8 text-lg font-semibold">Quick actions</h2><div className="admin-actions-grid">{[['applications','Approve a seller','Review identity documents and approve or reject the application.'],['orders','Process an order','Review paid orders and send tracking numbers to sellers.'],['buyer-wallet','Fund a buyer','Credit a buyer balance or review coin deposit requests.'],['payment-type-deposits','Review seller deposits','Open payment proof and confirm funds received.'],['payment-type-withdrawals','Review seller withdrawals','Check the receiving wallet and record a confirmed transfer.'],['accounts','Find an account','Search buyer and seller profiles and open their controls.'],['statistics','Adjust display statistics','Apply labeled display adjustments with a saved audit reason.']].map(([id,label,description])=><Link key={id} to={id==='admin-access'?'/super-admin':`/admin#${id}`} className="admin-action-card"><div className="flex justify-between"><h3 className="font-semibold">{label}</h3><ArrowUpRight size={17}/></div><p className="mt-3 text-sm leading-6 text-gray-500">{description}</p></Link>)}</div></>}
+ {tab==='overview'&&<><Link to="/admin#admin-sign-ins" className="admin-primary-link mr-3">Admin sign-ins</Link><Link to="/admin/seller-metrics" className="admin-primary-link">Manage seller credit scores</Link><div className="admin-metrics-grid">{[['Registered accounts',data.counts.accounts],['Store profiles',data.counts.stores],['Products',data.counts.products],['Seller applications pending',data.counts.pending]].map(([label,value])=><div key={label} className="admin-metric-card"><p>{label}</p><strong>{value.toLocaleString()}</strong></div>)}</div><h2 className="mt-8 text-lg font-semibold">Quick actions</h2><div className="admin-actions-grid">{[['applications','Approve a seller','Review identity documents and approve or reject the application.'],['orders','Process an order','Review paid orders and send tracking numbers to sellers.'],['buyer-wallet','Fund a buyer','Credit a buyer balance or review coin deposit requests.'],['payment-type-deposits','Review seller deposits','Open payment proof and confirm funds received.'],['payment-type-withdrawals','Review seller withdrawals','Check the receiving wallet and record a confirmed transfer.'],['accounts','Find an account','Search buyer and seller profiles and open their controls.'],['statistics','Adjust display statistics','Apply labeled display adjustments with a saved audit reason.']].map(([id,label,description])=><Link key={id} to={id==='admin-access'?'/super-admin':`/admin#${id}`} className="admin-action-card"><div className="flex justify-between"><h3 className="font-semibold">{label}</h3><ArrowUpRight size={17}/></div><p className="mt-3 text-sm leading-6 text-gray-500">{description}</p></Link>)}</div></>}
  {tab==='admin-access'&&(admin.isSuperAdmin?<AdminAccess/>:<p role="alert" className="border bg-white p-5 text-sm">Only the super admin can manage administrator access.</p>)}
  {tab==='account-recovery'&&<RecoveryRequests/>}
  {tab==='accounts'&&<AdminAccountDirectory users={data.users} sellers={data.sellers}/>}
@@ -149,7 +151,26 @@ export default function AdminPage(){
  {tab==='referrals'&&<AdminReferrals/>}
  {tab==='marketing'&&<AdminMarketing/>}
  {tab==='statistics'&&<AdminDisplayStats sellers={data.sellers.filter(s=>data.users.some(u=>u.id===s.id&&u.role==='seller'))}/>}
- {tab==='activity'&&<section className="border bg-white p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">Recent account sign-ins and registrations</h2><button className="text-xs underline" onClick={async()=>{try{const result=await apiRequest('/api/admin/events');setData(d=>({...d,events:result.events}))}catch(e){setError(e.message)}}}>Refresh activity</button></div>{data.eventsLoaded&&!data.events.length&&<p className="mt-4 text-sm">No sign-ins or registrations recorded yet.</p>}{data.events.map(e=><div key={e.id} className="mt-4 flex flex-wrap justify-between gap-3 border-b pb-4 text-sm"><Link to={`/admin/users/${e.userId}`} className="underline">{e.fullName} · #{e.publicId}</Link><span>{e.type==='login'?'Signed in':'Registered'}</span><div className="min-w-0 break-words text-xs"><p><strong>IP address</strong> {e.ipAddress||'Not recorded'}</p><p className="mt-1"><strong>Approximate location</strong> {e.location||'Unavailable'}</p></div><time className="text-xs text-gray-500">{e.createdAt} UTC</time></div>)}</section>}
+ {(tab==='activity'||adminSignIns)&&<section className="border bg-white p-5">
+  <div className="flex flex-wrap items-center justify-between gap-3">
+   <h2 className="font-semibold">{adminSignIns?'Recent admin sign-ins':'Recent account sign-ins and registrations'}</h2>
+   <button className="text-xs underline" onClick={async()=>{try{const {events}=await apiRequest(eventsPath,{cache:'no-store'});setData(d=>({...d,events,eventsScope:eventsPath}))}catch(e){setError(e.message)}}}>Refresh activity</button>
+  </div>
+  {data.eventsScope===eventsPath&&<>
+   {!data.events.length&&<p className="mt-4 text-sm">{adminSignIns?'No admin sign-ins recorded yet.':'No sign-ins or registrations recorded yet.'}</p>}
+   {data.events.map(e=><div key={e.id} className="mt-4 flex flex-wrap justify-between gap-3 border-b pb-4 text-sm">
+    <div className="min-w-0 break-words">
+     <Link to={`/admin/users/${e.userId}`} className="underline">{e.fullName} · #{e.publicId}</Link>
+     {adminSignIns&&<p className="mt-1 text-xs break-all">{e.email}</p>}
+    </div>
+    {adminSignIns?<time className="text-xs text-gray-500">{e.createdAt} UTC</time>:<>
+     <span>{e.type==='login'?'Signed in':'Registered'}</span>
+     <div className="min-w-0 break-words text-xs"><p><strong>IP address</strong> {e.ipAddress||'Not recorded'}</p><p className="mt-1"><strong>Approximate location</strong> {e.location||'Unavailable'}</p></div>
+     <time className="text-xs text-gray-500">{e.createdAt} UTC</time>
+    </>}
+   </div>)}
+  </>}
+ </section>}
  {tab==='settings'&&<form className="max-w-xl border bg-white p-5" onSubmit={async e=>{e.preventDefault();setBusy(true);setError('');try{await saveSiteName(new FormData(e.currentTarget).get('siteName'));setNotice('Site name saved.')}catch(e){setError(e.message)}finally{setBusy(false)}}}><h2 className="font-semibold">Website name</h2><label className="mt-4 block text-sm">Site name<input name="siteName" defaultValue={siteName} required maxLength={60} className="mt-2 block w-full border p-3"/></label><button disabled={busy} className="mt-4 bg-black px-5 py-3 text-sm font-semibold text-white">Save changes</button></form>}
  </div>}</main></div></div>
 }
