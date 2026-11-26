@@ -7,8 +7,8 @@ export async function testSellerVerification({req,check,cookie,seller,buyer,db,p
  r=await signup('short-phone@example.test',{phone:'123'});check('seller signup validates real-length phone number',r.status===400)
  const invalid={...sellerForm.verificationPhotos,id_front:{type:'image/jpeg',data:png.toString('base64')}}
  r=await signup('bad-id@example.test',{verificationPhotos:invalid});check('verification image MIME must match bytes',r.status===400)
- r=await signup('review-applicant@example.test',{country:'United States',ssnLast4:'0001'});const userId=r.data.user?.id,applicant=r.cookie
- check('new applicant has no seller role before review',r.status===201&&r.data.user.role==='customer'&&r.data.user.sellerStatus==='pending',r.status)
+ r=await signup('review-applicant@example.test',{country:'United States',ssnLast4:'0001',phone:undefined});const userId=r.data.user?.id,applicant=r.cookie
+ check('applicant can sign up without a phone and has no seller role before review',r.status===201&&r.data.user.role==='customer'&&r.data.user.sellerStatus==='pending',r.status)
  if(!userId)return
  const reference=(await db.query('SELECT ssn_last4 FROM shop.seller_applications WHERE user_id=$1',[userId])).rows[0];check('legacy signup SSN field is ignored',reference.ssn_last4===null)
  r=await req('/api/admin/seller-applications/'+userId,{},cookie);check('private admin review shows no SSN reference for new applicants',r.data.application.ssnLast4===null)
@@ -34,7 +34,7 @@ export async function testSellerVerification({req,check,cookie,seller,buyer,db,p
  const missing=stored[0];await db.query('DELETE FROM shop.seller_verification_documents WHERE id=$1',[missing.id]);r=await review(userId,'approved');check('approval requires both ID documents',r.status===400)
  await db.query('INSERT INTO shop.seller_verification_documents(id,user_id,kind,content_type,object_path,created_at) VALUES ($1,$2,$3,$4,$5,$6)',[missing.id,missing.user_id,missing.kind,missing.content_type,missing.object_path,missing.created_at])
  r=await review(userId,'needs_changes',{note:'Please send a clearer back photo.'});check('admin can request corrections',r.status===200&&r.data.application.status==='needs_changes'&&r.data.user.role==='customer')
- r=await req('/api/seller/application/resubmit',{method:'POST',body:JSON.stringify({revision:1,phone:'+15559876543',verificationConsent:true,verificationPhotos:sellerForm.verificationPhotos})},applicant);check('applicant can submit revised private documents without optional SSN',r.status===200&&r.data.application.revision===2&&r.data.application.status==='pending'&&r.data.application.ssnLast4===null)
+ r=await req('/api/seller/application/resubmit',{method:'POST',body:JSON.stringify({revision:1,verificationConsent:true,verificationPhotos:sellerForm.verificationPhotos})},applicant);check('applicant can submit revised private documents without a phone number or SSN',r.status===200&&r.data.application.revision===2&&r.data.application.status==='pending'&&r.data.application.ssnLast4===null)
  r=await req(document.url,{},applicant);check('old document IDs stop working after replacement',r.status===404)
  r=await review(userId,'approved');check('admin cannot approve an outdated photo revision',r.status===409)
  await db.query("UPDATE shop.users SET role='admin' WHERE id=$1",[userId]);

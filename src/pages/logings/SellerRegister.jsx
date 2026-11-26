@@ -14,7 +14,7 @@ const steps = ['Welcome', 'Your account', 'Your store', 'Verification']
 const titles = ['Let’s build something yours.', 'First, a little about you.', 'Give your store its own identity.', 'One last step. Make it official.']
 const descriptions = ['Your next chapter starts with a store. Here’s what to expect before you apply.', 'Add your contact details and create a secure account to manage your store.', 'Introduce your business with a name, a logo and a little of your story.', 'Share your location and identity photos so our support team can review your application.']
 const initialForm = {
-  fullName: '', email: '', phone: '', password: '', confirmPassword: '', verificationCode: '',
+  fullName: '', email: '', password: '', confirmPassword: '', verificationCode: '',
   storeName: '', storeDescription: '', storeLogoUrl: '', country: 'United States', address: '', city: '', region: '', postalCode: '',
 }
 
@@ -51,7 +51,7 @@ const SellerRegister = () => {
       if (!active) return
       if (['seller','admin'].includes(user.role)) { navigate(user.role==='admin'?'/admin':'/seller',{replace:true}); return }
       if (user.sellerStatus && user.sellerStatus!=='none') { navigate('/seller/application',{replace:true}); return }
-      setExistingAccount(user);setForm(current=>({...current,fullName:user.fullName,email:user.email,phone:user.phone||''}))
+      setExistingAccount(user);setForm(current=>({...current,fullName:user.fullName,email:user.email}))
     }).catch(()=>{})
     return()=>{active=false}
   }, [navigate])
@@ -180,7 +180,6 @@ const SellerRegister = () => {
           referralCode,
           fullName: form.fullName,
           email: form.email,
-          phone: form.phone,
           verificationPhotos, verificationConsent,
           password: form.password,
           storeName: form.storeName,
@@ -226,7 +225,7 @@ const SellerRegister = () => {
           {!hasStarted && <div className="signup-welcome">
             <div className="signup-welcome-note"><Sparkles size={20}/><span>A considered start for your business</span></div>
             <div className="signup-checklist">
-              {[[Store,'Make it yours','Create your account and tell us about your store.'],[ShieldCheck,'Verify your identity','Have your phone number, the front and back of your government-issued ID ready.'],[ClipboardCheck,'Leave the review to us','Submit your application. Seller access opens after an support team approves it.']].map(([Icon,title,copy])=><div key={title}><span className="signup-check-icon"><Icon size={21} strokeWidth={1.6}/></span><section><h3>{title}</h3><p>{copy}</p></section></div>)}
+              {[[Store,'Make it yours','Create your account and tell us about your store.'],[ShieldCheck,'Verify your identity','Have the front and back of your government-issued ID ready.'],[ClipboardCheck,'Leave the review to us','Submit your application. Seller access opens after an support team approves it.']].map(([Icon,title,copy])=><div key={title}><span className="signup-check-icon"><Icon size={21} strokeWidth={1.6}/></span><section><h3>{title}</h3><p>{copy}</p></section></div>)}
             </div>
             <label className="signup-agreement"><input type="checkbox" checked={acceptedTerms} onChange={event=>setAcceptedTerms(event.target.checked)}/><span>I agree to provide accurate information belonging to me and submit my application for support team review. I understand I can start selling only after approval.</span></label>
             <button type="button" className="signup-primary" disabled={!acceptedTerms} onClick={()=>{setHasStarted(true);setMessage('')}}>Agree & start my application <ArrowRight size={18}/></button>
@@ -316,9 +315,6 @@ const SellerRegister = () => {
             <input name="postalCode" value={form.postalCode} onChange={updateForm} maxLength={20} required autoComplete="postal-code" className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" />
           </label>
 
-            <label className="block text-sm font-medium">Phone
-              <input name="phone" value={form.phone} onChange={updateForm} type="tel" autoComplete="tel" maxLength={30} required className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="+1 (202) 555-0123" />
-            </label>
           <div className="signup-section-label"><ShieldCheck size={16}/> YOUR PRIVATE VERIFICATION</div>
           <VerificationPhotoFields photos={verificationPhotos} setPhotos={setVerificationPhotos} consent={verificationConsent} setConsent={setVerificationConsent} onError={setMessage} onBusyChange={setIsReadingVerification} />
 

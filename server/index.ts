@@ -691,7 +691,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
     if (!fullName || fullName.length > 100) return res.status(400).json({ error: 'Enter your name (up to 100 characters).' })
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return res.status(400).json({ error: 'Enter a valid email address.' })
     const signupPhone = verificationPhone(phone)
-    if (phone.length > 30 || ((role === 'seller' || phone !== '') && !signupPhone)) return res.status(400).json({ error: 'Enter a valid phone number with country code (7–15 digits).' })
+    if (phone.length > 30 || (phone !== '' && !signupPhone)) return res.status(400).json({ error: 'Enter a valid phone number with country code (7–15 digits).' })
     phone = signupPhone || ''
     if (!existingAccount && (Buffer.byteLength(password, 'utf8') < 8 || Buffer.byteLength(password, 'utf8') > 72)) return res.status(400).json({ error: 'Password must be between 8 and 72 bytes.' })
 
@@ -727,9 +727,6 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
       if (profile.storeLogoUrl && !logoUpload && !await isValidStoreLogoUrl(profile.storeLogoUrl)) {
         return res.status(400).json({ error: 'Enter a valid store logo URL.' })
       }
-      const normalizedPhone = verificationPhone(phone)
-      if (!normalizedPhone) return res.status(400).json({ error: 'Enter a valid phone number with country code (7–15 digits).' })
-      phone = normalizedPhone
       verificationPhotos = prepareVerificationPhotos(req.body)
       if ('error' in verificationPhotos) return res.status(400).json({ error: verificationPhotos.error })
       sellerProfile = profile
@@ -746,7 +743,7 @@ const registerAccount = (role: UserRole, existingAccount = false): RequestHandle
       if (existingAccount) {
         const current = await getRow<UserRow>('SELECT * FROM users WHERE id=?',req.user!.id)
         if (!current || current.role !== 'customer' || current.seller_status !== 'none') throw new Error('The seller application changed before submission.')
-        await database.prepare("UPDATE users SET full_name=?,phone=?,seller_status='pending' WHERE id=?").run(fullName,phone,current.id)
+        await database.prepare("UPDATE users SET full_name=?,phone=COALESCE(?,phone),seller_status='pending' WHERE id=?").run(fullName,phone || null,current.id)
         user = (await getRow<UserRow>('SELECT * FROM users WHERE id=?',current.id))!
       } else {
       const result = (await database.prepare(`

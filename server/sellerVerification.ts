@@ -129,12 +129,12 @@ export async function registerSellerVerification(app: Express, db: Database, aut
       const application=await getApplication(id)
       if(!application)throw new ReviewError(404,'Seller application not found.')
       if(application.status!=='pending'||req.body?.revision!==application.revision)throw new ReviewError(409,'This application changed or was already reviewed. Reload it first.')
-      const applicant = await db.prepare('SELECT phone,suspended,role FROM users WHERE id=? AND deleted_at IS NULL').get(id) as {phone:string,suspended:number,role:string}
+      const applicant = await db.prepare('SELECT suspended,role FROM users WHERE id=? AND deleted_at IS NULL').get(id) as {suspended:number,role:string}
       if (!applicant) throw new ReviewError(404,'Active seller applicant not found.')
       if (applicant.role==='admin') throw new ReviewError(400,'Administrator accounts cannot be reviewed as seller applicants.')
       if(status==='approved') {
         const documents=await db.prepare('SELECT kind FROM seller_verification_documents WHERE user_id=?').all(id) as {kind:string}[]
-        if(req.body?.reviewed!==true||kinds.some(kind=>!documents.some(d=>d.kind===kind))||!verificationPhone(applicant.phone)||applicant.suspended)throw new ReviewError(400,'Review both ID photos and the phone number before approval. Suspended or admin accounts cannot be approved here.')
+        if(req.body?.reviewed!==true||kinds.some(kind=>!documents.some(d=>d.kind===kind))||applicant.suspended)throw new ReviewError(400,'Review both ID photos before approval. Suspended or admin accounts cannot be approved here.')
       }
       if(establishedOn!==undefined){
         const dates=await storeDates(db,id)
@@ -156,8 +156,7 @@ export async function registerSellerVerification(app: Express, db: Database, aut
     if (req.user!.role!=='customer') return res.status(409).json({error:'This account is not awaiting a seller application resubmission.'})
     const fullName=typeof req.body?.fullName==='string'?req.body.fullName.trim():req.user!.full_name
     if (!fullName || fullName.length>100) return res.status(400).json({error:'Enter your full name (up to 100 characters).'})
-    const phone=verificationPhone(req.body?.phone),prepared=prepareVerificationPhotos(req.body||{})
-    if(!phone)return res.status(400).json({error:'Enter a valid phone number with country code.'})
+    const prepared=prepareVerificationPhotos(req.body||{})
     if('error' in prepared)return res.status(400).json({error:prepared.error})
     const initial=await getApplication(req.user!.id)
     if(!initial||!['rejected','needs_changes'].includes(initial.status))return res.status(409).json({error:'This application is not awaiting a resubmission.'})
@@ -171,9 +170,9 @@ export async function registerSellerVerification(app: Express, db: Database, aut
         await db.prepare('DELETE FROM seller_verification_documents WHERE user_id=?').run(req.user!.id)
         await insertApplicationPhotos(db,req.user!.id,uploaded)
         await db.prepare("UPDATE seller_applications SET status='pending',revision=revision+1,consented_at=?,submitted_at=?,reviewed_at=NULL,reviewed_by=NULL,review_note='' WHERE user_id=?").run(stamp(),stamp(),req.user!.id)
-        await db.prepare("UPDATE users SET full_name=?,phone=?,seller_status='pending',role='customer' WHERE id=?").run(fullName,phone,req.user!.id)
+        await db.prepare("UPDATE users SET full_name=?,seller_status='pending',role='customer' WHERE id=?").run(fullName,req.user!.id)
         await db.prepare("UPDATE seller_profiles SET verification_status='pending' WHERE user_id=?").run(req.user!.id)
-        await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) SELECT id,'seller_verification','Seller application resubmitted','Review the updated verification photos and phone number.',? FROM users WHERE role='admin'").run(`/admin/users/${req.user!.id}`)
+        await db.prepare("INSERT INTO notifications(user_id,type,title,body,link) SELECT id,'seller_verification','Seller application resubmitted','Review the updated ID photos.',? FROM users WHERE role='admin'").run(`/admin/users/${req.user!.id}`)
       })()
     }catch(error){await queuePhotoCleanup(db,uploaded);throw error}
     res.json(await serialize(req.user!.id))
