@@ -1,3 +1,4 @@
+import {hasOtherActiveSuperAdmin} from './adminAccess.ts'
 import {queuePhotoCleanup,type StoredVerificationPhoto} from './sellerVerification.ts'
 import type {Express,RequestHandler} from 'express'
 import {rateLimit} from 'express-rate-limit'
@@ -19,9 +20,10 @@ export function registerAccountDeletion(app:Express,db:Database,auth:RequestHand
    if(current.role!=='admin'||current.suspended||current.deleted_at||current.password_hash!==actor.password_hash)return 403
    const target=await db.prepare('SELECT * FROM users WHERE id=?').get(id) as Account|undefined
    if(!target)return 404
-   if(id===current.id||target.is_super_admin||target.role==='admin'&&!current.is_super_admin)return 403
+   if((id===current.id||target.role==='admin'||target.is_super_admin)&&!current.is_super_admin)return 403
    if(confirmEmail!==target.email)return 400
    if(target.deleted_at)return 200
+   if(target.is_super_admin&&!await hasOtherActiveSuperAdmin(db,id))return 409
    await db.prepare('UPDATE users SET deleted_at=?,deleted_by=?,suspended=1,password_hash=? WHERE id=?').run(new Date().toISOString(),current.id,unusableHash,id)
    await db.prepare('DELETE FROM sessions WHERE user_id=?').run(id)
    await db.prepare('DELETE FROM password_resets WHERE user_id=?').run(id)
@@ -36,7 +38,7 @@ export function registerAccountDeletion(app:Express,db:Database,auth:RequestHand
    await db.prepare('INSERT INTO account_admin_history(user_id,admin_id,action,details) VALUES(?,?,?,?)').run(id,current.id,'account_deleted',reason)
    return 200
   })()
-  if(status!==200)return res.status(status).json({error:status===404?'Account not found.':status===400?'The confirmation email does not match.':'You cannot delete yourself, a super admin, or an administrator without super-admin access.'})
-  res.json({ok:true})
+  if(status!==200)return res.status(status).json({error:status===404?'Account not found.':status===400?'The confirmation email does not match.':status===409?'Grant another active admin management access before deleting the last super admin.':'Super-admin access is required to delete an administrator.'})
+  res.json({ok:true,signedOut:id===req.user!.id})
  })
 }

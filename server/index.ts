@@ -372,10 +372,7 @@ const seedAdmin = async (): Promise<void> => {
   }
 
   const existingAdmin = (await getRow<{ id: number }>('SELECT id FROM users WHERE email = ?', email))
-  if (existingAdmin) {
-    await database.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(existingAdmin.id)
-    return
-  }
+  if (existingAdmin) return
 
   const passwordHash = await bcrypt.hash(password, 12)
   await database.prepare(`
@@ -2100,7 +2097,7 @@ app.patch('/api/admin/users/:id/suspension', requireAuth, requireRole('admin'), 
   if (!user || user.role === 'admin') return res.status(404).json({ error: 'User not found or admin accounts cannot be suspended.' })
   if (Boolean(user.suspended) === suspended) return res.status(409).json({ error: 'The account already has that status.' })
   const updated=await database.transaction(async () => {
-    const changed=await database.prepare('UPDATE users SET suspended = ? WHERE id = ? AND deleted_at IS NULL').run(suspended ? 1 : 0, userId)
+    const changed=await database.prepare("UPDATE users SET suspended = ? WHERE id = ? AND deleted_at IS NULL AND role <> 'admin'").run(suspended ? 1 : 0, userId)
     if(!changed.changes)return false
     if (suspended) await database.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId)
     await database.prepare('INSERT INTO account_admin_history (user_id, admin_id, action, details) VALUES (?, ?, ?, ?)').run(userId, req.user!.id, suspended ? 'Suspended' : 'Restored', reason)

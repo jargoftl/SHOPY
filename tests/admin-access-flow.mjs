@@ -26,7 +26,7 @@ export async function testAdminAccess({req,check,db,cookie,buyer,seller}){
  r=await req('/api/admin/overview',{},newCookie);check('promoted account can access admin',r.status===200,r)
  check('promoted admin cannot delegate admin',(await req(path,{},newCookie)).status===403)
  check('stale role changes are rejected',(await change({})).status===409)
- check('super admin cannot remove self',(await req(path+'/'+root.id,{method:'PATCH',body:JSON.stringify({action:'remove',expectedRole:'admin',password:'long-test-password-123'})},cookie)).status===409)
+ check('last super admin cannot remove their own access',(await req(path+'/'+root.id,{method:'PATCH',body:JSON.stringify({action:'remove',expectedRole:'admin',password:'long-test-password-123'})},cookie)).status===409)
  check('super admin can remove regular admin',(await change({action:'remove',expectedRole:'admin'})).status===200)
  check('removed admin session is revoked',(await req('/api/admin/overview',{},newCookie)).status===401)
  r=await req(path,{},cookie)
@@ -37,5 +37,12 @@ export async function testAdminAccess({req,check,db,cookie,buyer,seller}){
  check('removing admin restores approved seller access',(await approvedChange({action:'remove',expectedRole:'admin'})).status===200&&(await db.query('SELECT role FROM shop.users WHERE id=$1',[approved.id])).rows[0].role==='seller')
  const remaining=(await db.query('SELECT role,is_super_admin FROM shop.users WHERE id=$1',[root.id])).rows[0]
  check('owner access survives changes',remaining.role==='admin'&&remaining.is_super_admin===1)
+ check('super admin can grant admin access again',(await change({})).status===200)
+ check('a regular admin can be given management access',(await change({action:'grant_management',expectedRole:'admin'})).status===200)
+ const managementCookie=await fixtureSession()
+ check('new super admin can manage accounts',(await req(path,{},managementCookie)).status===200)
+ const selfRemoval=await change({action:'remove',expectedRole:'admin'},managementCookie)
+ check('a super admin can remove their own access when another remains',selfRemoval.status===200&&selfRemoval.data.signedOut===true)
+ check('self-removal revokes the session',(await req('/api/auth/me',{},managementCookie)).status===401)
  await db.query('UPDATE shop.users SET is_super_admin=0 WHERE id=$1',[root.id])
 }

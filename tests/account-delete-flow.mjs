@@ -43,7 +43,8 @@ export async function testAccountDeletion({req,check,db,cookie,buyer,seller,sell
  check('regular admin cannot delete another admin',(await remove({...body,confirmEmail:'delete-admin@example.test'},cookie,`/api/admin/users/${another.id}`)).status===403)
  await db.query('UPDATE shop.users SET is_super_admin=1 WHERE id=$1',[root.id])
  const owner=(await db.query("INSERT INTO shop.users(full_name,email,password_hash,role,is_super_admin) VALUES('Protected owner','protected-owner@example.test',$1,'admin',1) RETURNING id",[root.password_hash])).rows[0]
- check('even another super admin cannot delete an owner',(await remove({...body,confirmEmail:'protected-owner@example.test'},cookie,`/api/admin/users/${owner.id}`)).status===403)
+ check('a super admin can delete another owner while management access remains',(await remove({...body,confirmEmail:'protected-owner@example.test'},cookie,`/api/admin/users/${owner.id}`)).status===200)
+ check('last active super admin cannot be deleted',(await remove({...body,confirmEmail:'admin@example.test'},cookie,`/api/admin/users/${root.id}`)).status===409)
  check('super admin can delete an ordinary admin',(await remove({...body,confirmEmail:'delete-admin@example.test'},cookie,`/api/admin/users/${another.id}`)).status===200)
  await db.query('UPDATE shop.users SET is_super_admin=0 WHERE id=$1',[root.id])
 }
