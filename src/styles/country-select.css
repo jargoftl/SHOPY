@@ -1,0 +1,17 @@
+.country-picker{position:relative;width:100%;margin-top:8px;color:#171717;font-size:14px}
+.country-picker .country-picker-trigger{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:50px;width:100%;padding:12px 14px;border:1px solid #d6d6d6;border-radius:12px;background:#fff;color:#171717;cursor:pointer;text-align:left;box-shadow:0 1px 2px #00000004;transition:border-color .15s,box-shadow .15s}
+.country-picker .country-picker-trigger:hover{border-color:#929292;background:#fafafa}
+.country-picker .country-picker-trigger[aria-expanded=true]{border-color:#171717;box-shadow:0 0 0 3px #1717170a}
+.country-picker-value{display:flex;align-items:center;gap:11px;min-width:0}
+.country-picker-flag{width:24px;height:18px;object-fit:cover;border-radius:3px;box-shadow:0 0 0 1px #00000010;flex-shrink:0}
+.country-picker-trigger>svg{color:#777;flex-shrink:0;transition:transform .15s}
+.country-picker-chevron-open{transform:rotate(180deg)}
+.country-picker-panel{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:50;padding:6px;border:1px solid #e5e5e5;border-radius:14px;background:#fff;box-shadow:0 14px 40px #0000001a}
+.country-picker-search{display:flex;align-items:center;gap:9px;margin:3px 3px 7px;padding:0 10px;border:1px solid #e7e7e7;border-radius:9px;background:#f7f7f7;color:#777}
+.country-picker .country-picker-search input{width:100%;min-width:0;height:40px;margin:0;padding:0;border:0;border-radius:0;background:transparent;color:#171717;font-size:14px;box-shadow:none;outline:none}
+.country-picker-search:focus-within{border-color:#999}
+.country-picker-list{max-height:min(252px,38dvh);margin:0;padding:0;overflow-y:auto;overscroll-behavior:contain;list-style:none}
+.country-picker-option{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;margin:2px 0;padding:10px;border-radius:8px;cursor:pointer;font-weight:400}
+.country-picker-option.is-active{background:#f2f2f2}
+.country-picker-option[aria-selected=true]{font-weight:600}
+.country-picker-empty{padding:12px;font-size:13px;color:#666}

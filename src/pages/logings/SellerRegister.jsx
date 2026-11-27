@@ -1,4 +1,4 @@
-import UiverseSelect from '../../components/UiverseSelect.jsx'
+import CountrySelect from '../../components/CountrySelect.jsx'
 import {readReferralCode,clearReferralCode} from '../../lib/referralCode.js'
 import PasswordInput from '../../components/PasswordInput.jsx'
 import SiteName from '../../components/SiteName.jsx'
@@ -295,11 +295,9 @@ const SellerRegister = () => {
       {hasStarted && step === 2 && (
         <form className="space-y-4" onSubmit={finishRegistration}>
           <p className="text-sm leading-6 text-[#666]">Add your contact location and verification photos. Your support team must approve your application before seller access is enabled.</p>
-          <label className="block text-sm font-medium">Country
-            <UiverseSelect name="country" value={form.country} onChange={updateForm} required className="mt-2 h-11 w-full border border-[#cccccc] bg-white px-3 outline-none focus:border-black">
-              <option value="">Select country</option><option>United States</option><option>Canada</option><option>United Kingdom</option><option>Nigeria</option><option>Germany</option><option>Japan</option><option>Other</option>
-            </UiverseSelect>
-          </label>
+          <div className="block text-sm font-medium">Country
+            <CountrySelect name="country" value={form.country} onChange={updateForm} required/>
+          </div>
           <label className="block text-sm font-medium">Home or business address
             <input name="address" value={form.address} onChange={updateForm} maxLength={200} required autoComplete="street-address" className="mt-2 h-11 w-full border border-[#cccccc] px-3 outline-none focus:border-black" placeholder="Street address" />
           </label>
