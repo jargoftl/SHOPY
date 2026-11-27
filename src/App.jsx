@@ -1,3 +1,4 @@
+import {RecoveryOnboarding} from './components/RecoveryPhrase.jsx'
 import {apiRequest} from './lib/api.js'
 import SellerAccountPage from './pages/SellerAccountPage.jsx'
 import SellerBottomNav from './components/SellerBottomNav.jsx'
@@ -332,6 +333,7 @@ const App = () => (
   <CartProvider>
     <BrowserRouter>
       <AnimatedRoutes />
+      <RecoveryOnboarding/>
     </BrowserRouter>
   </CartProvider>
 )

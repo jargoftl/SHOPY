@@ -1,3 +1,4 @@
+import {testSellerRecovery} from './seller-recovery-flow.mjs';
 import {testAccountDeletion} from './account-delete-flow.mjs';
 import {testStoreDates} from './store-dates-flow.mjs';
 import {testAccountRecovery} from './account-recovery-flow.mjs';
@@ -271,6 +272,7 @@ try{
  await testStoreDates({req,check,db,cookie,buyer,seller,sellerId});
  await testAccountDeletion({req,check,db,cookie,buyer,seller,sellerId});
  await testAccountRecovery({req,check,db,cookie,buyer,seller});
+ await testSellerRecovery({req,check,db,cookie,buyer});
  await testEmailLifecycle({req,check,db,cookie,seller,sellerId,sellerForm});
  const historicalPath=`/api/admin/seller-sales-history/${sellerId}`
  const historicalEntry={soldOn:'2019-04-10',itemName:'Historical lamp',itemType:'Lighting',quantity:3,unitPriceCents:12550,orderReference:'OFF-204',requestKey:randomUUID()}

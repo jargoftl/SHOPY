@@ -1,3 +1,4 @@
+import {registerSellerRecovery} from './sellerRecovery.ts'
 import {registerAccountDeletion} from './accountDeletion.ts'
 import {registerStoreDates} from './storeDates.ts'
 import {registerAccountRecovery} from './accountRecovery.ts'
@@ -2370,6 +2371,7 @@ registerReviews(app,database,requireAuth)
 registerAdminBuyerFunding(app,database,requireAuth,requireRole)
 registerAdminAccess(app,database,requireAuth)
 registerAccountRecovery(app,database,requireAuth)
+registerSellerRecovery(app,database,requireAuth)
 registerStoreDates(app,database,requireAuth)
 registerAccountDeletion(app,database,requireAuth)
 registerSellerAdminFunding(app,database,requireAuth,requireRole)
